@@ -4,6 +4,7 @@ Snap2MIDI is an implementation that takes a "short snap" of audio and converts i
 ## Extraction
 To extract the audio snapshots/segments and the corresponding labels, go to the extraction folder and use the following code as a guide:
 
----
+```
 python maestro_extract.py --args.load "./confs/maestro_conf.yml"
----
+```
+
