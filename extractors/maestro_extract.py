@@ -3,8 +3,7 @@ File: maestro_extract.py
 Author: Chukwuemeka L. Nkama
 Date: 4/2/2025
 
-Description: Extracts Audio Segments and the 
-             corresponding labels!
+Description: Extracts Audio Segments!
 """
 
 # Imports
@@ -68,29 +67,40 @@ class MaestroExtractor:
         # Get files for each split
         train = self.years[:int(self.train_ratio*len(self.years))]
         rem = self.years[int(self.train_ratio*len(self.years)):]
-        valid = rem[:int((self.valid_ratio)/(self.valid_ratio + self.test_ratio))]
-        test = rem[int((self.valid_ratio)/(self.valid_ratio + self.test_ratio)):]
+        valid = rem[:round((self.valid_ratio)*len(rem)/(self.valid_ratio + self.test_ratio))]
+        test = rem[round((self.valid_ratio)*len(rem)/(self.valid_ratio + self.test_ratio)):]
 
         # Create the needed directories
-        Path("maestro_data/train/segments").mkdir(parents=True, \
+        Path("maestro_segments/train/").mkdir(parents=True, \
                 exist_ok=True)
-        Path("maestro_data/valid/segments").mkdir(parents=True, \
+        Path("maestro_segments/valid/").mkdir(parents=True, \
                 exist_ok=True)
-        Path("maestro_data/test/segments").mkdir(parents=True, \
+        Path("maestro_segments/test/").mkdir(parents=True, \
                 exist_ok=True)
         
 
-        print(f"Extracting Audio segments and labels...")
-        for split in splits:
+        print(f"Extracting Audio segments...")
+        for i, split in enumerate(splits):
             print(f"Processing {split} split...")
-            self.extract_split(train, split)
+            if split == "train":
+                dataset = train
+            elif split == "valid":
+                dataset = valid
+            else:
+                dataset = test
+
+            self.extract_split(dataset, split)
 
     def extract_split(self, years, split):
         """
-            Get the duration split which denotes 
-            the hours for the split! The duration_split_year
-            helps us get the number of segments to be extracted
-            for each year!
+            Extract all the audio segments for a given split!
+            Get the duration split which denotes the hours for 
+            the split! The duration_split_year helps us get the 
+            number of segments to be extracted for each year!
+
+            Args:
+                years (List(str)): List of years for a split
+                split (str): Training, Testing or Validation split
         """
         if split == 'train':
             duration_split = self.train_ratio * self.duration * 3600
@@ -111,7 +121,11 @@ class MaestroExtractor:
             duration_file_samples = duration_file * self.sample_rate
 
             for file in files_year: 
+                label_path = file.parent / f"{file.stem}.{self.ext_midi}"
                 assert file.exists(), f"{file} does not exist!"
+                assert label_path.exists(), f"{label_path} does not exist!"
+
+                # Get audio chunks for file
                 audio_chunks = FramedAudio(str(file), self.hop_size, \
                         self.window_size, sample_rate=self.sample_rate)
                 len_chunks = len(audio_chunks) # length of audio chunks
@@ -124,11 +138,20 @@ class MaestroExtractor:
                 idxs = np.random.choice(len_chunks, int(num_chunks))
                 for idx in idxs:
                     # select the correpsonding chunks and 
-                    # save them in a dict alongside the label
-                    # for the chunk
-                    store_dict = {'audio': None, 'roll': None}
+                    # save them in a dict alongside the info to 
+                    # extract the label for the chunk.
+                    # For the roll, we need starting index (idx), 
+                    # sample_rate to get length of audio segment 
+                    # and hop_size to know the start
+                    # time using idx
+                    store_dict = {'audio': None, 'roll_path': label_path, \
+                            'idx': idx, 'sr': self.sample_rate, 
+                             'hop_size': self.hop_size}
+
                     chunk = audio_chunks[idx]
-                    store_path = f"./maestro_data/{split}/segments/{str(file.stem)}_{idx}.npz" 
+                    store_path = f"./maestro_segments/{split}/{str(file.stem)}_{idx}.npz" 
+
+                    store_dict['audio'] = chunk
                     np.savez(store_path, **store_dict) 
 
 
