@@ -8,4 +8,5 @@ MaestroExtractor.test_ratio: 0.1
 MaestroExtractor.train_ratio: 0.75
 MaestroExtractor.valid_ratio: 0.15
 MaestroExtractor.window_size: 1.0
+MaestroExtractor.pr_rate: 256
 

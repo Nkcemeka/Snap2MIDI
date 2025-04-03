@@ -38,7 +38,7 @@ class FramedAudio:
             Returns:
                 framed_audio (np.ndarray): Shape of (num_frames, frame_size)
         """
-        audio, sr = librosa.load(self.audio_path)
+        audio, sr = librosa.load(self.audio_path, sr=self.sample_rate)
         self.hop_size = int(sr * self.hop_size)
         self.frame_size = int(self.frame_size * sr)
 

@@ -9,6 +9,7 @@ Description: Extracts Audio Segments!
 # Imports
 import torch
 import numpy as np
+import pretty_midi
 from pathlib import Path
 import argbind 
 from tqdm import tqdm
@@ -20,7 +21,8 @@ class MaestroExtractor:
                  sample_rate: float=None, duration: float=6.0,
                  train_ratio: float=0.75, valid_ratio: float=0.15,
                  test_ratio: float=0.10, ext_audio: str="wav",
-                 ext_midi: str="midi", hop_size: float=0.8):
+                 ext_midi: str="midi", hop_size: float=0.8,
+                 pr_rate: int=None):
         """
             Args:
                 path (str): Base path to the MAESTRO dataset directory
@@ -31,12 +33,16 @@ class MaestroExtractor:
                 train_ratio (float): Training ratio
                 valid_ratio (float): Validation ratio
                 test_ratio (float): Testing ratio
+                ext_midi (str): Midi extenstion
+                ext_audio (str): Audio extension
+                pr_rate (int): Number of frames per second for piano roll
 
             Returns:
                 None
         """
         if path is None:
             raise ValueError(f"Path is None! Cannot Instantiate {self.__class__.__name__}!")
+
         self.base_path = Path(path)
         self.years = [d.name for d in self.base_path.iterdir() \
                 if d.is_dir()]
@@ -49,7 +55,28 @@ class MaestroExtractor:
         self.hop_size = hop_size
         self.ext_audio = ext_audio
         self.ext_midi = ext_midi
+        if pr_rate is None:
+            self.pr_rate = sample_rate
+        else:
+            self.pr_rate = pr_rate
         self.extract()
+
+    def get_label(self, midi, duration, hop_size, idx):
+        num_frames = int(duration * self.pr_rate)
+        start = idx * hop_size
+        end = start + duration
+        labels = np.zeros((num_frames, 128))
+
+        for instrument in midi.instruments:
+            if not instrument.is_drum:
+                for note in instrument.notes:
+                    if note.start >= end or note.end <= start:
+                        continue
+                    pitch = note.pitch
+                    start_frame = max(0, int(self.pr_rate * (note.start-start)))
+                    end_frame = min(num_frames, int(self.pr_rate * (note.end - start)))
+                    labels[start_frame:end_frame, pitch] = 1
+        return labels
 
     def extract(self):
         """
@@ -67,6 +94,10 @@ class MaestroExtractor:
         # Get files for each split
         train = self.years[:int(self.train_ratio*len(self.years))]
         rem = self.years[int(self.train_ratio*len(self.years)):]
+
+        # I round the below for valid and test as using int leads to
+        # test being 2 and valid 1 given the default ratios and if 
+        # len(years) is 10
         valid = rem[:round((self.valid_ratio)*len(rem)/(self.valid_ratio + self.test_ratio))]
         test = rem[round((self.valid_ratio)*len(rem)/(self.valid_ratio + self.test_ratio)):]
 
@@ -120,10 +151,11 @@ class MaestroExtractor:
             duration_file = duration_split_year / num_files_year
             duration_file_samples = duration_file * self.sample_rate
 
-            for file in files_year: 
+            for file in tqdm(files_year, total=len(files_year)): 
                 label_path = file.parent / f"{file.stem}.{self.ext_midi}"
                 assert file.exists(), f"{file} does not exist!"
                 assert label_path.exists(), f"{label_path} does not exist!"
+                midi = pretty_midi.PrettyMIDI(str(label_path))
 
                 # Get audio chunks for file
                 audio_chunks = FramedAudio(str(file), self.hop_size, \
@@ -144,14 +176,16 @@ class MaestroExtractor:
                     # sample_rate to get length of audio segment 
                     # and hop_size to know the start
                     # time using idx
-                    store_dict = {'audio': None, 'roll_path': label_path, \
-                            'idx': idx, 'sr': self.sample_rate, 
-                             'hop_size': self.hop_size}
+                    store_dict = {'audio': None, 
+                             'roll': None}
 
                     chunk = audio_chunks[idx]
+                    label = self.get_label(midi, self.window_size, \
+                            self.hop_size, idx)
                     store_path = f"./maestro_segments/{split}/{str(file.stem)}_{idx}.npz" 
 
                     store_dict['audio'] = chunk
+                    store_dict['roll'] = label
                     np.savez(store_path, **store_dict) 
 
 
