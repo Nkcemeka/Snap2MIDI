@@ -43,7 +43,7 @@ class ShallowTranscriber(nn.Module):
             nn.Linear(in_features=self.in_features, \
                     out_features = self.hidden_units),
             nn.ReLU(),
-            nn.dropout(self.dropout),
+            nn.Dropout(self.dropout),
             nn.Linear(in_features = self.hidden_units, \
                     out_features = self.out_features)
         )
@@ -59,7 +59,7 @@ class ShallowTranscriber(nn.Module):
         for each in self.modules():
             if isinstance(each, nn.Linear):
                 nn.init.xavier_uniform_(each.weight, \
-                        init.calculate_gain('relu'))
+                        nn.init.calculate_gain('relu'))
                 if each.bias is not None:
                     each.bias.data.zero_()
 

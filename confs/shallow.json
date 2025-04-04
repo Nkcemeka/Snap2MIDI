@@ -1,0 +1,15 @@
+{
+  "batch_size": 4,
+  "train_path": "./extractors/maestro_segments/train",
+  "valid_path": "./extractors/maestro_segments/valid",
+  "test_path": "./extractors/maestro_segments/test",
+  "epochs": 30,
+  "lr": 0.001,
+  "in_features": 256,
+  "hidden_units": 512,
+  "dropout": 0.2,
+  "weight_decay": 1e-4,
+  "resume": 0,
+  "resume_path": "",
+  "save_dir": "./runs"
+}
