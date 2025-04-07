@@ -27,8 +27,10 @@ class SnapDataset(Dataset):
     def __getitem__(self, index):
         item_path = str(self.data[index])
         item = np.load(item_path)
-        audio = item["audio"]
-        label = item["roll"]
+        audio = item["audio"].astype(np.float32)
+        audio = torch.from_numpy(audio)
+        label = item["roll"].astype(np.int32)
+        label = torch.from_numpy(label)
         return (audio, label)
 
     def __len__(self):

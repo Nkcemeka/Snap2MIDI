@@ -7,7 +7,6 @@
 
 # Imports
 import torch
-from snap2midi.datasets.dataset import SnapDataset
 from pathlib import Path
 from tqdm import tqdm
 from torch.utils.data import DataLoader
@@ -15,6 +14,7 @@ import argparse
 import wandb
 import json
 from model_loader import load_shallow
+from datasets.dataset import SnapDataset
 
 @torch.no_grad()
 def evaluate(model, dataloader, device, \
@@ -110,7 +110,7 @@ def main(config):
         train_loss = train_step(model, train_dataloader, device, \
                 loss_fn, optimizer)        
 
-        valid_loss = evaluate(model, valid_dataloder, device, loss_fn) 
+        valid_loss = evaluate(model, valid_dataloader, device, loss_fn) 
 
         if valid_loss <= best_loss:
             best_loss = valid_loss
