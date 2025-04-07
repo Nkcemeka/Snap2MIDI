@@ -121,6 +121,9 @@ def main(config):
                 'train_loss': train_loss,
                 'valid_loss': valid_loss,
             }, config["save_dir"] + f"/{model_name}/checkpoint_{epoch}.pt")
+        
+        print(f"Epoch {epoch+1}/{config['epochs']}, Train Loss: {train_loss:.4f}, \
+                Valid Loss: {valid_loss:.4f}")
 
     print(f"Evaluating best model on test set")
     best_model = load_shallow(config["in_features"], config["hidden_units"], \
@@ -140,6 +143,7 @@ if __name__ == "__main__":
     # load JSON file
     with open(args.config_path, 'r') as filename:
         content = filename.read()
-
+    
+    # parse JSON file
     config = json.loads(content)
     main(config)

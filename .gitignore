@@ -1,3 +1,4 @@
 venv/
 __pycache__/
 maestro_segments/
+logfile.log

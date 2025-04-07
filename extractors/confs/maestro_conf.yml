@@ -3,10 +3,11 @@ MaestroExtractor.ext_audio: wav
 MaestroExtractor.ext_midi: midi
 MaestroExtractor.hop_size: 0.8
 MaestroExtractor.path: /home/nkcemeka/Documents/phd_tests/onsets-and-frames-embed/data/maestro-v2.0.0
-MaestroExtractor.sample_rate: 16000.0
+MaestroExtractor.sample_rate: 24000.0
 MaestroExtractor.test_ratio: 0.1
 MaestroExtractor.train_ratio: 0.75
 MaestroExtractor.valid_ratio: 0.15
-MaestroExtractor.window_size: 1.0
+MaestroExtractor.window_size: 5.0
 MaestroExtractor.pr_rate: 256
+MaestroExtractor.feature: "cqt"
 

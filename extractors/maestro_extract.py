@@ -3,7 +3,7 @@ File: maestro_extract.py
 Author: Chukwuemeka L. Nkama
 Date: 4/2/2025
 
-Description: Extracts Audio Segments!
+Description: Extracts Audio Segments, features and the corresponding labels!
 """
 
 # Imports
@@ -14,6 +14,7 @@ from pathlib import Path
 import argbind 
 from tqdm import tqdm
 from framed_signal import FramedAudio
+import librosa
 
 @argbind.bind()
 class MaestroExtractor:
@@ -22,7 +23,7 @@ class MaestroExtractor:
                  train_ratio: float=0.75, valid_ratio: float=0.15,
                  test_ratio: float=0.10, ext_audio: str="wav",
                  ext_midi: str="midi", hop_size: float=0.8,
-                 pr_rate: int=None):
+                 pr_rate: int=None, feature: str="mel"):
         """
             Args:
                 path (str): Base path to the MAESTRO dataset directory
@@ -36,6 +37,8 @@ class MaestroExtractor:
                 ext_midi (str): Midi extenstion
                 ext_audio (str): Audio extension
                 pr_rate (int): Number of frames per second for piano roll
+                feature (str): Feature to extract
+                hop_size (float): Hop size in seconds
 
             Returns:
                 None
@@ -55,6 +58,7 @@ class MaestroExtractor:
         self.hop_size = hop_size
         self.ext_audio = ext_audio
         self.ext_midi = ext_midi
+        self.feature = feature
         if pr_rate is None:
             self.pr_rate = sample_rate
         else:
@@ -80,7 +84,7 @@ class MaestroExtractor:
 
     def extract(self):
         """
-            Extract the audio segments and the corresponding
+            Extract the audio segments, features and the corresponding
             labels!
 
             Args:
@@ -182,11 +186,49 @@ class MaestroExtractor:
                     chunk = audio_chunks[idx]
                     label = self.get_label(midi, self.window_size, \
                             self.hop_size, idx)
+                    feature = self.get_feature(chunk, feature=self.feature)
+                    feature = feature.T # (time, embedding)
                     store_path = f"./maestro_segments/{split}/{str(file.stem)}_{idx}.npz" 
-
                     store_dict['audio'] = chunk
                     store_dict['roll'] = label
+                    store_dict['feature'] = feature
                     np.savez(store_path, **store_dict) 
+    
+    def get_feature(self, audio, feature):
+        if feature == "mel":
+            return self.compute_mel(audio)
+        elif feature == "cqt":
+            return self.compute_cqt(audio)
+    
+    def compute_cqt(self, audio, bins_per_octave=24):
+        """
+            Compute the CQT for a given audio segment
+            Args:
+                audio (np.ndarray): Audio segment
+            Returns:
+                np.ndarray: CQT of the audio segment
+        """
+        # compute hop length to get CQT
+        numerator = self.window_size * self.sample_rate
+        denominator = self.pr_rate - 1
+        hop_length = int(numerator / denominator)
+        cqt = librosa.cqt(audio, sr=self.sample_rate, n_bins=144, \
+                          bins_per_octave=bins_per_octave, hop_length=hop_length)
+        return cqt
+
+    def compute_mel(self, audio, n_mels=229, n_fft=2048):
+        """
+            Compute the Mel spectrogram for a given audio segment
+            Args:
+                audio (np.ndarray): Audio segment
+            Returns:
+                np.ndarray: Mel spectrogram of the audio segment
+        """
+        numerator = (self.window_size * self.sample_rate)
+        denominator = self.pr_rate - 1
+        hop_length = int(numerator / denominator)
+        mel = librosa.feature.melspectrogram(y=audio, hop_length=hop_length, sr=self.sample_rate, n_mels=n_mels)
+        return mel
 
 
 if __name__ == '__main__':
