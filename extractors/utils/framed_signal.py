@@ -39,6 +39,10 @@ class FramedAudio:
                 framed_audio (np.ndarray): Shape of (num_frames, frame_size)
         """
         audio, sr = librosa.load(self.audio_path, sr=self.sample_rate)
+        
+        # Convert audio to MONO
+        audio = librosa.to_mono(audio)
+
         self.hop_size = int(sr * self.hop_size)
         self.frame_size = int(self.frame_size * sr)
 

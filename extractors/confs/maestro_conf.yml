@@ -1,4 +1,4 @@
-MaestroExtractor.duration: 6.0
+MaestroExtractor.duration: 8.0
 MaestroExtractor.ext_audio: wav
 MaestroExtractor.ext_midi: midi
 MaestroExtractor.hop_size: 0.8
@@ -8,6 +8,6 @@ MaestroExtractor.test_ratio: 0.1
 MaestroExtractor.train_ratio: 0.75
 MaestroExtractor.valid_ratio: 0.15
 MaestroExtractor.window_size: 5.0
-MaestroExtractor.pr_rate: 256
+MaestroExtractor.pr_rate: 51.2
 MaestroExtractor.feature: "cqt"
 

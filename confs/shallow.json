@@ -1,15 +1,19 @@
 {
+  "project_name": "snap2midi",
+  "experiment_name": "ShallowTranscriber",
   "batch_size": 4,
   "train_path": "/home/nkcemeka/Documents/snap2midi/extractors/maestro_segments/train",
   "valid_path": "/home/nkcemeka/Documents/snap2midi/extractors/maestro_segments/valid",
   "test_path": "/home/nkcemeka/Documents/snap2midi/extractors/maestro_segments/test",
   "epochs": 30,
-  "lr": 0.001,
-  "in_features": 256,
+  "frame_rate": 51.2,
+  "lr": 0.00005,
+  "in_features": 144,
   "hidden_units": 512,
   "dropout": 0.2,
   "weight_decay": 1e-4,
+  "threshold": 0.3,
   "resume": 0,
-  "resume_path": "",
+  "resume_path": "/home/nkcemeka/Documents/snap2midi/runs/ShallowTranscriber/checkpoint_28.pt",
   "save_dir": "/home/nkcemeka/Documents/snap2midi/runs"
 }

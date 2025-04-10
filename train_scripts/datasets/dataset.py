@@ -27,11 +27,19 @@ class SnapDataset(Dataset):
     def __getitem__(self, index):
         item_path = str(self.data[index])
         item = np.load(item_path)
+
+        # Get the audio representation
         audio = item["audio"].astype(np.float32)
         audio = torch.from_numpy(audio)
-        label = item["roll"].astype(np.int32)
+
+        # Get the latent space representation
+        feature = item["feature"].astype(np.float32)
+        feature = torch.from_numpy(feature)
+
+        # Get the roll representation
+        label = item["roll"].astype(np.float32)
         label = torch.from_numpy(label)
-        return (audio, label)
+        return (feature, label, audio)
 
     def __len__(self):
         return len(self.data)

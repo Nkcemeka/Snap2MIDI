@@ -13,7 +13,7 @@ import pretty_midi
 from pathlib import Path
 import argbind 
 from tqdm import tqdm
-from framed_signal import FramedAudio
+from utils.framed_signal import FramedAudio
 import librosa
 
 @argbind.bind()
@@ -66,6 +66,17 @@ class MaestroExtractor:
         self.extract()
 
     def get_label(self, midi, duration, hop_size, idx):
+        """
+            Get the labels for a given audio segment
+            Args:
+                midi (pretty_midi.PrettyMIDI): PrettyMIDI object
+                duration (float): Duration of the audio segment
+                hop_size (float): Hop size in seconds
+                idx (int): Index of the audio segment
+
+            Returns:
+                np.ndarray: Labels for the audio segment
+        """
         num_frames = int(duration * self.pr_rate)
         start = idx * hop_size
         end = start + duration
@@ -210,10 +221,16 @@ class MaestroExtractor:
         """
         # compute hop length to get CQT
         numerator = self.window_size * self.sample_rate
-        denominator = self.pr_rate - 1
+        denominator = (self.pr_rate * self.window_size) - 1
         hop_length = int(numerator / denominator)
         cqt = librosa.cqt(audio, sr=self.sample_rate, n_bins=144, \
                           bins_per_octave=bins_per_octave, hop_length=hop_length)
+
+        # convert to squared magnitude
+        cqt = np.abs(cqt)**2 
+
+        # find the log of the cqts
+        cqt = np.log1p(cqt)
         return cqt
 
     def compute_mel(self, audio, n_mels=229, n_fft=2048):
@@ -228,6 +245,13 @@ class MaestroExtractor:
         denominator = self.pr_rate - 1
         hop_length = int(numerator / denominator)
         mel = librosa.feature.melspectrogram(y=audio, hop_length=hop_length, sr=self.sample_rate, n_mels=n_mels)
+        
+        # convert to squared magnitude
+        mel = np.abs(mel)**2
+        # find the log of the mel spectrogram and clamp
+        # to avoid log(0)
+        mel = np.clip(mel, a_min=1e-10, a_max=None)
+        mel = np.log(mel)
         return mel
 
 
