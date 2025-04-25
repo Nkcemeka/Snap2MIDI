@@ -1,0 +1,13 @@
+MaestroEventsExtractor.duration: 12.0
+MaestroEventsExtractor.ext_audio: wav
+MaestroEventsExtractor.ext_midi: midi
+MaestroEventsExtractor.hop_size: 20.0
+MaestroEventsExtractor.path: /home/nkcemeka/Documents/phd_tests/onsets-and-frames-embed/data/maestro-v2.0.0
+MaestroEventsExtractor.sample_rate: 16000.0
+MaestroEventsExtractor.test_ratio: 0.10
+MaestroEventsExtractor.train_ratio: 0.80
+MaestroEventsExtractor.valid_ratio: 0.10
+MaestroEventsExtractor.window_size: 20.0
+MaestroEventsExtractor.pr_rate: 32
+MaestroEventsExtractor.feature: "cqt"
+MaestroEventsExtractor.save_name: "maestro_events_segments" 
