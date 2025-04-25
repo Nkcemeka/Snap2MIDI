@@ -8,7 +8,7 @@
     "epochs": 100,
     "frame_rate": 32,
     "lr": 0.0006,
-    "model_complexity": 48,
+    "model_complexity": 32,
     "factor": 16,
     "in_features": 144,
     "learning_rate_decay_rate": 0.98,
@@ -16,7 +16,7 @@
     "clip_gradient_norm": 3,
     "threshold": 0.5,
     "resume": 0,
-    "resume_path": "/home/nkcemeka/Documents/snap/snap2midi/runs/OnsetsAndFrames/checkpoint_87.pt",
+    "resume_path": "/home/nkcemeka/Documents/snap/snap2midi/runs/OnsetsAndFrames/checkpoint_0.pt",
     "save_dir": "/home/nkcemeka/Documents/snap/snap2midi/runs/OnsetsAndFrames"
   }
   

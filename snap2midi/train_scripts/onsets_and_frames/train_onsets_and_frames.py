@@ -396,7 +396,8 @@ def main(config):
             model_complexity=config["model_complexity"])
     best_model = best_model.to(device)
     checkpoint_path = config["save_dir"]
-    best_checkpoints = sorted(Path(checkpoint_path).glob("checkpoint_*.pt"))
+    best_checkpoints = list(Path(checkpoint_path).glob("checkpoint_*.pt"))
+    best_checkpoints.sort(key=lambda x: int(x.stem.split("_")[1]))
     best_checkpoint = str(best_checkpoints[-1])
     best_model.load_state_dict(torch.load(best_checkpoint, weights_only=True)["model_state_dict"])
     test_loss_dict, frame_metrics_test, note_metrics_test = evaluate(best_model, test_dataloader, device, loss_fn, \
