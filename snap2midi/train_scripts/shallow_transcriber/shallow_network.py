@@ -10,7 +10,6 @@ Description: A shallow neural network performing multi-pitch
 # Imports
 import torch
 from torch import nn
-from typing import List, Optional, Tuple
 
 # Create class for shallow neural network
 class ShallowTranscriber(nn.Module):
@@ -58,8 +57,9 @@ class ShallowTranscriber(nn.Module):
         """
         for each in self.modules():
             if isinstance(each, nn.Linear):
-                nn.init.xavier_uniform_(each.weight, \
-                        nn.init.calculate_gain('relu'))
+                # Initialize weights using He Initialization
+                # a is 0 by default in torch, so leaky relu becomes relu
+                nn.init.kaiming_normal_(each.weight) 
                 if each.bias is not None:
                     each.bias.data.zero_()
 
@@ -80,19 +80,10 @@ class ShallowTranscriber(nn.Module):
 
     def predict(self, x):
         """
-            Return a piano roll given input rep. x!
-            We assume a Bernoulli prob. distribution
-            for each midi pitch and perform a sigmoid
-            so we can know what notes are active.
-
-            Hence, the loss function would be a sum of the
-            binary cross-entropy loss across all midi pitches
-            and across the entire batch under consideration!
-
-            See UDL by Simon Prince for more details!!!
+            Return a piano roll given input representation.
             
             Args:
-                x (torch.tensor): Input mid-levl rep.
+                x (torch.tensor): Input mid-level representation
 
             Returns:
                 out (torch.tensor): Piano roll of shape (frames, out_features)

@@ -24,7 +24,6 @@ def conv_to_midi(piano_roll, filename, frame_rate, output_path=None, save=False)
             midi (MIDI object): MIDI file
     """
     piano_roll = piano_roll.astype(int) # convert to int
-    duration = piano_roll.shape[0]/frame_rate # duration of piano roll
     midi = pretty_midi.PrettyMIDI()
     prog = pretty_midi.instrument_name_to_program('Acoustic Grand Piano')
     piano = pretty_midi.Instrument(program=prog)
