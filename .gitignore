@@ -2,7 +2,7 @@ venv/
 __pycache__/
 maestro_segments/
 maestro_events_segments/
-logfile.log
+logfile*.log
 runs/
 wandb/
 notebooks/

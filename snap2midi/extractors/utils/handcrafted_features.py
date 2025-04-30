@@ -32,11 +32,13 @@ class HandcraftedFeatures:
         self.window_size = window_size
         self.pr_rate = pr_rate
 
-    def compute_cqt(self, audio, bins_per_octave=24):
+    def compute_cqt(self, audio, bins_per_octave=24, num_octaves=6):
         """
             Compute the CQT for a given audio segment
             Args:
                 audio (np.ndarray): Audio segment
+                bins_per_octave (int): Number of bins per octave
+                num_octaves (int): Number of octaves
             Returns:
                 np.ndarray: CQT of the audio segment
         """
@@ -44,7 +46,7 @@ class HandcraftedFeatures:
         numerator = self.window_size * self.sample_rate
         denominator = (self.pr_rate * self.window_size) - 1
         hop_length = int(numerator / denominator)
-        cqt = librosa.cqt(audio, sr=self.sample_rate, n_bins=144, \
+        cqt = librosa.cqt(audio, sr=self.sample_rate, n_bins=int(bins_per_octave*num_octaves), \
                           bins_per_octave=bins_per_octave, hop_length=hop_length)
 
         # convert to squared magnitude

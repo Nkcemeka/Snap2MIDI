@@ -3,7 +3,8 @@ File: maestro_extract.py
 Author: Chukwuemeka L. Nkama
 Date: 4/2/2025
 
-Description: Extracts Audio Segments, features and the corresponding labels!
+Description: Extracts Audio Segments, features and the corresponding labels
+             for MAESTRO daaset!
 """
 
 # Imports
@@ -12,8 +13,8 @@ import pretty_midi
 from pathlib import Path
 import argbind 
 from tqdm import tqdm
-from .. import FramedAudio
-import librosa
+from snap2midi.extractors.utils.framed_signal import FramedAudio
+from snap2midi.extractors.utils.handcrafted_features import HandcraftedFeatures
 
 @argbind.bind()
 class MaestroExtractor:
@@ -22,22 +23,30 @@ class MaestroExtractor:
                  train_ratio: float=0.75, valid_ratio: float=0.15,
                  test_ratio: float=0.10, ext_audio: str="wav",
                  ext_midi: str="midi", hop_size: float=0.8,
+                 cqt_num_octaves: int=None, cqt_bins_oct: int=None,
+                 n_mels: int=None, mel_n_fft: int=None,
                  pr_rate: int=None, feature: str="mel", save_name: str="maestro_segments"):
         """
+            Default constructor for the MaestroExtractor class.
+
             Args:
-                path (str): Base path to the MAESTRO dataset directory
-                window_size (float): window size in seconds to consider
-                sample_rate (float): sample rate to use
-                duration (float): Total duration of the audio segments
-                              generated in hours!
-                train_ratio (float): Training ratio
-                valid_ratio (float): Validation ratio
-                test_ratio (float): Testing ratio
-                ext_midi (str): Midi extenstion
-                ext_audio (str): Audio extension
-                pr_rate (int): Number of frames per second for piano roll
-                feature (str): Feature to extract
-                hop_size (float): Hop size in seconds
+                path (str): Path to the MAESTRO dataset
+                window_size (float): Window size for the audio segments
+                sample_rate (float): Sample rate for the audio segments
+                duration (float): Duration of all the audio segments together
+                train_ratio (float): Ratio of training data
+                valid_ratio (float): Ratio of validation data
+                test_ratio (float): Ratio of testing data
+                ext_audio (str): Extension of the audio files
+                ext_midi (str): Extension of the midi files
+                hop_size (float): Hop size for the audio segments
+                cqt_num_octaves (int): Number of octaves for CQT
+                cqt_bins_oct (int): Number of bins per octave for CQT
+                n_mels (int): Number of mel bands
+                mel_n_fft (int): Size of FFT window for mel spectrogram
+                pr_rate (int): Rate of the audio segments
+                feature (str): Feature to extract from the audio segments
+                save_name (str): Name of the directory to save the segments
 
             Returns:
                 None
@@ -57,6 +66,10 @@ class MaestroExtractor:
         self.hop_size = hop_size
         self.ext_audio = ext_audio
         self.ext_midi = ext_midi
+        self.cqt_num_octaves = cqt_num_octaves if cqt_num_octaves is not None else 6
+        self.cqt_bins_oct = cqt_bins_oct if cqt_bins_oct is not None else 24
+        self.n_mels = n_mels if n_mels is not None else 229
+        self.mel_n_fft = mel_n_fft if mel_n_fft is not None else 2048
         self.feature = feature
         self.save_name = save_name
         if pr_rate is None:
@@ -75,7 +88,7 @@ class MaestroExtractor:
                 idx (int): Index of the audio segment
 
             Returns:
-                np.ndarray: Labels for the audio segment
+                labels (np.ndarray): Labels for the audio segment
         """
         num_frames = int(duration * self.pr_rate)
         start = idx * hop_size
@@ -217,53 +230,28 @@ class MaestroExtractor:
                     np.savez(store_path, **store_dict) 
     
     def get_feature(self, audio, feature):
-        if feature == "mel":
-            return self.compute_mel(audio)
-        elif feature == "cqt":
-            return self.compute_cqt(audio)
-    
-    def compute_cqt(self, audio, bins_per_octave=24):
         """
-            Compute the CQT for a given audio segment
+            Get the feature for a given audio segment
             Args:
                 audio (np.ndarray): Audio segment
+                feature (str): Feature to extract
+
             Returns:
-                np.ndarray: CQT of the audio segment
+                feature (np.ndarray): Feature for the audio segment
         """
-        # compute hop length to get CQT
-        numerator = self.window_size * self.sample_rate
-        denominator = (self.pr_rate * self.window_size) - 1
-        hop_length = int(numerator / denominator)
-        cqt = librosa.cqt(audio, sr=self.sample_rate, n_bins=144, \
-                          bins_per_octave=bins_per_octave, hop_length=hop_length)
-
-        # convert to squared magnitude
-        cqt = np.abs(cqt)**2 
-
-        # find the log of the cqts
-        cqt = np.log1p(cqt)
-        return cqt
-
-    def compute_mel(self, audio, n_mels=229, n_fft=2048):
-        """
-            Compute the Mel spectrogram for a given audio segment
-            Args:
-                audio (np.ndarray): Audio segment
-            Returns:
-                np.ndarray: Mel spectrogram of the audio segment
-        """
-        numerator = (self.window_size * self.sample_rate)
-        denominator = self.pr_rate - 1
-        hop_length = int(numerator / denominator)
-        mel = librosa.feature.melspectrogram(y=audio, hop_length=hop_length, sr=self.sample_rate, n_mels=n_mels)
+        if feature not in ["mel", "cqt"]:
+            raise ValueError(f"Feature {feature} not supported!")
         
-        # convert to squared magnitude
-        mel = np.abs(mel)**2
-        # find the log of the mel spectrogram and clamp
-        # to avoid log(0)
-        mel = np.clip(mel, a_min=1e-10, a_max=None)
-        mel = np.log(mel)
-        return mel
+        # Create the HandcraftedFeatures object
+        hf = HandcraftedFeatures(sample_rate=self.sample_rate, \
+                window_size=self.window_size, pr_rate=self.pr_rate)
+        if feature == "mel":
+            return hf.compute_mel(audio, \
+                                  n_mels=self.n_mels, n_fft=self.mel_n_fft)
+        elif feature == "cqt":
+            return hf.compute_cqt(audio, bins_per_octave=self.cqt_bins_oct, \
+                    num_octaves=self.cqt_num_octaves)
+    
 
 
 if __name__ == '__main__':

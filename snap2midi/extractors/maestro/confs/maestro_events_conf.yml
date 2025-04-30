@@ -1,3 +1,26 @@
+# Copyright (c) 2025, Nkcemeka
+# All rights reserved.
+# This file is part of Snap2Midi.
+
+# Description: Configuration file for MaestroEventsExtractor.
+# MaestroEventsExtractor.duration is the duration of all audio segments extracted in seconds.
+# MaestroEventsExtractor.ext_audio is the audio file extension.
+# MaestroEventsExtractor.ext_midi is the midi file extension.
+# MaestroEventsExtractor.hop_size is the hop size in seconds when extracting audio segments.
+# MaestroEventsExtractor.path is the path to the dataset.
+# MaestroEventsExtractor.sample_rate is the sample rate of the audio files.
+# MaestroEventsExtractor.test_ratio is the ratio of the test set.
+# MaestroEventsExtractor.train_ratio is the ratio of the training set.
+# MaestroEventsExtractor.valid_ratio is the ratio of the validation set.
+# MaestroEventsExtractor.window_size is the size in seconds of each audio segment.
+# MaestroEventsExtractor.pr_rate is the number of frames per second.
+# MaestroEventsExtractor.feature is the feature extraction method.
+# MaestroEventsExtractor.save_name is the name of the file to save the extracted segments.
+# MaestroEventsExtractor.cqt_bins_oct is the number of bins per octave for CQT if selected.
+# MaestroEventsExtractor.cqt_num_octaves is the number of octaves for CQT if selected.
+# MaestroEventsExtractor.n_mels is the number of mel bands for mel spectrogram if selected.
+# MaestroEventsExtractor.mel_n_fft is the size of the FFT window for the mel spectrogram if selected.
+
 MaestroEventsExtractor.duration: 12.0
 MaestroEventsExtractor.ext_audio: wav
 MaestroEventsExtractor.ext_midi: midi
@@ -11,3 +34,7 @@ MaestroEventsExtractor.window_size: 20.0
 MaestroEventsExtractor.pr_rate: 32
 MaestroEventsExtractor.feature: "cqt"
 MaestroEventsExtractor.save_name: "maestro_events_segments" 
+MaestroEventsExtractor.cqt_bins_oct: 24
+MaestroEventsExtractor.cqt_num_octaves: 6
+MaestroEventsExtractor.n_mels: 229
+MaestroEventsExtractor.mel_n_fft: 2048

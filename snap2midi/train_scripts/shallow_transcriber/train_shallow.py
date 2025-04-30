@@ -15,7 +15,7 @@ import argparse
 import wandb
 import json
 from .shallow_network import ShallowTranscriber
-from .datasets.dataset_shallow import SnapDataset
+from .datasets.dataset_shallow import ShallowDataset
 from snap2midi.utils.eval_mir import transcription_metrics, multipitch_metrics
 
 def transcription_metrics_batch(pred, gt, threshold, frame_rate, offset_ratio=None):
@@ -226,9 +226,9 @@ def train_step(model, dataloader, device, \
 
 def main(config):
     # Create datasets 
-    train_dataset = SnapDataset(config["train_path"])
-    valid_dataset = SnapDataset(config["valid_path"])
-    test_dataset = SnapDataset(config["test_path"])
+    train_dataset = ShallowDataset(config["train_path"])
+    valid_dataset = ShallowDataset(config["valid_path"])
+    test_dataset = ShallowDataset(config["test_path"])
 
     # Create dataloaders for each dataset
     train_dataloader = DataLoader(train_dataset, batch_size=config["batch_size"], \
@@ -303,8 +303,10 @@ def main(config):
     best_model = best_model.to(device)
     checkpoint_path = config["save_dir"]
     best_checkpoints = sorted(Path(checkpoint_path).glob("checkpoint_*.pt"))
+    best_checkpoints = list(Path(checkpoint_path).glob("checkpoint_*.pt"))
+    best_checkpoints.sort(key=lambda x: int(x.stem.split("_")[1]))
     best_checkpoint = str(best_checkpoints[-1])
-    best_model.load_state_dict(torch.load(best_checkpoint)["model_state_dict"])
+    best_model.load_state_dict(torch.load(best_checkpoint, weights_only=True)["model_state_dict"])
     test_loss, frame_metrics_test, note_metrics_test = evaluate(best_model, test_dataloader, device, loss_fn, \
                          config["frame_rate"], threshold=config["threshold"], \
                          save_dir=checkpoint_path)

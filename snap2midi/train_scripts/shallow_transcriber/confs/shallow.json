@@ -6,7 +6,7 @@
   "valid_path": "/home/nkcemeka/Documents/snap/snap2midi/extractors/maestro/maestro_segments/valid",
   "test_path": "/home/nkcemeka/Documents/snap/snap2midi/extractors/maestro/maestro_segments/test",
   "epochs": 30,
-  "frame_rate": 51.2,
+  "frame_rate": 32,
   "lr": 0.001,
   "in_features": 144,
   "hidden_units": 512,

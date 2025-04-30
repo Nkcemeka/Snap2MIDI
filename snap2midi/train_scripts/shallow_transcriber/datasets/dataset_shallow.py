@@ -14,7 +14,7 @@ import torch
 from torch.utils.data import Dataset
 
 
-class SnapDataset(Dataset):
+class ShallowDataset(Dataset):
     def __init__(self, emb_path=None):
         super().__init__()
         if emb_path is None:
@@ -46,5 +46,5 @@ class SnapDataset(Dataset):
 
 
 if __name__ == "__main__":
-    dataset = SnapDataset("./extractors/maestro/maestro_segments/train/")
+    dataset = ShallowDataset("./extractors/maestro/maestro_segments/train/")
     print(dataset[0][0].shape, dataset[0][1].shape)

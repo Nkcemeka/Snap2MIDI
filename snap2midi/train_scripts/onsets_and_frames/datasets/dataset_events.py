@@ -16,7 +16,7 @@ import torch
 from torch.utils.data import Dataset
 
 
-class SnapEventsDataset(Dataset):
+class OAFDataset(Dataset):
     def __init__(self, emb_path=None):
         super().__init__()
         if emb_path is None:
@@ -52,5 +52,5 @@ class SnapEventsDataset(Dataset):
 
 
 if __name__ == "__main__":
-    dataset = SnapEventsDataset("./extractors/maestro/maestro_events_segments/train/")
+    dataset = OAFDataset("./extractors/maestro/maestro_events_segments/train/")
     print(dataset[0][0].shape, dataset[0][1].shape)

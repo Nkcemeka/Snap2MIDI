@@ -17,7 +17,7 @@ import json
 from torch.nn.utils import clip_grad_norm_
 from torch.optim.lr_scheduler import StepLR
 from snap2midi.utils.eval_mir import transcription_metrics, multipitch_metrics, note_extract, notes_to_frames
-from .datasets.dataset_events import SnapEventsDataset
+from .datasets.dataset_events import OAFDataset
 from .onsets_and_frames import OnsetsAndFrames
 
 def transcription_metrics_batch(pred, gt, threshold, frame_rate, offset_ratio=None):
@@ -314,9 +314,9 @@ def train_step(model, dataloader, device, \
 
 def main(config):
     # Create datasets 
-    train_dataset = SnapEventsDataset(config["train_path"])
-    valid_dataset = SnapEventsDataset(config["valid_path"])
-    test_dataset = SnapEventsDataset(config["test_path"])
+    train_dataset = OAFDataset(config["train_path"])
+    valid_dataset = OAFDataset(config["valid_path"])
+    test_dataset = OAFDataset(config["test_path"])
 
     # Create dataloaders for each dataset
     train_dataloader = DataLoader(train_dataset, batch_size=config["batch_size"], \
@@ -377,8 +377,6 @@ def main(config):
 
         if valid_loss_dict['valid_total_loss'] <= best_loss:
             best_loss = valid_loss_dict['valid_total_loss']
-            Path(config["save_dir"] + f"/{model_name}/").mkdir(parents=True, \
-                            exist_ok=True)
             torch.save({
                 'epoch': epoch + 1,
                 'model_state_dict': model.state_dict(),
