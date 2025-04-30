@@ -17,7 +17,7 @@ import json
 from torch.nn.utils import clip_grad_norm_
 from torch.optim.lr_scheduler import StepLR
 from snap2midi.utils.eval_mir import transcription_metrics, multipitch_metrics, note_extract, notes_to_frames
-from .datasets.dataset_events import OAFDataset
+from .datasets.dataset_oaf import OAFDataset
 from .onsets_and_frames import OnsetsAndFrames
 
 def transcription_metrics_batch(pred, gt, threshold, frame_rate, offset_ratio=None):

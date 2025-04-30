@@ -4,9 +4,7 @@
     Date: 4/3/2025
     Description: A dataset class to load
                  audio segments for training
-                 an architecture such as Onsets
-                 and frames that requires onsets,
-                 offsets, etc...!
+                 the Onsets and Frames model.
 """
 
 # Imports

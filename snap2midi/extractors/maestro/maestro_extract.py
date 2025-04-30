@@ -25,7 +25,8 @@ class MaestroExtractor:
                  ext_midi: str="midi", hop_size: float=0.8,
                  cqt_num_octaves: int=None, cqt_bins_oct: int=None,
                  n_mels: int=None, mel_n_fft: int=None,
-                 pr_rate: int=None, feature: str="mel", save_name: str="maestro_segments"):
+                 pr_rate: int=None, feature: str="mel", \
+                 save_name: str="maestro_segments"):
         """
             Default constructor for the MaestroExtractor class.
 
@@ -88,12 +89,12 @@ class MaestroExtractor:
                 idx (int): Index of the audio segment
 
             Returns:
-                labels (np.ndarray): Labels for the audio segment
+                label (np.ndarray): Label for the audio segment
         """
         num_frames = int(duration * self.pr_rate)
         start = idx * hop_size
         end = start + duration
-        labels = np.zeros((num_frames, 128))
+        label = np.zeros((num_frames, 128))
 
         for instrument in midi.instruments:
             if not instrument.is_drum:
@@ -103,8 +104,59 @@ class MaestroExtractor:
                     pitch = note.pitch
                     start_frame = max(0, int(self.pr_rate * (note.start-start)))
                     end_frame = min(num_frames, int(self.pr_rate * (note.end - start)))
-                    labels[start_frame:end_frame, pitch] = 1
-        return labels
+                    label[start_frame:end_frame, pitch] = 1
+        return label
+
+    def get_label_events(self, midi, duration, hop_size, idx):
+        """
+            Get the label events for a given audio segment
+            Args:
+                midi (pretty_midi.PrettyMIDI): PrettyMIDI object
+                duration (float): Duration of the audio segment
+                hop_size (float): Hop size in seconds
+                idx (int): Index of the audio segment
+
+            Returns:
+                label_frames (np.ndarray): Label frames for the audio segment
+                label_onsets (np.ndarray): Label onsets for the audio segment
+                label_offsets (np.ndarray): Label offsets for the audio segment
+                label_velocities (np.ndarray): Label velocities for the audio segment
+        """
+        num_frames = int(duration * self.pr_rate)
+        start = idx * hop_size
+        end = start + duration
+        label_frames = np.zeros((num_frames, 128))
+        label_onsets = np.zeros((num_frames, 128))
+        label_offsets = np.zeros((num_frames, 128))
+        label_velocities = np.zeros((num_frames, 128))
+        label_roll = np.zeros((num_frames, 128))
+
+        for instrument in midi.instruments:
+            if not instrument.is_drum:
+                for note in instrument.notes:
+                    if note.start >= end or note.end <= start:
+                        continue
+                    pitch = note.pitch
+                    start_frame = max(0, int(self.pr_rate * (note.start-start)))
+                    end_frame = min(num_frames, int(self.pr_rate * (note.end - start)))
+
+                    # label roll
+                    label_roll[start_frame:end_frame, pitch] = 1
+
+                    onset_end = min(num_frames, start_frame + 1)
+                    offset_end = min(num_frames, end_frame + 1)
+                    # label onsets
+                    label_onsets[start_frame:onset_end, pitch] = 1
+
+                    # label frames
+                    label_frames[onset_end:end_frame, pitch] = 1
+
+                    # label offsets
+                    label_offsets[end_frame:offset_end, pitch] = 1
+
+                    # label velocities
+                    label_velocities[start_frame:end_frame, pitch] = note.velocity
+        return label_frames, label_onsets, label_offsets, label_velocities, label_roll
 
     def extract(self):
         """
@@ -173,8 +225,6 @@ class MaestroExtractor:
 
         for year in tqdm(years, total=len(years)): 
             files_year = sorted((self.base_path / f"{year}").glob(f"*.{self.ext_audio}"))
-            labels_year = sorted((self.base_path / f"{year}").glob(f"*.{self.ext_midi}"))
-
             num_files_year = len(files_year)
             duration_file = duration_split_year / num_files_year
             duration_file_samples = duration_file * self.sample_rate
@@ -205,29 +255,56 @@ class MaestroExtractor:
                     # and hop_size to know the start
                     # time using idx
                     store_dict = {'audio': None, 
-                             'roll': None}
+                                'roll': None,
+                             'roll_frame': None, 
+                             'roll_onset': None, 
+                             'roll_offset': None, 
+                             'roll_velocity': None,
+                             'feature': None}  
 
                     chunk = audio_chunks[idx]
-                    label = self.get_label(midi, self.window_size, \
+
+                    label_frames, label_onsets, label_offsets, \
+                         label_velocities, label_roll = self.get_label_events(midi, self.window_size, \
                             self.hop_size, idx)
+
                     feature = self.get_feature(chunk, feature=self.feature)
                     feature = feature.T # (time, embedding)
 
-                    if feature.shape[0] < label.shape[0]:
-                        # raise error to show that the num of frames of 
-                        # the feature is less than the num of frames
-                        # of the label
-                        raise RuntimeError(f"Feature shape {feature.shape} \
-                                is less than label shape {label.shape}!")
-                    elif feature.shape[0] > label.shape[0]:
-                        # truncate the feature
-                        feature = feature[:label.shape[0], :]
+                    feature = self.trunc_feature(feature, label_frames)
                         
                     store_path = f"./{self.save_name}/{split}/{str(file.stem)}_{idx}.npz" 
                     store_dict['audio'] = chunk
-                    store_dict['roll'] = label
                     store_dict['feature'] = feature
+                    store_dict['roll'] = label_roll
+                    store_dict['roll_frame'] = label_frames
+                    store_dict['roll_onset'] = label_onsets
+                    store_dict['roll_offset'] = label_offsets
+                    store_dict['roll_velocity'] = label_velocities
                     np.savez(store_path, **store_dict) 
+
+    def trunc_feature(self, feature, label):
+        """
+            Truncate the feature to the length of the label
+            Args:
+                feature (np.ndarray): Feature to truncate
+                label (np.ndarray): Label to truncate to
+
+            Returns:
+                feature (np.ndarray): Truncated feature
+        """       
+        if feature.shape[0] < label.shape[0]:
+            # raise error to show that the num of frames of 
+            # the feature is less than the num of frames
+            # of the label
+            raise RuntimeError(f"Feature shape {feature.shape} \
+                    is less than label shape {label.shape}!")
+        elif feature.shape[0] > label.shape[0]:
+            # truncate the feature
+            feature = feature[:label.shape[0], :]
+        
+        return feature
+
     
     def get_feature(self, audio, feature):
         """
