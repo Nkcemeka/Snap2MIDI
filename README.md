@@ -3,24 +3,28 @@ Snap2MIDI is a package that allows you take a "short snap" of audio and convert 
 
 ## Installation
 1. First of all, clone this repo:
-```
-git clone https://github.com/Nkcemeka/Snap2MIDI.git
-```
+
+    ```
+    git clone https://github.com/Nkcemeka/Snap2MIDI.git
+    ```
 
 2. Create a virtual environment:
-```
-python3 -m venv venv
-```
+
+    ```
+    python3 -m venv venv
+    ```
 
 3. Activate the environment (for example):
-```
-source ./venv/bin/activate
-```
+
+    ```
+    source ./venv/bin/activate
+    ```
 
 4. Go to the root directory and run the following:
-```
-pip install .
-```
+
+    ```
+    pip install .
+    ```
 
 ## Extraction
 To extract the audio snapshots/segments and the corresponding labels for a dataset of your choice, go to the extractors folder and run the necessary code using the following below (for MAESTRO) as a guide:
