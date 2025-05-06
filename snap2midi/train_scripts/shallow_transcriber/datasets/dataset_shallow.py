@@ -15,14 +15,28 @@ from torch.utils.data import Dataset
 
 
 class ShallowDataset(Dataset):
-    def __init__(self, emb_path=None):
+    def __init__(self, emb_paths=None, dataset_type="train"):
+        """
+        Args:
+            emb_paths (list): List of paths to npz files containing audio and feature data.
+            dataset_type (str): Type of dataset to load. Options are "train", "val", "test".
+        """
         super().__init__()
-        if emb_path is None:
+        if emb_paths is None:
             raise ValueError(f"{self.__class__.__name__} needs path to embeddings!")
 
-        assert Path(emb_path).exists(), f"{emb_path} does not exist."
-        self.emb_path = emb_path
-        self.data = sorted(Path(self.emb_path).glob("*.npz"))
+        self.data = [] # path to npz files
+        for emb_path in emb_paths:
+            assert Path(emb_path).exists(), f"{emb_path} does not exist."
+            self.emb_path = emb_path
+
+            # Open dataset_type.txt file
+            dataset_type_path = Path(emb_path)/ f"{dataset_type}.txt"
+            with open(dataset_type_path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    self.data.append(Path(emb_path + "/" + line + ".npz"))
+
 
     def __getitem__(self, index):
         item_path = str(self.data[index])

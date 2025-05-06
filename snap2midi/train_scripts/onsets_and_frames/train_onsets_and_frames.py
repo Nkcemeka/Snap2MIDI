@@ -314,9 +314,9 @@ def train_step(model, dataloader, device, \
 
 def main(config):
     # Create datasets 
-    train_dataset = OAFDataset(config["train_path"])
-    valid_dataset = OAFDataset(config["valid_path"])
-    test_dataset = OAFDataset(config["test_path"])
+    train_dataset = OAFDataset(config["paths"])
+    valid_dataset = OAFDataset(config["paths"], dataset_type="val")
+    test_dataset = OAFDataset(config["paths"], dataset_type="test")
 
     # Create dataloaders for each dataset
     train_dataloader = DataLoader(train_dataset, batch_size=config["batch_size"], \

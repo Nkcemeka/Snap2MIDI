@@ -226,9 +226,9 @@ def train_step(model, dataloader, device, \
 
 def main(config):
     # Create datasets 
-    train_dataset = ShallowDataset(config["train_path"])
-    valid_dataset = ShallowDataset(config["valid_path"])
-    test_dataset = ShallowDataset(config["test_path"])
+    train_dataset = ShallowDataset(config["paths"], dataset_type="train")
+    valid_dataset = ShallowDataset(config["paths"], dataset_type="val")
+    test_dataset = ShallowDataset(config["paths"], dataset_type="test")
 
     # Create dataloaders for each dataset
     train_dataloader = DataLoader(train_dataset, batch_size=config["batch_size"], \

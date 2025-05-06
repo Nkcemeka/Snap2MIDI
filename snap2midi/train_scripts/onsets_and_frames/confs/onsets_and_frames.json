@@ -2,9 +2,12 @@
     "project_name": "snap2midi",
     "experiment_name": "OnsetsAndFrames",
     "batch_size": 4,
-    "train_path": "/home/nkcemeka/Documents/snap/snap2midi/extractors/maestro/maestro_segments/train",
-    "valid_path": "/home/nkcemeka/Documents/snap/snap2midi/extractors/maestro/maestro_segments/valid",
-    "test_path": "/home/nkcemeka/Documents/snap/snap2midi/extractors/maestro/maestro_segments/test",
+    "paths": [
+    "/home/nkcemeka/Documents/snap/snap2midi/extractors/mnet_segments/",
+    "/home/nkcemeka/Documents/snap/snap2midi/extractors/gset_segments/",
+    "/home/nkcemeka/Documents/snap/snap2midi/extractors/slakh_segments/",
+    "/home/nkcemeka/Documents/snap/snap2midi/extractors/maestro_segments/"
+    ],
     "epochs": 100,
     "frame_rate": 32,
     "lr": 0.0006,

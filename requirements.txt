@@ -5,3 +5,4 @@ numpy==2.2.5
 pretty_midi==0.2.10
 torch==2.6.0
 tqdm==4.67.1
+git+https://github.com/marl/jams.git
