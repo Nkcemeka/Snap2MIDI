@@ -12,11 +12,11 @@ Description: Implementation of the Onsets and Frames model
 # Imports
 import torch
 from torch import nn
-from typing import List, Optional, Tuple
+from typing import Sequence
 import torch.nn.functional as F
 
 class BiLSTM(nn.Module):
-    def __init__(self, input_size, hidden_size):
+    def __init__(self, input_size: int, hidden_size: int) -> None:
         """
         Default constructor for BiLSTM
         Args:
@@ -26,12 +26,12 @@ class BiLSTM(nn.Module):
         super().__init__()
         self.lstm = nn.LSTM(input_size, hidden_size, bidirectional=True, batch_first=True)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x, _ = self.lstm(x)
         return x
 
 class ConvStack(nn.Module):
-    def __init__(self, input_features, output_features, factor=16):
+    def __init__(self, input_features: int, output_features: int, factor: int=16) -> None:
         """
         Default constructor for ConvStack
         Args:
@@ -72,7 +72,7 @@ class ConvStack(nn.Module):
             nn.Dropout(0.5)
         )
 
-    def forward(self, mel):
+    def forward(self, mel: torch.Tensor) -> torch.Tensor:
         x = mel.view(mel.size(0), 1, mel.size(1), mel.size(2))
         x = self.cnn(x)
         x = x.transpose(1, 2).flatten(-2)
@@ -81,7 +81,16 @@ class ConvStack(nn.Module):
 
 
 class OnsetsAndFrames(nn.Module):
-    def __init__(self, input_features, output_features, factor=16, model_complexity=48):
+    def __init__(self, input_features: int, output_features: int, \
+                 factor: int=16, model_complexity: int=48) -> None:
+        """
+        Default constructor for OnsetsAndFrames
+        Args:
+            input_features (int): Number of input features
+            output_features (int): Number of output features
+            factor (int): Factor for the number of channels
+            model_complexity (int): Model complexity
+        """
         super().__init__()
 
         model_size = model_complexity * factor
@@ -110,7 +119,7 @@ class OnsetsAndFrames(nn.Module):
             nn.Linear(model_size, output_features)
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> Sequence[torch.Tensor]:
         onset_pred = self.onset_stack(x)
         offset_pred = self.offset_stack(x)
         activation_pred = self.frame_stack(x)

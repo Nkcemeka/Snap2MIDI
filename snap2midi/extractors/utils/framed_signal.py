@@ -10,7 +10,8 @@ import numpy as np
 import librosa
 
 class FramedAudio:
-    def __init__(self, audio_path, hop_size, frame_size, sample_rate=None):
+    def __init__(self, audio_path: str, hop_size: float, \
+                 frame_size: float, sample_rate: float | None=None) -> None:
         """ 
             Args:
                 audio_path (str): Path to audio file
@@ -28,7 +29,7 @@ class FramedAudio:
         self.framed_audio = self.generate_frames()
         self.index = 0
     
-    def generate_frames(self):
+    def generate_frames(self) -> np.ndarray:
         """ 
             Generate audio frames
 
@@ -61,17 +62,17 @@ class FramedAudio:
         
         return framed_audio
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> np.ndarray:
         return self.framed_audio[index]
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.framed_audio)
 
     def __iter__(self):
         self.index = 0
         return self
     
-    def __next__(self):
+    def __next__(self) -> np.ndarray:
         if self.index < len(self.framed_audio):
             framed_audio =  self.framed_audio[self.index]
             self.index += 1

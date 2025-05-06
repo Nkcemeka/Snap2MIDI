@@ -32,7 +32,8 @@ class HandcraftedFeatures:
         self.window_size = window_size
         self.pr_rate = pr_rate
 
-    def compute_cqt(self, audio, bins_per_octave=24, num_octaves=6):
+    def compute_cqt(self, audio: np.ndarray, bins_per_octave: int=24,\
+                     num_octaves: int=6) -> np.ndarray:
         """
             Compute the CQT for a given audio segment
             Args:
@@ -56,7 +57,8 @@ class HandcraftedFeatures:
         cqt = np.log1p(cqt)
         return cqt
 
-    def compute_mel(self, audio, n_mels=229, n_fft=2048):
+    def compute_mel(self, audio: np.ndarray, \
+                    n_mels: int=229, n_fft: int=2048) -> np.ndarray:
         """
             Compute the Mel spectrogram for a given audio segment
             Args:

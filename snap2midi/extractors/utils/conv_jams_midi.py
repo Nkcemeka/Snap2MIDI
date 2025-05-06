@@ -5,12 +5,20 @@
 """
 import numpy as np
 import pretty_midi
+import jams
 
-def jams_to_midi(jam, q=1):
+def jams_to_midi(jam: jams.JAMS, q: int = 1) -> pretty_midi.PrettyMIDI:
     """
-        Culled from Github!
+        Convert jams to midi using pretty_midi.
+        Gotten from the `marl repo`_.
+        .. _marl repo: https://github.com/marl/GuitarSet/blob/master/visualize/interpreter.py
 
-        Credits: https://github.com/marl/GuitarSet/blob/master/visualize/interpreter.py
+        Args:
+            jam (jams.JAMS): Jams object
+            q (int): 1: with pitch bend. q = 0: without pitch bend.
+        
+        Returns:
+            midi: PrettyMIDI object
     """
     # q = 1: with pitch bend. q = 0: without pitch bend.
     midi = pretty_midi.PrettyMIDI()

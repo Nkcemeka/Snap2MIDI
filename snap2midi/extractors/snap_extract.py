@@ -19,6 +19,7 @@ from tqdm import tqdm
 from snap2midi.extractors.utils.framed_signal import FramedAudio
 from snap2midi.extractors.utils.handcrafted_features import HandcraftedFeatures
 from snap2midi.extractors.utils.conv_jams_midi import jams_to_midi
+from typing import Sequence
 
 
 @argbind.bind()
@@ -29,12 +30,12 @@ class SnapExtractor:
         two lists of files, one for audio and the other for MIDI.
     """
 
-    def __init__(self, path: str=None, window_size: float=1.0, sample_rate: float=None, 
-                 duration: float=6.0, train_split: float=0.8, val_split: float=0.1, 
+    def __init__(self, path: str=None, window_size: float=1.0, sample_rate: int | float=None, 
+                 duration: int | float=6.0, train_split: float=0.8, val_split: float=0.1, 
                  test_split: float=0.1, ext_audio: str="wav", ext_midi: str="midi",
-                 hop_size: float=0.8, pr_rate: int=None, feature: str="mel", 
-                 feature_params: dict=None, dataset_name = "maestro", \
-                 save_name: str="gset_segments"):
+                 hop_size: float=0.8, pr_rate: int | None=None, feature: str="mel", 
+                 feature_params: dict | None =None, dataset_name: str="maestro", \
+                 save_name: str="gset_segments") -> None:
         """
             Args:
                 path (str): Path to the dataset
@@ -237,7 +238,8 @@ class SnapExtractor:
     
         print(f"Extraction complete! Total duration: {total_duration} seconds")
     
-    def get_label(self, midi, duration, hop_size, idx):
+    def get_label(self, midi: pretty_midi.PrettyMIDI, \
+                  duration: int | float, hop_size: float, idx: int) -> np.ndarray:
         """
             Get the labels for a given audio segment
             Args:
@@ -265,7 +267,9 @@ class SnapExtractor:
                     label[start_frame:end_frame, pitch] = 1
         return label
 
-    def get_label_events(self, midi, duration, hop_size, idx):
+    def get_label_events(self, midi: pretty_midi.PrettyMIDI, \
+                         duration: int | float, hop_size: float, idx: int) -> \
+                            Sequence[np.ndarray]:
         """
             Get the label events for a given audio segment
             Args:
@@ -316,7 +320,7 @@ class SnapExtractor:
                     label_velocities[start_frame:end_frame, pitch] = note.velocity
         return label_frames, label_onsets, label_offsets, label_velocities, label_roll
     
-    def trunc_feature(self, feature, label):
+    def trunc_feature(self, feature: np.ndarray, label: np.ndarray) -> np.ndarray:
         """
             Truncate the feature to the length of the label
             Args:
@@ -339,7 +343,7 @@ class SnapExtractor:
         return feature
 
     
-    def get_feature(self, audio, feature, feature_params = None):
+    def get_feature(self, audio : np.ndarray, feature: str):
         """
             Get the feature for a given audio segment
             Args:
@@ -375,7 +379,7 @@ class SnapExtractor:
                 return hf.compute_cqt(audio, bins_per_octave=bins_per_octave, \
                         num_octaves=num_octaves)
 
-    def checker(self, audio_files, midi_files):
+    def checker(self, audio_files: list[Path], midi_files: list[Path]) -> None:
         """
             Check if the audio and midi files are the same.
             This function should be used only on datasets
@@ -396,7 +400,8 @@ class SnapExtractor:
         assert audio_files[idx].stem == midi_files[idx].stem, \
                 f"Audio file name: {audio_files[idx].stem} not the same as midi file: {midi_files[idx].stem}"
     
-    def checker_guitarset_slakh(self, audio_files, midi_files, dataset="guitarset"):
+    def checker_guitarset_slakh(self, audio_files: list[Path], midi_files: list[Path], \
+                                dataset: str="guitarset") -> None:
         """
             Check if the audio and midi files are the same
             for the GuitarSet dataset (assuming the audio is
@@ -430,7 +435,7 @@ class SnapExtractor:
             assert audio_files[idx].stem == midi_files[idx].stem, \
                 f"Audio file name: {audio_files[idx].stem} not the same as midi file: {midi_files[idx].stem}"
 
-    def get_files_maestro(self, path: str):
+    def get_files_maestro(self, path: str) -> tuple[list[Path], list[Path]]:
         """
             Get the list of audio and midi files from the given path
             for the MAESTRO dataset.
@@ -449,7 +454,7 @@ class SnapExtractor:
         self.checker(audio_files, midi_files)
         return audio_files, midi_files
 
-    def get_files_guitarset(self, path: str):
+    def get_files_guitarset(self, path: str) -> tuple[list[Path], list[Path]]:
         """
             Get the list of audio and midi files from the given path
             for the GuitarSet dataset.
@@ -483,7 +488,7 @@ class SnapExtractor:
 
         return audio_files, midi_files
     
-    def get_files_musicnet(self, path: str):
+    def get_files_musicnet(self, path: str) -> tuple[list[Path], list[Path]]:
         """
         Get the list of audio and midi files from the given path
         for the MusicNet dataset. This function assumes that you are using 
@@ -513,7 +518,7 @@ class SnapExtractor:
 
         return audio_files, midi_files
 
-    def get_files_slakh(self, path: str):
+    def get_files_slakh(self, path: str) -> tuple[list[Path], list[Path]]:
         """
         Get the list of audio and midi files from the given path
         for the Slakh dataset.

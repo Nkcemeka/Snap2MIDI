@@ -19,8 +19,11 @@ from torch.optim.lr_scheduler import StepLR
 from snap2midi.utils.eval_mir import transcription_metrics, multipitch_metrics, note_extract, notes_to_frames
 from .datasets.dataset_oaf import OAFDataset
 from .onsets_and_frames import OnsetsAndFrames
+from typing import Any
 
-def transcription_metrics_batch(pred, gt, threshold, frame_rate, offset_ratio=None):
+def transcription_metrics_batch(pred: tuple[torch.Tensor], gt: tuple[torch.Tensor], \
+                                threshold: float, frame_rate: int | float,\
+                                 offset_ratio: float|None=None) -> dict:
     """
     Calculate transcription metrics for a batch of predictions and ground truth.
     F1-scores should be ignored and recalculated based on the precision and recall
@@ -34,6 +37,7 @@ def transcription_metrics_batch(pred, gt, threshold, frame_rate, offset_ratio=No
         gt (Tuple): Ground truth piano rolls.
         threshold (float): Threshold for binarizing predictions.
         frame_rate (int): Frames per second.
+
     Returns:
         metrics (dict): Dictionary containing the calculated metrics.
     """
@@ -80,7 +84,8 @@ def transcription_metrics_batch(pred, gt, threshold, frame_rate, offset_ratio=No
     
     return metrics
 
-def multipitch_metrics_batch(pred, gt, threshold, frame_rate):
+def multipitch_metrics_batch(pred: tuple[torch.Tensor], gt: tuple[torch.Tensor], \
+                             threshold: float, frame_rate: float | int) -> dict:
     """
     Calculate multipitch metrics for a batch of predictions and ground truth.
     Args:
@@ -123,7 +128,8 @@ def multipitch_metrics_batch(pred, gt, threshold, frame_rate):
     
     return metrics
 
-def save(audio, y, preds, threshold, save_dir, batch_index):
+def save(audio: torch.Tensor, y: torch.Tensor, preds: torch.Tensor, \
+         threshold: float, save_dir: str, batch_index: int) -> None:
     """
     Save audio and piano roll predictions to .npz files.
 
@@ -154,7 +160,8 @@ def save(audio, y, preds, threshold, save_dir, batch_index):
         result_dict = {'audio': audio_arr, 'original_roll': y_roll, 'pred_roll': preds_roll}
         np.savez(save_dir + f"/results/{batch_index}_{each}.npz", **result_dict)
 
-def loss_velocity(velocity_pred, velocity_label, onset_label):
+def loss_velocity(velocity_pred: torch.Tensor, velocity_label: torch.Tensor, \
+                  onset_label: torch.Tensor) -> torch.Tensor:
         denominator = onset_label.sum()
         if denominator.item() == 0:
             return denominator
@@ -162,8 +169,9 @@ def loss_velocity(velocity_pred, velocity_label, onset_label):
             return (onset_label * (velocity_label - velocity_pred) ** 2).sum() / denominator
 
 @torch.no_grad()
-def evaluate(model, dataloader, device, \
-        loss_fn, frame_rate, threshold=0.3, prefix="valid", offset_ratio=None, save_dir=None):
+def evaluate(model: Any, dataloader: Any, device: str, \
+        loss_fn: Any, frame_rate: float | int, threshold:float=0.3, \
+        prefix: str="valid", offset_ratio=None, save_dir: str | None=None):
     model.eval()
     loss_dict = {f'{prefix}_total_loss': 0, f'{prefix}_onset_loss': 0, \
             f'{prefix}_offset_loss': 0, f'{prefix}_frame_loss': 0, \
@@ -257,8 +265,8 @@ def evaluate(model, dataloader, device, \
     return loss_dict, metrics_frames, metrics_note
 
 
-def train_step(model, dataloader, device, \
-    loss_fn, optimizer, scheduler, clip_gradient_norm=3.0):
+def train_step(model: Any, dataloader: Any, device: str, \
+    loss_fn: Any, optimizer: Any, scheduler: Any, clip_gradient_norm: float=3.0):
     model.train()
     loss_dict = {'train_total_loss': 0, 'train_onset_loss': 0, 'train_offset_loss': 0, \
             'train_frame_loss': 0, 'train_velocity_loss': 0}

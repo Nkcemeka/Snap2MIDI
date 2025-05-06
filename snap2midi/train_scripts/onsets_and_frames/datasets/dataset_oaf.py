@@ -12,10 +12,10 @@ import numpy as np
 from pathlib import Path
 import torch
 from torch.utils.data import Dataset
-
+from typing import Sequence
 
 class OAFDataset(Dataset):
-    def __init__(self, emb_paths=None, dataset_type="train"):
+    def __init__(self, emb_paths: list[str]=None, dataset_type: str="train") -> None:
         """
         Args:
             emb_paths (list): List of paths to npz files containing audio and feature data.
@@ -37,7 +37,7 @@ class OAFDataset(Dataset):
                     line = line.strip()
                     self.data.append(Path(emb_path + "/" + line + ".npz"))
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> Sequence[np.ndarray]:
         item_path = str(self.data[index])
         item = np.load(item_path)
 
@@ -58,7 +58,7 @@ class OAFDataset(Dataset):
         return (feature, label_frame, label_onset, label_offset,\
                 label_velocity, audio)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.data)
 
 

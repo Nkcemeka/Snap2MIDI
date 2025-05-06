@@ -12,15 +12,18 @@ import torch
 
 # Function that takes a piano roll and gets the
 # ref and est intervals and pitches
-def get_intervals_and_pitches(piano_roll, frame_rate):
+def get_intervals_and_pitches(piano_roll: np.ndarray, \
+                              frame_rate: int) -> tuple[np.ndarray, np.ndarray]:
     """
     Get the intervals and pitches from a piano roll.
+    
     Args:
-        piano_roll (numpy.ndarray): Piano roll.
+        piano_roll (np.ndarray): Piano roll.
         frame_rate (int): Frames per second
+
     Returns:
-        intervals (numpy.ndarray): Onset and offset events.
-        pitches (numpy.ndarray): Pitches of events.
+        intervals (np.ndarray): Onset and offset events.
+        pitches (np.ndarray): Pitches of events.
     """
 
     # pad the piano roll at the top and bottom with zeros
@@ -48,15 +51,17 @@ def get_intervals_and_pitches(piano_roll, frame_rate):
     return intervals, pitches
 
 # Function to calculate transcription metrics
-def transcription_metrics(pred, gt, frame_rate=None):
+def transcription_metrics(pred: np.ndarray, gt: np.ndarray, \
+                          frame_rate: int|None=None) -> dict:
     """
     Calculate transcription metrics using mir_eval.
     Args:
-        pred (numpy.ndarray): Predicted piano roll.
-        gt (numpy.ndarray): Ground truth piano roll.
+        pred (np.ndarray): Predicted piano roll.
+        gt (np.ndarray): Ground truth piano roll.
         frame_rate (int): Frames per second
+
     Returns:
-        scores: Dictionary containing the calculated metrics.
+        scores (dict): Dictionary containing the calculated metrics.
     """
     if frame_rate is None:
         raise ValueError("Frame rate must be specified.")
@@ -74,15 +79,16 @@ def transcription_metrics(pred, gt, frame_rate=None):
     return scores
 
 # Function to get multipitch intervals and pitches
-def get_multipitch_intervals_and_pitches(piano_roll, frame_rate):
+def get_multipitch_intervals_and_pitches(piano_roll: np.ndarray, \
+                                         frame_rate: int) -> tuple[np.ndarray, list[np.ndarray]]:
     """
     Get the multipitch intervals and pitches from a piano roll.
     Args:
-        piano_roll (numpy.ndarray): Piano roll.
+        piano_roll (np.ndarray): Piano roll.
         frame_rate (int): Frames per second
     Returns:
-        times (numpy.ndarray): Times of the active notes.
-        pitches (numpy.ndarray): Pitches of the active notes.
+        times (np.ndarray): Times of the active notes.
+        pitches list(np.ndarray): Pitches of the active notes.
     """
     times = np.arange(piano_roll.shape[0])
 
@@ -102,13 +108,15 @@ def get_multipitch_intervals_and_pitches(piano_roll, frame_rate):
     return times, pitches   
 
 # Function to calculate multipitch metrics
-def multipitch_metrics(pred, gt, frame_rate=None):
+def multipitch_metrics(pred: np.ndarray, gt: np.ndarray, \
+                       frame_rate: int|None=None) -> dict:
     """
     Calculate multipitch metrics using mir_eval.
     Args:
-        pred (numpy.ndarray): Predicted multipitch.
-        gt (numpy.ndarray): Ground truth multipitch.
+        pred (np.ndarray): Predicted multipitch.
+        gt (np.ndarray): Ground truth multipitch.
         frame_rate (int): Frames per second
+
     Returns:
         scores: Dictionary containing the calculated metrics.
     """
@@ -126,8 +134,9 @@ def multipitch_metrics(pred, gt, frame_rate=None):
     return scores
 
 
-def note_extract(onset_roll, frame_roll, velocity_roll, onset_thresh=0.5, \
-                 frame_thresh=0.5):
+def note_extract(onset_roll: torch.Tensor, frame_roll: torch.Tensor, \
+                 velocity_roll: torch.Tensor, onset_thresh: float=0.5, \
+                 frame_thresh: float=0.5) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Extract notes from the piano roll.
     Args:
@@ -180,15 +189,15 @@ def note_extract(onset_roll, frame_roll, velocity_roll, onset_thresh=0.5, \
     return np.array(notes), np.array(intervals), np.array(vels)
 
 
-def notes_to_frames(notes, intervals, shape):
+def notes_to_frames(notes: np.ndarray, intervals: np.ndarray, shape: tuple) -> np.ndarray:
     """
     Convert notes and intervals to a piano roll.
     Args:
-        notes (numpy.ndarray): Notes.
-        intervals (numpy.ndarray): Intervals of the notes.
+        notes (np.ndarray): Notes.
+        intervals (np.ndarray): Intervals of the notes.
         shape (tuple): Shape of the piano roll.
     Returns:
-        roll (numpy.ndarray): Piano roll.
+        roll (np.ndarray): Piano roll.
     Credits: https://github.com/jongwook/onsets-and-frames
     """
     # Create a piano roll of zeros

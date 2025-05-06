@@ -17,8 +17,11 @@ import json
 from .shallow_network import ShallowTranscriber
 from .datasets.dataset_shallow import ShallowDataset
 from snap2midi.utils.eval_mir import transcription_metrics, multipitch_metrics
+from typing import Any
 
-def transcription_metrics_batch(pred, gt, threshold, frame_rate, offset_ratio=None):
+def transcription_metrics_batch(pred: torch.Tensor, gt: torch.Tensor, \
+                                threshold: float, frame_rate: int | float,\
+                                offset_ratio=None) -> dict:
     """
     Calculate transcription metrics for a batch of predictions and ground truth.
     F1-scores should be ignored and recalculated based on the precision and recall
@@ -69,7 +72,8 @@ def transcription_metrics_batch(pred, gt, threshold, frame_rate, offset_ratio=No
     
     return metrics
 
-def multipitch_metrics_batch(pred, gt, threshold, frame_rate):
+def multipitch_metrics_batch(pred: torch.Tensor, gt: torch.Tensor, \
+                             threshold: float, frame_rate: float | int) -> dict:
     """
     Calculate multipitch metrics for a batch of predictions and ground truth.
     Args:
@@ -102,7 +106,8 @@ def multipitch_metrics_batch(pred, gt, threshold, frame_rate):
     
     return metrics
 
-def save(audio, y, preds, threshold, save_dir, batch_index):
+def save(audio: torch.Tensor, y: torch.Tensor, preds: torch.Tensor, \
+         threshold: float, save_dir: str, batch_index: int) -> None:
     """
     Save audio and piano roll predictions to .npz files.
 
@@ -125,8 +130,9 @@ def save(audio, y, preds, threshold, save_dir, batch_index):
         np.savez(save_dir + f"/results/{batch_index}_{each}.npz", **result_dict)
     
 @torch.no_grad()
-def evaluate(model, dataloader, device, \
-        loss_fn, frame_rate, threshold=0.3, offset_ratio=None, save_dir=None):
+def evaluate(model: Any, dataloader: Any, device: str, \
+        loss_fn: Any, frame_rate: int | float, threshold: float=0.3, \
+        offset_ratio=None, save_dir: str | None=None) -> tuple[torch.Tensor, dict, dict]:
     model.eval()
     total_loss = 0
     num_samples = 0
@@ -195,8 +201,8 @@ def evaluate(model, dataloader, device, \
     return avg_loss, metrics_frames, metrics_note
 
 
-def train_step(model, dataloader, device, \
-    loss_fn, optimizer):
+def train_step(model: Any, dataloader: Any, device: str, \
+    loss_fn: Any, optimizer: Any):
     model.train()
     total_loss = 0
     num_samples = 0

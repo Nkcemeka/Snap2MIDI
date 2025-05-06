@@ -10,7 +10,8 @@ import pretty_midi
 import argparse
 from pathlib import Path
 
-def conv_to_midi(piano_roll, filename, frame_rate, output_path=None, save=False):
+def conv_to_midi(piano_roll: np.ndarray, filename: str, frame_rate: int, \
+                 output_path: str|None=None, save: bool=False) -> pretty_midi.PrettyMIDI:
     """ 
         Args:
             piano_roll (np.ndarray): Piano roll of shape (frames, 128)
