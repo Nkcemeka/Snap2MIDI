@@ -52,7 +52,7 @@ class ShallowDataset(Dataset):
         feature = torch.from_numpy(feature)
 
         # Get the roll representation
-        label = item["roll"].astype(np.float32)
+        label = item["label_frames"].astype(np.float32)
         label = torch.from_numpy(label)
         return (feature, label, audio)
 

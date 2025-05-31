@@ -30,17 +30,18 @@ def conv_to_midi(piano_roll: np.ndarray, filename: str, frame_rate: int, \
     piano = pretty_midi.Instrument(program=prog)
 
     for pitch in range(128):
-        prev_val = 0 # stores velocity value of previous frame [0, 1]
+        prev_val = 0.0 # stores velocity value of previous frame [0, 1]
         for frame in range(piano_roll.shape[0]):
-            if piano_roll[frame, pitch] == 1 and prev_val == 0:
+            if piano_roll[frame, pitch] > 0.0 and prev_val == 0.0:
                 # Note on
                 start = frame / frame_rate
+                vel = piano_roll[frame, pitch]
                 prev_val = piano_roll[frame, pitch]
-            elif piano_roll[frame, pitch] == 0 and prev_val == 1:
+            elif piano_roll[frame, pitch] == 0.0 and prev_val > 0.0:
                 # Note off
                 end = frame / frame_rate
                 note = pretty_midi.Note(
-                    velocity=100, pitch=pitch, start=start, end=end
+                    velocity=vel, pitch=pitch, start=start, end=end
                 )
                 piano.notes.append(note)
                 prev_val = 0

@@ -109,7 +109,7 @@ class OnsetsAndFrames(nn.Module):
         self.frame_stack = nn.Sequential(
             ConvStack(input_features, model_size),
             nn.Linear(model_size, output_features),
-        )
+        ) 
         self.combined_stack = nn.Sequential(
             sequence_model(output_features * 3, model_size),
             nn.Linear(model_size, output_features),

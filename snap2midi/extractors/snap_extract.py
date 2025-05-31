@@ -19,7 +19,7 @@ from tqdm import tqdm
 from snap2midi.extractors.utils.framed_signal import FramedAudio
 from snap2midi.extractors.utils.handcrafted_features import HandcraftedFeatures
 from snap2midi.extractors.utils.conv_jams_midi import jams_to_midi
-from typing import Sequence
+from typing import Optional
 
 
 @argbind.bind()
@@ -30,28 +30,29 @@ class SnapExtractor:
         two lists of files, one for audio and the other for MIDI.
     """
 
-    def __init__(self, path: str=None, window_size: float=1.0, sample_rate: int | float=None, 
-                 duration: int | float=6.0, train_split: float=0.8, val_split: float=0.1, 
-                 test_split: float=0.1, ext_audio: str="wav", ext_midi: str="midi",
-                 hop_size: float=0.8, pr_rate: int | None=None, feature: str="mel", 
-                 feature_params: dict | None =None, dataset_name: str="maestro", \
+    def __init__(self, path: Optional[str]=None, window_size: float=1.0, 
+                 sample_rate: Optional[int]=None, duration: float=6.0, 
+                 train_split: float=0.8, val_split: float=0.1, test_split: float=0.1, 
+                 ext_audio: str="wav", ext_midi: str="midi", hop_size: float=0.8, 
+                 pr_rate: Optional[int]=None, feature: str="mel", 
+                 feature_params: dict={}, dataset_name: str="maestro",
                  save_name: str="gset_segments") -> None:
         """
             Args:
                 path (str): Path to the dataset
                 window_size (float): Window size for the audio segments
                 sample_rate (float): Sample rate for the audio segments
-                duration (float): Duration of the audio segments to extract
-                ext_audio (str): Extension of the audio files
-                ext_midi (str): Extension of the midi files
-                hop_size (float): Hop size for the audio segments
-                pr_rate (int): Rate at which to extract features
-                feature (str): Feature to extract from the audio segments
-                feature_params (dict): Parameters for the feature extraction
-                dataset_name (str): Name of the dataset
+                duration (float): Total duration of the audio segments to extract
                 train_split (float): Split for the training set
                 val_split (float): Split for the validation set
                 test_split (float): Split for the test set
+                ext_audio (str): Extension of the audio files
+                ext_midi (str): Extension of the midi files
+                hop_size (float): Hop size for the audio segments
+                pr_rate (int): Piano roll rate at which to extract features (frames_per_second)
+                feature (str): Feature to extract from the audio segments
+                feature_params (dict): Parameters for the feature extraction
+                dataset_name (str): Name of the dataset
                 save_name (str): Name of the folder to save the extracted files
 
             Returns:
@@ -65,12 +66,13 @@ class SnapExtractor:
         if not Path(path).exists():
             raise ValueError(f"Path {path} does not exist!")
         
+        # Init defaults
         self.hop_size = hop_size
         self.window_size = window_size
         self.ext_audio = ext_audio
         self.ext_midi = ext_midi
         self.duration = duration
-        self.sample_rate = sample_rate
+        self.sample_rate = sample_rate if sample_rate is not None else 22050
         self.dataset_name = dataset_name
         self.save_name = save_name
         self.feature = feature
@@ -85,15 +87,18 @@ class SnapExtractor:
                     Train split: {self.train_split}, Val split: {self.val_split}, \
                     Test split: {self.test_split}")
 
+        # Set pr_rate
         if pr_rate is None:
-            self.pr_rate = sample_rate
+            self.pr_rate = 32
         else:
             self.pr_rate = pr_rate
         
-        if feature_params is None:
+        # Set feature params.
+        if not feature_params:
             self.feature = "mel"
             self.feature_params = {"n_mels": 229, "mel_n_fft": 2048}
 
+        # Extract datasets
         if self.dataset_name == "maestro":
             self.data = self.get_files_maestro(path)
         elif self.dataset_name == "guitarset":
@@ -173,6 +178,7 @@ class SnapExtractor:
         """
         audio_files = self.data[0]
         midi_files = self.data[1]
+
         total_duration = 0 # Track the accumulated duration of the audio segments
         for audio_file, midi_file in zip(audio_files, midi_files):
             assert audio_file.exists(), f"{audio_file} does not exist"
@@ -206,19 +212,16 @@ class SnapExtractor:
                         len(chunk) / self.sample_rate)} seconds")
                     return
 
-                store_dict = {'audio': None, 'roll': None, 'roll_frame': None, 
-                'roll_onset': None, 'roll_offset': None, 'roll_velocity': None,
-                'feature': None}  
+                store_dict = {'audio': None, 'feature': None}  
 
-                label_frames, label_onsets, label_offsets, \
-                label_velocities, label_roll = self.get_label_events(midi, self.window_size, \
-                self.hop_size, idx)
+                label_dict = self.get_label_roll(midi, self.window_size, \
+                    self.hop_size, idx)
 
                 feature = self.get_feature(chunk, feature=self.feature)
                 feature = feature.T # (time, embedding)
 
-                feature = self.trunc_feature(feature, label_frames)
-                    
+                feature = self.trunc_feature(feature, label_dict['label_frames'])
+
                 if self.dataset_name != "slakh":
                     store_path = f"./{self.save_name}/{str(audio_file.stem)}_{idx}.npz" 
                 else:
@@ -229,19 +232,20 @@ class SnapExtractor:
 
                 store_dict['audio'] = chunk
                 store_dict['feature'] = feature
-                store_dict['roll'] = label_roll
-                store_dict['roll_frame'] = label_frames
-                store_dict['roll_onset'] = label_onsets
-                store_dict['roll_offset'] = label_offsets
-                store_dict['roll_velocity'] = label_velocities
+
+                for key in label_dict.keys():
+                    store_dict[key] = label_dict[key]
+                    
                 np.savez(store_path, **store_dict)
     
         print(f"Extraction complete! Total duration: {total_duration} seconds")
-    
-    def get_label(self, midi: pretty_midi.PrettyMIDI, \
-                  duration: int | float, hop_size: float, idx: int) -> np.ndarray:
+
+    def get_label_roll(self, midi: pretty_midi.PrettyMIDI, \
+                  duration: int | float, hop_size: float, idx: int) -> dict:
         """
-            Get the labels for a given audio segment
+            Get the label and pedal rolls for a given audio segment.
+            The regressed rolls generated follow Kong's model!
+
             Args:
                 midi (pretty_midi.PrettyMIDI): PrettyMIDI object
                 duration (float): Duration of the audio segment
@@ -249,76 +253,202 @@ class SnapExtractor:
                 idx (int): Index of the audio segment
 
             Returns:
-                label (np.ndarray): Label for the audio segment
+                target_dict: {
+                    label_frames (np.ndarray): Frames label
+                    label_onsets (np.ndarray): Onsets label
+                    label_offsets (np.ndarray): Offsets label
+                    label_reg_onsets (np.ndarray): Label regression onsets for the audio segment
+                    label_reg_offsets (np.ndarray): Label regression offsets for the audio segment
+                    label_velocities (np.ndarray): Label velocities for the audio segment
+                    pedal_onset (np.ndarray): Pedal onset label
+                    pedal_frames (np.ndarray): Pedal frames label
+                    pedal_offset (np.ndarray): Pedal offset label
+                    pedal_reg_onset (np.ndarray): Regressed pedal onset label
+                    pedal_reg_offset (np.ndarray): Regressed pedal offset label
+                    mask_roll (np.ndarray): Mask roll label to remove all events that do not occur
+                                            in the audio segment
+                    note_events (np.ndarray): Array of note events for the audio segment
+                    pedal_events (np.ndarray): Array of pedal events for the audio segment
+                } 
         """
-        num_frames = int(duration * self.pr_rate)
+        # init target_dict and set the keys to None
+        target_dict: dict[str, Optional[np.ndarray]] = {
+            'label_frames': None,
+            'label_onsets': None,
+            'label_offsets': None,
+            'label_reg_onsets': None,
+            'label_reg_offsets': None,
+            'label_velocities': None,
+            'pedal_onset': None,
+            'pedal_frames': None,
+            'pedal_offset': None,
+            'pedal_reg_onset': None,
+            'pedal_reg_offset': None,
+            'mask_roll': None,
+            'note_events': None
+        }
+
+        num_frames = int(round(duration * self.pr_rate)) + 1
         start = idx * hop_size
         end = start + duration
-        label = np.zeros((num_frames, 128))
 
-        for instrument in midi.instruments:
-            if not instrument.is_drum:
-                for note in instrument.notes:
-                    if note.start >= end or note.end <= start:
-                        continue
-                    pitch = note.pitch
-                    start_frame = max(0, int(self.pr_rate * (note.start-start)))
-                    end_frame = min(num_frames, int(self.pr_rate * (note.end - start)))
-                    label[start_frame:end_frame, pitch] = 1
-        return label
-
-    def get_label_events(self, midi: pretty_midi.PrettyMIDI, \
-                         duration: int | float, hop_size: float, idx: int) -> \
-                            Sequence[np.ndarray]:
-        """
-            Get the label events for a given audio segment
-            Args:
-                midi (pretty_midi.PrettyMIDI): PrettyMIDI object
-                duration (float): Duration of the audio segment
-                hop_size (float): Hop size in seconds
-                idx (int): Index of the audio segment
-
-            Returns:
-                label_frames (np.ndarray): Label frames for the audio segment
-                label_onsets (np.ndarray): Label onsets for the audio segment
-                label_offsets (np.ndarray): Label offsets for the audio segment
-                label_velocities (np.ndarray): Label velocities for the audio segment
-        """
-        num_frames = int(duration * self.pr_rate)
-        start = idx * hop_size
-        end = start + duration
+        # initialize the labels
         label_frames = np.zeros((num_frames, 128))
         label_onsets = np.zeros((num_frames, 128))
         label_offsets = np.zeros((num_frames, 128))
         label_velocities = np.zeros((num_frames, 128))
-        label_roll = np.zeros((num_frames, 128))
+        label_reg_onsets = np.ones((num_frames, 128))
+        label_reg_offsets = np.ones((num_frames, 128))
+        pedal_onset = np.zeros((num_frames,))
+        pedal_frames = np.zeros((num_frames,))
+        pedal_offset = np.zeros((num_frames,))
+        pedal_reg_onset = np.ones((num_frames,))
+        pedal_reg_offset = np.ones((num_frames,))
+        mask_roll = np.ones((num_frames, 128))
 
+        note_events = []  # contains (onset, offset, pitch, velocity)
+        
         for instrument in midi.instruments:
             if not instrument.is_drum:
                 for note in instrument.notes:
                     if note.start >= end or note.end <= start:
-                        continue
+                        continue 
                     pitch = note.pitch
-                    start_frame = max(0, int(self.pr_rate * (note.start-start)))
-                    end_frame = min(num_frames, int(self.pr_rate * (note.end - start)))
+                    note_events.append([note.start - start, min(duration, note.end - start), 
+                                        pitch, note.velocity])
+                    
+                    start_frame = int(round(self.pr_rate * (note.start - start)))
 
-                    # label roll
-                    label_roll[start_frame:end_frame, pitch] = 1
+                    # clamp end frame like was done in Kong's paper
+                    end_frame = int(round(self.pr_rate * (note.end - start)))
 
-                    onset_end = min(num_frames, start_frame + 1)
-                    offset_end = min(num_frames, end_frame + 1)
-                    # label onsets
-                    label_onsets[start_frame:onset_end, pitch] = 1
+                    # prepare labels (note that end_frame is >= 0 else it would
+                    # have been skipped)
+                    if end_frame < num_frames:
+                        label_frames[max(0, start_frame):end_frame + 1, pitch] = 1
+                        label_offsets[end_frame, pitch] = 1
+                        label_velocities[max(0, start_frame):end_frame + 1, pitch] = note.velocity
 
-                    # label frames
-                    label_frames[onset_end:end_frame, pitch] = 1
+                        label_reg_offsets[end_frame, pitch] = \
+                        (note.end - start) - (end_frame / self.pr_rate)
 
-                    # label offsets
-                    label_offsets[end_frame:offset_end, pitch] = 1
+                        if start_frame >= 0:
+                            label_onsets[start_frame, pitch] = 1
+                            label_reg_onsets[start_frame, pitch] = \
+                            (note.start - start) - (start_frame / self.pr_rate)
+                        else:
+                            mask_roll[:end_frame + 1, pitch] = 0
+                    else:
+                        if start_frame >= 0:
+                            mask_roll[start_frame:] = 0
+                        else:
+                            mask_roll[:] = 0
+        
+        for pitch in range(128):
+            label_reg_onsets[:, pitch] = self.get_reg(label_reg_onsets[:, pitch])
+            label_reg_offsets[:, pitch] = self.get_reg(label_reg_offsets[:, pitch])
+        
+        # Get the pedal events
+        # Credits: https://github.com/craffel/pretty-midi/blob/main/pretty_midi/instrument.py#L69
+        CC_SUSTAIN_PEDAL = 64
+        frame_pedal_on = 0
+        is_pedal_on = False
+        pedal_events: list[list] = [] # contains [onset_time, offset_time]
 
-                    # label velocities
-                    label_velocities[start_frame:end_frame, pitch] = note.velocity
-        return label_frames, label_onsets, label_offsets, label_velocities, label_roll
+        for instrument in midi.instruments:
+            if not instrument.is_drum:
+                for cc in [_e for _e in instrument.control_changes
+                           if _e.number == CC_SUSTAIN_PEDAL]:
+                    
+                    if cc.time >= end or cc.time <= start:
+                        continue
+                   
+                    # Kong's implementation used round before int & so I did...why?
+                    # round minimizes the average timing error to half a frame...
+                    # int is okay but leads to more errors on average..
+                    frame_now = int(round((cc.time - start) * self.pr_rate))
+                    time_now = cc.time - start
+                    is_current_pedal_on = (cc.value >= CC_SUSTAIN_PEDAL)
+
+                    if not is_pedal_on and is_current_pedal_on:
+                        frame_pedal_on = frame_now
+                        is_pedal_on = True
+                        onset_time = time_now
+                    elif is_pedal_on and not is_current_pedal_on:
+                        # store the pedal information
+                        # We add +1 due to python's indexing. Also, see num_frames above;
+                        # + 1 was added to catch events that fall exactly at the right
+                        # edge of the last frame (which can happen)
+                        pedal_frames[frame_pedal_on:frame_now + 1] = 1
+                        pedal_offset[frame_now] = 1
+                        pedal_reg_offset[frame_now] = \
+                        (time_now) - (frame_now / self.pr_rate)
+
+                        if frame_pedal_on >= 0:
+                            pedal_onset[frame_pedal_on] = 1
+                            pedal_reg_onset[frame_pedal_on] = \
+                            (onset_time) - (frame_pedal_on / self.pr_rate)
+                        
+                        is_pedal_on = False
+                        pedal_events.append([onset_time, time_now])
+        
+        # Get the pedal regressed values
+        pedal_reg_onset = self.get_reg(pedal_reg_onset)
+        pedal_reg_offset = self.get_reg(pedal_reg_offset)
+
+        # update the target_dict
+        target_dict['label_frames'] = label_frames
+        target_dict['label_onsets'] = label_onsets
+        target_dict['label_offsets'] = label_offsets
+        target_dict['label_reg_onsets'] = label_reg_onsets
+        target_dict['label_reg_offsets'] = label_reg_offsets
+        target_dict['label_velocities'] = label_velocities
+        target_dict['pedal_onset'] = pedal_onset
+        target_dict['pedal_frames'] = pedal_frames
+        target_dict['pedal_offset'] = pedal_offset
+        target_dict['pedal_reg_onset'] = pedal_reg_onset
+        target_dict['pedal_reg_offset'] = pedal_reg_offset
+        target_dict['mask_roll'] = mask_roll
+        target_dict['note_events'] = np.array(note_events)
+        target_dict['pedal_events'] = np.array(pedal_events)
+        return target_dict
+        
+    
+    def get_reg(self, input: np.ndarray) -> np.ndarray:
+        """
+            Get the regression for a given roll using
+            Kong's approach! The code is slightly different
+            from the original.
+
+            Args:
+                input (np.ndarray): Roll to regress
+            Returns:
+                output (np.ndarray): Regressed roll
+        """
+        step = 1. / self.pr_rate
+        output = np.ones_like(input)
+        
+        locts = np.where(input < 0.5)[0] 
+        if len(locts) > 0:
+            for t in range(0, locts[0]):
+                output[t] = step * (t - locts[0]) - input[locts[0]]
+
+            for i in range(0, len(locts) - 1):
+                for t in range(locts[i], (locts[i] + locts[i + 1]) // 2):
+                    output[t] = step * (t - locts[i]) - input[locts[i]]
+
+                for t in range((locts[i] + locts[i + 1]) // 2, locts[i + 1]):
+                    # should be input[locts[i + 1]]
+                    output[t] = step * (t - locts[i + 1]) - input[locts[i + 1]]
+
+            for t in range(locts[-1], len(input)):
+                output[t] = step * (t - locts[-1]) - input[locts[-1]]
+
+        output = np.clip(np.abs(output), 0., 0.05) * 20
+        output = (1. - output)
+
+        return output
+
     
     def trunc_feature(self, feature: np.ndarray, label: np.ndarray) -> np.ndarray:
         """
@@ -334,8 +464,8 @@ class SnapExtractor:
             # raise error to show that the num of frames of 
             # the feature is less than the num of frames
             # of the label
-            raise RuntimeError(f"Feature shape {feature.shape} \
-                    is less than label shape {label.shape}!")
+            raise RuntimeError(f"Feature frames {feature.shape} \
+                    is less than label frames {label.shape}!")
         elif feature.shape[0] > label.shape[0]:
             # truncate the feature
             feature = feature[:label.shape[0], :]

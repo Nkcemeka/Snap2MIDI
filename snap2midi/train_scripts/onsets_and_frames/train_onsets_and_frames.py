@@ -146,10 +146,10 @@ def save(audio: torch.Tensor, y: torch.Tensor, preds: torch.Tensor, \
 
     for each in range(audio.shape[0]):
         audio_arr = audio[each].squeeze(0).detach().cpu().numpy()
-        note_preds, int_preds, _ = note_extract(on_preds[each], frame_preds[each], vel_preds[each], \
+        note_preds, int_preds, vel_preds = note_extract(on_preds[each], frame_preds[each], vel_preds[each], \
                 onset_thresh=threshold, frame_thresh=threshold)
         
-        note_gt, int_gt, _ = note_extract(y_onsets[each], y_frames[each], y_velocities[each], \
+        note_gt, int_gt, vel_gt = note_extract(y_onsets[each], y_frames[each], y_velocities[each], \
                 onset_thresh=threshold, frame_thresh=threshold)
 
         # Convert notes to frames

@@ -43,16 +43,16 @@ def get_intervals_and_pitches(piano_roll: np.ndarray, \
                                 offset_events[:, 0].reshape(-1, 1)), axis=1)
 
     # Convert intervals to seconds
-    intervals = intervals / frame_rate
+    intervals_arr = intervals / frame_rate
 
     # Convert pitches to Hz
-    pitches = 440 * (2 ** ((pitches - 69) / 12))
+    pitches_arr = 440 * (2 ** ((pitches - 69) / 12))
 
-    return intervals, pitches
+    return intervals_arr, pitches_arr
 
 # Function to calculate transcription metrics
 def transcription_metrics(pred: np.ndarray, gt: np.ndarray, \
-                          frame_rate: int|None=None) -> dict:
+                          frame_rate: int|None=None) -> dict | None:
     """
     Calculate transcription metrics using mir_eval.
     Args:
@@ -103,9 +103,9 @@ def get_multipitch_intervals_and_pitches(piano_roll: np.ndarray, \
     # Convert times to seconds
     times = times / frame_rate
     # Convert pitches to Hz 
-    pitches = [440 * (2 ** ((p - 69) / 12)) for p in pitches]
+    pitches_arr = [440 * (2 ** ((p - 69) / 12)) for p in pitches]
 
-    return times, pitches   
+    return times, pitches_arr   
 
 # Function to calculate multipitch metrics
 def multipitch_metrics(pred: np.ndarray, gt: np.ndarray, \
@@ -204,4 +204,39 @@ def notes_to_frames(notes: np.ndarray, intervals: np.ndarray, shape: tuple) -> n
     roll = np.zeros(shape)
     for note, (onset, offset) in zip(notes, intervals):
         roll[onset:offset, note] = 1
+    return roll
+
+def notes_to_frames_vels(notes: np.ndarray, intervals: np.ndarray,
+                         velocities: np.ndarray, shape: tuple) -> np.ndarray:
+    """
+    Convert notes and intervals to a piano roll.
+    Args:
+        notes (np.ndarray): Notes.
+        intervals (np.ndarray): Intervals of the notes.
+        shape (tuple): Shape of the piano roll.
+    Returns:
+        roll (np.ndarray): Piano roll.
+    Credits: https://github.com/jongwook/onsets-and-frames
+    """
+    # Create a piano roll of zeros
+    roll = np.zeros(shape)
+    for note, (onset, offset), velocity in zip(notes, intervals, velocities):
+        roll[onset:offset, note] = velocity
+    return roll
+
+def events_to_roll(events: list[dict], shape: tuple, frame_rate: float) -> np.ndarray:
+    roll = np.zeros(shape)
+    
+    if events is None:
+        return roll
+    
+    for i, event in enumerate(events):
+        onset_time = int(event['onset_time'] * frame_rate)
+        offset_time = int(event['offset_time'] * frame_rate)
+        midi_note = event['midi_note']
+        velocity = event['velocity']
+
+        # We will ignore velocity for now
+        # convert time to frame index
+        roll[onset_time:offset_time, midi_note] = 1
     return roll

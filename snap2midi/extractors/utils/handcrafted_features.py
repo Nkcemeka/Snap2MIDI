@@ -15,14 +15,14 @@ from typing import List, Optional, Tuple
 class HandcraftedFeatures:
     def __init__(self, \
             sample_rate: int = 22050, \
-            window_size: int = 2048, \
+            window_size: float = 2048, \
             pr_rate: int = 4) -> None:
         """
             Default constructor for HandcraftedFeatures
 
             Args:
                 sample_rate (int): Sample rate of audio
-                window_size (int): Window size of audio
+                window_size (float): Window size of audio
                 pr_rate (int): Pitch rate of audio
 
             Returns:
@@ -66,10 +66,14 @@ class HandcraftedFeatures:
             Returns:
                 np.ndarray: Mel spectrogram of the audio segment
         """
-        numerator = (self.window_size * self.sample_rate)
-        denominator = self.pr_rate - 1
+        # This assumes padding on both ends
+        # (without padding, size of window needs to be subtracted)
+        numerator = (self.window_size * self.sample_rate) 
+        denominator = (self.pr_rate * self.window_size) - 1
         hop_length = int(numerator / denominator)
-        mel = librosa.feature.melspectrogram(y=audio, hop_length=hop_length, sr=self.sample_rate, n_mels=n_mels)
+        mel = librosa.feature.melspectrogram(y=audio, hop_length=hop_length, 
+                                             sr=self.sample_rate, 
+                                             n_mels=n_mels, n_fft=n_fft)
         
         # convert to squared magnitude
         mel = np.abs(mel)**2

@@ -50,10 +50,10 @@ class OAFDataset(Dataset):
         feature = torch.from_numpy(feature)
 
         # Get the roll representation
-        label_frame = item["roll_frame"].astype(np.float32)
-        label_onset = item["roll_onset"].astype(np.float32)
-        label_offset = item["roll_offset"].astype(np.float32)
-        label_velocity = item["roll_velocity"].astype(np.float32)
+        label_frame = item["label_frames"].astype(np.float32)
+        label_onset = item["label_onsets"].astype(np.float32)
+        label_offset = item["label_offsets"].astype(np.float32)
+        label_velocity = item["label_velocities"].astype(np.float32)
 
         return (feature, label_frame, label_onset, label_offset,\
                 label_velocity, audio)
