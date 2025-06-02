@@ -256,13 +256,172 @@ class AcousticModel(nn.Module):
         out = torch.sigmoid(self.fc(x))
         return out
 
-class KongBaseModel(nn.Module):
-    pass
+class KongModel(nn.Module):
+    def __init__(self, classes: int, clue: int, momentum: float, cmp: int=48, 
+                 factors: list=[16, 32, 32]):
+        """
+            Base model for Kong.
 
+            Args:
+                classes (int): Number of classes for the model
+                clue (int): Clue for the model which is size of embedding dimension
+                momentum (float): Momentum for batch norm layers
+                cmp (int): Complexity for Acoustic model
+                factors (list): List of factors for the complexity of the conv block
+        """
+        super().__init__()
+        self.clue = clue
+        self.classes = classes
+        self.momentum = momentum
+    
+        self.frame_model = AcousticModel(self.classes, self.clue, self.momentum,
+                                         cmp=cmp, factors=factors)
+        self.reg_onset_model = AcousticModel(self.classes, self.clue, self.momentum,
+                                         cmp=cmp, factors=factors)
+        self.reg_offset_model = AcousticModel(self.classes, self.clue, self.momentum,
+                                         cmp=cmp, factors=factors)
+        self.velocity_model = AcousticModel(self.classes, self.clue, self.momentum,
+                                         cmp=cmp, factors=factors)
+        
+        self.bn0 = nn.BatchNorm2d(self.clue, momentum)
+        self.reg_onset_gru = nn.GRU(input_size=self.classes*2, hidden_size=256, num_layers=1,
+                                    bias=True, batch_first=True, dropout=0., bidirectional=True)
+        self.reg_onset_fc = nn.Linear(512, self.classes)
+        self.frame_gru = nn.GRU(input_size=self.classes* 3, hidden_size=256, num_layers=1, 
+            bias=True, batch_first=True, dropout=0., bidirectional=True)
+        self.frame_fc = nn.Linear(512, self.classes, bias=True)
 
-# Test acoustic model
-# if __name__ == "__main__":
-#     model = AcousticModel(classes=10, clue=229, momentum=0.1)
-#     x = torch.randn(32, 1, 100, 229)  # (batch, chans, time, embed_dim)
-#     out = model(x)
-#     print(out.shape)  # Should be (32, time_steps, classes)
+        # initialize the weights for architecture
+        self.weights_init()
+    
+    def weights_init(self):
+        """
+            Weight initialization for the Kong 
+            model!
+        """
+        bnorm_initialize(self.bn0)
+        init_gru(self.reg_onset_gru)
+        init_gru(self.frame_gru)
+        layer_initialize(self.reg_onset_fc)
+        layer_initialize(self.frame_fc)
+    
+    def forward(self, x: torch.Tensor) -> dict:
+        """
+            Forward pass for Kong's model
+
+            Args:
+                x (torch.Tensor): (batch, time, classes)
+
+            Returns:
+                dict: Dictionary containing the outputs for 
+                      reg_onset, reg_offset, frame and velocity
+                      outputs.
+        """
+        x = x.unsqueeze(1)  # (batch_size, 1, time_steps, embed_dim)
+        x = x.transpose(1, 3)
+
+        # The transpose above shows Kong did the batch normalization 
+        # considering each embedding dimension as a feature: interesting!
+        x = self.bn0(x)
+        x = x.transpose(1, 3)
+
+        frame_output = self.frame_model(x)  # (batch, time_steps, classes)
+        reg_onset_output = self.reg_onset_model(x)  # (batch, time_steps, classes)
+        reg_offset_output = self.reg_offset_model(x)    # (batch, time_steps, classes)
+        velocity_output = self.velocity_model(x)    # (batch, time_steps, classes)
+ 
+        # Use velocities to condition onset regression
+        # The velocities were scaled by Kong based on the onsets: interesting stuff
+        x = torch.cat((reg_onset_output, (reg_onset_output ** 0.5) * velocity_output.detach()), dim=2)
+        (x, _) = self.reg_onset_gru(x)
+        x = F.dropout(x, p=0.5, training=self.training, inplace=False)
+        reg_onset_output = torch.sigmoid(self.reg_onset_fc(x)) #(batch, time_steps, classes)
+
+        # Use onsets and offsets to condition frame-wise classification
+        x = torch.cat((frame_output, reg_onset_output.detach(), reg_offset_output.detach()), dim=2)
+        (x, _) = self.frame_gru(x)
+        x = F.dropout(x, p=0.5, training=self.training, inplace=False)
+        frame_output = torch.sigmoid(self.frame_fc(x))  # (batch, time_steps, classes)
+
+        return {
+            'reg_onset_output': reg_onset_output, 
+            'reg_offset_output': reg_offset_output, 
+            'frame_output': frame_output, 
+            'velocity_output': velocity_output
+        }
+
+class KongPedal(nn.Module):
+    def __init__(self, clue: int, momentum: float, cmp: int=48, 
+                 factors: list=[16, 32, 32]):
+        """
+            Base model for Kong.
+
+            Args:
+                clue (int): Clue for the model which is size of embedding dimension
+                momentum (float): Momentum for batch norm layers
+                cmp (int): Complexity for Acoustic model
+                factors (list): List of factors for the complexity of the conv block
+        """
+        super().__init__()
+        self.clue = clue
+        self.momentum = momentum
+        self.reg_pedal_onset_model = AcousticModel(1, self.clue, self.momentum,
+                                         cmp=cmp, factors=factors)
+        self.reg_pedal_offset_model = AcousticModel(1, self.clue, self.momentum,
+                                         cmp=cmp, factors=factors)
+        self.reg_pedal_frame_model = AcousticModel(1, self.clue, self.momentum,
+                                         cmp=cmp, factors=factors)
+        
+        self.bn0 = nn.BatchNorm2d(self.clue, momentum)
+
+        # initialize the weights for architecture
+        self.weights_init()
+    
+    def weights_init(self):
+        """
+            Weight initialization for the 
+            architecture!
+        """
+        bnorm_initialize(self.bn0)
+    
+
+    def forward(self, x: torch.Tensor) -> dict:
+        """
+            Forward pass for Kong's Pedal model
+
+            Args:
+                x (torch.Tensor): (batch, time, classes)
+
+            Returns:
+                dict: Dictionary containing the outputs for 
+                      reg_pedal_onset_output, reg_pedal_offset_output, 
+                      and pedal_frame_output.
+        """
+        x = x.unsqueeze(1)  # (batch_size, 1, time_steps, embed_dim)
+        x = x.transpose(1, 3)
+
+        # The transpose above shows Kong did the batch normalization 
+        # considering each embedding dimension as a feature: interesting!
+        x = self.bn0(x)
+        x = x.transpose(1, 3)
+
+        reg_pedal_onset_output = self.reg_pedal_onset_model(x)  # (batch, time_steps, 1)
+        reg_pedal_offset_output = self.reg_pedal_offset_model(x)  # (batch, time_steps, 1)
+        pedal_frame_output = self.reg_pedal_frame_model(x)  # (batch, time_steps, 1)
+        
+        return {
+            'reg_pedal_onset_output': reg_pedal_onset_output, 
+            'reg_pedal_offset_output': reg_pedal_offset_output,
+            'pedal_frame_output': pedal_frame_output
+        }
+
+# Test Kong's pedal model
+if __name__ == "__main__":
+    model = KongPedal(clue=229, momentum=0.1)
+    x = torch.randn(4, 640, 229)  # (batch, time_steps, embed_dim)
+    out = model(x)
+
+    for key in out:
+        print(f"{key}: {out[key].shape}")
+
+    print("Kong's pedal model initialized and tested successfully!")
