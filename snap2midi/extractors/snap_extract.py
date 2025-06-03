@@ -313,9 +313,16 @@ class SnapExtractor:
                 for note in instrument.notes:
                     if note.start >= end or note.end <= start:
                         continue 
+
+                    if note.start < start:
+                        # Only accept note events that occur in the segment
+                        continue 
+
                     pitch = note.pitch
-                    note_events.append([note.start - start, min(duration, note.end - start), 
+                    note_events.append([max(0, note.start - start), min(duration, note.end - start), 
                                         pitch, note.velocity])
+                    
+                    assert np.min(note_events) >= 0, "Note events contain negative values!"
                     
                     start_frame = int(round(self.pr_rate * (note.start - start)))
 
@@ -337,11 +344,13 @@ class SnapExtractor:
                             label_reg_onsets[start_frame, pitch] = \
                             (note.start - start) - (start_frame / self.pr_rate)
                         else:
+                            # We will never get here
                             mask_roll[:end_frame + 1, pitch] = 0
                     else:
                         if start_frame >= 0:
                             mask_roll[start_frame:] = 0
                         else:
+                            # we won't get here too
                             mask_roll[:] = 0
         
         for pitch in range(128):
