@@ -314,11 +314,11 @@ class SnapExtractor:
                     if note.start >= end or note.end <= start:
                         continue 
 
-                    if note.start < start:
-                        # Only accept note events that occur in the segment
-                        continue 
-
                     pitch = note.pitch
+
+                    # Need to deal with the case where the note starts before
+                    # the start of the segment and ends after the end of the segment
+                    # Not sure if what I have done below is the right thing to do
                     note_events.append([max(0, note.start - start), min(duration, note.end - start), 
                                         pitch, note.velocity])
                     
@@ -348,10 +348,18 @@ class SnapExtractor:
                             mask_roll[:end_frame + 1, pitch] = 0
                     else:
                         if start_frame >= 0:
-                            mask_roll[start_frame:] = 0
+                            # This section wasn't here before
+                            # ------------------------------
+                            label_frames[start_frame:, pitch] = 1
+                            label_onsets[start_frame, pitch] = 1
+                            label_velocities[start_frame:, pitch] = note.velocity
+                            label_reg_onsets[start_frame, pitch] = \
+                            (note.start - start) - (start_frame / self.pr_rate)
+                            # ------------------------------
+                            mask_roll[start_frame:, pitch] = 0
                         else:
                             # we won't get here too
-                            mask_roll[:] = 0
+                            mask_roll[:, pitch] = 0
         
         for pitch in range(128):
             label_reg_onsets[:, pitch] = self.get_reg(label_reg_onsets[:, pitch])
