@@ -66,6 +66,9 @@ def transcription_metrics_batch(output_dict: dict, target_dict: dict, \
         ref_pitches = target_note_events[:, 2]
         est_pitches = est_note_events[:, 2]
 
+        assert np.min(ref_intervals) >= 0, "Reference intervals contain negative values!"
+        assert np.min(est_intervals) >= 0, "Estimated intervals contain negative values!"
+
         # convert pitches to Hertz
         ref_pitches = 440 * (2 ** ((ref_pitches - 69) / 12))
         est_pitches = 440 * (2 ** ((est_pitches - 69) / 12))

@@ -156,7 +156,7 @@ def note_extract(onset_roll: torch.Tensor, frame_roll: torch.Tensor, \
     frames = (frame_roll > frame_thresh).cpu().int()
     # Due to frame resolution, we could have continuous onsets
     # if notes are sustained. That makes no sense, right?
-    onset_events = (torch.cat([onsets[:1, :], onsets[:-1, :]], \
+    onset_events = (torch.cat([onsets[:1, :], onsets[1:, :] -  onsets[:-1, :]], \
                              dim = 0) == 1).nonzero()
     
     notes = []
