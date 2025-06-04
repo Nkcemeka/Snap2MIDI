@@ -347,7 +347,7 @@ def custom_collate_fn(batches):
         pedal_event = each['pedal_events']
 
         if note_event.ndim != 2:
-            note_event = np.full((1, 4), -100, dtype=np.float32)
+            note_event = np.full((max_note_length, 4), -100, dtype=np.float32)
         else:
             # pad note_event to maximum length in the batch
             note_event = np.pad(note_event, ((0, max_note_length - note_event.shape[0]), (0, 0)), \
