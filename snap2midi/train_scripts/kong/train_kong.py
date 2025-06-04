@@ -157,11 +157,13 @@ def save(target_dict: dict, output_dict: dict, config: dict, \
         save_dir (str): Directory to save the results.
         batch_index (int): Index of the current batch.
     """
+    keys = output_dict.keys()
     for each in range(target_dict["label_frames"].shape[0]):
         audio_arr = target_dict["audio"][each].squeeze(0).detach().cpu().numpy()
+        output_dict_batch = {key: output_dict[key][each].cpu().detach().numpy() for key in keys}
 
         est_note_events, est_pedal_events = output_dict_to_events(
-            output_dict[each], onset_threshold=config["onset_threshold"],
+            output_dict_batch, onset_threshold=config["onset_threshold"],
             offset_threshold=config["offset_threshold"],
             frame_threshold=config["frame_threshold"],
             pedal_offset_threshold=config["pedal_offset_threshold"],
@@ -179,9 +181,12 @@ def save(target_dict: dict, output_dict: dict, config: dict, \
         # Filter the target_note_events using the mask
         target_note_events = target_note_events[mask]
 
-        preds_roll = notes_to_frames_vels(est_note_events[:, 2], est_note_events[:, :2], est_note_events[:, 3],
+        preds_roll = notes_to_frames_vels(est_note_events[:, 2].astype(int), 
+                    (est_note_events[:, :2]*config["frame_rate"]).astype(int), est_note_events[:, 3],
             target_dict["label_frames"][0].shape)
-        y_roll = notes_to_frames_vels(target_note_events[:, 2], target_note_events[:, :2], target_note_events[:, 3],
+        y_roll = notes_to_frames_vels(target_note_events[:, 2].cpu().detach().numpy().astype(int), 
+                    (target_note_events[:, :2]*config["frame_rate"]).cpu().detach().numpy().astype(int), 
+                    target_note_events[:, 3].cpu().detach().numpy(),
             target_dict["label_frames"][0].shape)
 
         Path(save_dir + f"/results/").mkdir(parents=True, exist_ok=True)
@@ -431,8 +436,7 @@ def main(config):
         
         # Log results to wandb
         results = results | train_loss_dict | valid_loss_dict
-        print(results)
-        #wandb.log(results)
+        wandb.log(results)
 
         if valid_loss_dict['valid_total_loss'] <= best_loss:
             best_loss = valid_loss_dict['valid_total_loss']
@@ -449,8 +453,8 @@ def main(config):
                 Valid Loss: {valid_loss_dict['valid_total_loss']:.4f}")
 
     print(f"Evaluating best model on test set")
-    best_model = KongModel(config["classes"], config["clue"], config["momentump"], cmp=config["cmp"], \
-                      factos=config["factors"])
+    best_model = KongModel(config["classes"], config["clue"], config["momentum"], cmp=config["cmp"], \
+                      factors=config["factors"])
     best_model = best_model.to(device)
     checkpoint_path = config["save_dir"]
     best_checkpoints = list(Path(checkpoint_path).glob("checkpoint_*.pt"))
@@ -488,7 +492,7 @@ if __name__ == "__main__":
     config = json.loads(content)
 
     # Initialize wandb
-    #wandb.init(project=config["project_name"], \
-    #        config=config)
+    wandb.init(project=config["project_name"], \
+            config=config)
     main(config)
-    #wandb.finish()
+    wandb.finish()
