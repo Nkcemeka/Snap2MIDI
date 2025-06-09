@@ -78,6 +78,25 @@ def transcription_metrics(pred: np.ndarray, gt: np.ndarray, \
         est_intervals=est_i, est_pitches=est_p)
     return scores
 
+def frame_metrics(pred: np.ndarray, gt: np.ndarray) -> dict:
+    pred = pred.astype(int)
+    gt = gt.astype(int)
+    true_pos = np.logical_and(pred == 1, gt == 1).sum()
+    false_pos = np.logical_and(pred == 1, gt == 0).sum()
+    false_neg = np.logical_and(pred == 0, gt == 1).sum()
+
+    precision = true_pos / (true_pos + false_pos) if (true_pos + false_pos) > 0 else 0
+    recall = true_pos / (true_pos + false_neg) if (true_pos + false_neg) > 0 else 0
+    accuracy = true_pos / (true_pos + false_pos + false_neg) \
+          if (true_pos + false_pos + false_neg) > 0 else 0
+
+    scores = {
+        "Precision": precision,
+        "Recall": recall,
+        "Accuracy": accuracy
+    }
+    return scores
+
 # Function to get multipitch intervals and pitches
 def get_multipitch_intervals_and_pitches(piano_roll: np.ndarray, \
                                          frame_rate: int) -> tuple[np.ndarray, list[np.ndarray]]:
@@ -262,12 +281,6 @@ def output_dict_to_events(output_dict, onset_threshold, offset_threshold,
             [39.74, 39.87, 27, 0.65], 
             [11.98, 12.11, 33, 0.69], 
             ...]
-
-        est_pedal_on_offs: (pedal_events_num, 2), the 2 columns are onset_time 
-        and offset_time. E.g. [
-            [0.17, 0.96], 
-            [1.17, 2.65], 
-            ...]
     """
 
     # ------ 1. Process regression outputs to binarized outputs ------
@@ -295,6 +308,40 @@ def output_dict_to_events(output_dict, onset_threshold, offset_threshold,
     output_dict['offset_output'] = offset_output  # Values are 0 or 1
     output_dict['offset_shift_output'] = offset_shift_output
 
+    # ------ 2. Process matrices results to event results ------
+    # Detect piano notes from output_dict
+    est_on_off_note_vels = output_dict_to_detected_notes(output_dict, frame_threshold, frames_per_second)   
+    return est_on_off_note_vels
+
+
+
+def output_dict_to_pedals(output_dict, pedal_offset_threshold,
+                          frames_per_second):
+    """
+        Convert the output probabilities of a transription model to events.
+
+    Args:
+        output_dict: dict, {
+        'reg_onset_output': (frames_num, classes_num), 
+        'reg_offset_output': (frames_num, classes_num), 
+        'frame_output': (frames_num, classes_num), 
+        'velocity_output': (frames_num, classes_num), 
+        ...}
+
+    Returns:
+        est_pedal_on_offs: (pedal_events_num, 2), the 2 columns are onset_time 
+        and offset_time. E.g. [
+            [0.17, 0.96], 
+            [1.17, 2.65], 
+            ...]
+    """
+
+    # ------ 1. Process regression outputs to binarized outputs ------
+    # For example, onset or offset of [0., 0., 0.15, 0.30, 0.40, 0.35, 0.20, 0.05, 0., 0.]
+    # will be processed to [0., 0., 0., 0., 1., 0., 0., 0., 0., 0.]
+
+    # Calculate binarized onset output from regression output
+
     if 'reg_pedal_onset_output' in output_dict.keys():
         """Pedal onsets are not used in inference. Instead, frame-wise pedal
         predictions are used to detect onsets. We empirically found this is 
@@ -312,9 +359,6 @@ def output_dict_to_events(output_dict, onset_threshold, offset_threshold,
         output_dict['pedal_offset_shift_output'] = pedal_offset_shift_output
 
     # ------ 2. Process matrices results to event results ------
-    # Detect piano notes from output_dict
-    est_on_off_note_vels = output_dict_to_detected_notes(output_dict, frame_threshold, frames_per_second)
-
     if 'reg_pedal_onset_output' in output_dict.keys():
         # Detect piano pedals from output_dict
         est_pedal_on_offs = output_dict_to_detected_pedals(output_dict, frames_per_second)
@@ -322,7 +366,7 @@ def output_dict_to_events(output_dict, onset_threshold, offset_threshold,
     else:
         est_pedal_on_offs = None    
 
-    return est_on_off_note_vels, est_pedal_on_offs
+    return est_pedal_on_offs
 
 def get_binarized_output_from_regression(reg_output, threshold, neighbour):
     """Calculate binarized output and shifts of onsets or offsets from the
@@ -467,7 +511,8 @@ def output_dict_to_detected_pedals(output_dict, frames_per_second):
     """(notes, 2), the two columns are pedal onsets and pedal offsets"""
     
     if len(est_tuples) == 0:
-        return np.array([])
+        #return np.array([])
+        return None
 
     else:
         onset_times = (est_tuples[:, 0] + est_tuples[:, 2]) / frames_per_second

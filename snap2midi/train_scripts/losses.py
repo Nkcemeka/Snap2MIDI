@@ -49,4 +49,11 @@ def regress_pedal_bce(output_dict, target_dict):
     offset_pedal_loss = F.binary_cross_entropy(output_dict['reg_pedal_offset_output'], target_dict['pedal_reg_offset'][:, :, None])
     frame_pedal_loss = F.binary_cross_entropy(output_dict['pedal_frame_output'], target_dict['pedal_frames'][:, :, None])
     total_loss = onset_pedal_loss + offset_pedal_loss + frame_pedal_loss
-    return total_loss
+
+    loss_dict = {
+        'onset_pedal_loss': onset_pedal_loss,
+        'offset_pedal_loss': offset_pedal_loss,
+        'frame_pedal_loss': frame_pedal_loss,
+        'total_loss': total_loss
+    }
+    return loss_dict

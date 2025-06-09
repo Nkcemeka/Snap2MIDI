@@ -1,8 +1,8 @@
 """
-    File: train_onsets_and_frames.py
+    File: train_kong.py
     Author: Chukwuemeka L. Nkama
-    Date: 4/11/2025
-    Description: Training script for Onsets and Frames model!
+    Date: 2/5/2025
+    Description: Training script for Kong model!
 """
 
 # Imports
@@ -42,7 +42,7 @@ def transcription_metrics_batch(output_dict: dict, target_dict: dict, \
     keys = output_dict.keys()
     for each in range(target_dict["note_events"].shape[0]):
         output_dict_batch = {key: output_dict[key][each].cpu().detach().numpy() for key in keys}
-        est_note_events, est_pedal_events = output_dict_to_events(
+        est_note_events = output_dict_to_events(
             output_dict_batch, onset_threshold=config["onset_threshold"],
             offset_threshold=config["offset_threshold"],
             frame_threshold=config["frame_threshold"],
@@ -104,7 +104,7 @@ def multipitch_metrics_batch(output_dict: dict, target_dict: dict, config: dict)
     keys = output_dict.keys()
     for each in range(target_dict["note_events"].shape[0]):
         output_dict_batch = {key: output_dict[key][each].cpu().detach().numpy() for key in keys}
-        est_note_events, est_pedal_events = output_dict_to_events(
+        est_note_events = output_dict_to_events(
             output_dict_batch, onset_threshold=config["onset_threshold"],
             offset_threshold=config["offset_threshold"],
             frame_threshold=config["frame_threshold"],
@@ -162,7 +162,7 @@ def save(target_dict: dict, output_dict: dict, config: dict, \
         audio_arr = target_dict["audio"][each].squeeze(0).detach().cpu().numpy()
         output_dict_batch = {key: output_dict[key][each].cpu().detach().numpy() for key in keys}
 
-        est_note_events, est_pedal_events = output_dict_to_events(
+        est_note_events = output_dict_to_events(
             output_dict_batch, onset_threshold=config["onset_threshold"],
             offset_threshold=config["offset_threshold"],
             frame_threshold=config["frame_threshold"],
