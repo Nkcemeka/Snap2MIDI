@@ -1,5 +1,5 @@
 # Snap2MIDI
-Snap2MIDI is a package that allows you take a "short snap" of audio and convert it to MIDI. Doing this allows for the quick training of Automatic Music Transcription (AMT) architectures without having to write a lot of code. By training a small model on small snapshots of audio, you can quickly verify if an architecture will perform well when scaled. The codebase is also designed such that it is extensible if you follow the coding paradigm; you should be able to add new datasets and new AMT models to train on.
+Snap2MIDI is a package that allows you take a "snap" of audio and convert it to MIDI. It contains different architectures including SOTA models such as OnsetsAndFrames, Kong, etc. The package is also designed such that you can quickly train these Automatic Music Transcription (AMT) architectures without having to write a lot of code. By training a small version of these models on small snapshots of audio, you can quickly verify if an architecture will perform well when scaled. The codebase is also designed such that it is extensible if you follow the coding paradigm; you should be able to add new datasets and new AMT models to train on.
 
 ## Installation
 1. First of all, clone this repo:
@@ -23,7 +23,7 @@ Snap2MIDI is a package that allows you take a "short snap" of audio and convert 
 4. Go to the root directory and run the following:
 
     ```
-    pip install .
+    pip install -e .
     ```
 
 ## Extraction
@@ -38,5 +38,31 @@ To train an architecture (e.g OnsetsAndFrames), you can go to the train_scripts/
  and run the corresponding training bash script. E.g:
 ```
 ./train.sh
+```
+
+## Inference
+To perform inference for any architecture, go into the relevant folder and run the following:
+```
+./inference.sh <audio_filename> <output_name> <feature_str>
+```
+
+## Model Directory Structure
+Each model has a directory structure similar to that below! The confs directory allows you to create different config files to suit your purpose. In the datasets directory, you can also create different dataset classes. The logs file contains your model's logs. It also contains the process id of the training session.
+```
+.
+├── confs
+│   ├── training_config.json
+│   └── inference_config.json
+├── datasets
+│   ├── dataset_oaf.py
+├── inference.sh
+├── __init__.py
+├── logs
+│   ├── logfile.log
+│   └── pid.txt
+├── model.py
+├── model_inference.py
+├── train_model.py
+└── train.sh
 ```
 

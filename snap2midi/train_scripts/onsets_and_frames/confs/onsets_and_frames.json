@@ -5,7 +5,7 @@
     "paths": [
     "/home/nkcemeka/Documents/snap/snap2midi/extractors/maestro_segments/"
     ],
-    "epochs": 100,
+    "epochs": 77,
     "frame_rate": 100,
     "lr": 0.0006,
     "model_complexity": 16,
@@ -16,8 +16,8 @@
     "learning_rate_decay_steps": 1000,
     "clip_gradient_norm": 3,
     "threshold": 0.3,
-    "resume": 0,
-    "resume_path": "/home/nkcemeka/Documents/snap/snap2midi/runs/OnsetsAndFrames/checkpoint_0.pt",
+    "resume": 1,
+    "resume_path": "/home/nkcemeka/Documents/snap/snap2midi/runs/OnsetsAndFrames/checkpoint_77.pt",
     "save_dir": "/home/nkcemeka/Documents/snap/snap2midi/runs/OnsetsAndFrames"
   }
   

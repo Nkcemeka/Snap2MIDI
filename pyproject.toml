@@ -16,27 +16,14 @@ where = ["."]
 
 # Setup overrides due to mypy typing errors
 [[tool.mypy.overrides]]
-module = "pretty_midi"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "yaml"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "jams"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "argbind"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "tqdm"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "mir_eval"
+module = [
+    "pretty_midi",
+    "yaml",
+    "jams",
+    "argbind",
+    "tqdm",
+    "mir_eval"
+]
 ignore_missing_imports = true
 
 
