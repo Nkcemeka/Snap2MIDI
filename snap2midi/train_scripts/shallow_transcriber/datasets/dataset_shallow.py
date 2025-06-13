@@ -61,5 +61,5 @@ class ShallowDataset(Dataset):
 
 
 if __name__ == "__main__":
-    dataset = ShallowDataset("./extractors/maestro/maestro_segments/train/")
+    dataset = ShallowDataset(["./extractors/maestro/maestro_segments/train/"])
     print(dataset[0][0].shape, dataset[0][1].shape)

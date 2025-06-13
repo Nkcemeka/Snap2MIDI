@@ -1,0 +1,11 @@
+{
+  "frame_rate": 100,
+  "lr": 0.001,
+  "window_size": 10,
+  "sample_rate": 16000,
+  "in_features": 229,
+  "hidden_units": 512,
+  "out_features": 128,
+  "threshold": 0.3,
+  "shallow_checkpoint": "/home/nkcemeka/Documents/snap/snap2midi/runs/ShallowTranscriber/checkpoint_28.pt"
+}

@@ -1,0 +1,19 @@
+{
+  "project_name": "snap2midi",
+  "experiment_name": "ConvShallowTranscriber",
+  "batch_size": 4,
+  "paths": [
+    "/home/nkcemeka/Documents/snap/snap2midi/extractors/maestro_segments/"
+  ],
+  "epochs": 30,
+  "frame_rate": 100,
+  "lr": 0.001,
+  "in_features": 229,
+  "out_features": 128,
+  "dropout": 0.2,
+  "weight_decay": 1e-4,
+  "threshold": 0.3,
+  "resume": 0,
+  "resume_path": "/home/nkcemeka/Documents/snap/snap2midi/runs/ConvShallowTranscriber/checkpoint_28.pt",
+  "save_dir": "/home/nkcemeka/Documents/snap/snap2midi/runs/ConvShallowTranscriber"
+}

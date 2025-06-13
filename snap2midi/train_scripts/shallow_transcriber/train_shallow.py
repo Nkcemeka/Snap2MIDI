@@ -16,7 +16,7 @@ import wandb
 import json
 from .shallow_network import ShallowTranscriber
 from .datasets.dataset_shallow import ShallowDataset
-from snap2midi.utils.eval_mir import transcription_metrics, multipitch_metrics
+from snap2midi.utils.eval_mir import transcription_metrics_roll, multipitch_metrics_roll
 from typing import Any
 
 def transcription_metrics_batch(pred: torch.Tensor, gt: torch.Tensor, \
@@ -40,7 +40,7 @@ def transcription_metrics_batch(pred: torch.Tensor, gt: torch.Tensor, \
     """
     # Initialize metrics dictionary
     if offset_ratio is not None:
-        metrics = {
+        metrics: dict = {
             "Precision": [],
             "Recall": []}
     else:
@@ -53,7 +53,7 @@ def transcription_metrics_batch(pred: torch.Tensor, gt: torch.Tensor, \
         preds_arr = torch.sigmoid(pred[each].squeeze(0))
         preds_roll = (preds_arr.detach().cpu().numpy() > threshold)
 
-        scores = transcription_metrics(preds_roll, y_roll, frame_rate=frame_rate)
+        scores = transcription_metrics_roll(preds_roll, y_roll, frame_rate=frame_rate)
         
         if scores is None:
             continue
@@ -73,25 +73,25 @@ def transcription_metrics_batch(pred: torch.Tensor, gt: torch.Tensor, \
     return metrics
 
 def multipitch_metrics_batch(pred: torch.Tensor, gt: torch.Tensor, \
-                             threshold: float, frame_rate: float | int) -> dict:
+                             threshold: float, frame_rate: float) -> dict:
     """
     Calculate multipitch metrics for a batch of predictions and ground truth.
     Args:
         pred (torch.Tensor): Predicted piano rolls.
         gt (torch.Tensor): Ground truth piano rolls.
         threshold (float): Threshold for binarizing predictions.
-        frame_rate (int): Frames per second.
+        frame_rate (float): Frames per second.
     Returns:
         metrics (dict): Dictionary containing the calculated metrics.
     """
     # Initialize metrics dictionary
-    metrics = {'Precision': [], 'Recall': [], 'Accuracy': []}
+    metrics: dict = {'Precision': [], 'Recall': [], 'Accuracy': []}
     for each in range(pred.shape[0]):
         y_roll = gt[each].squeeze(0).detach().cpu().numpy()
         preds_arr = torch.sigmoid(pred[each].squeeze(0))
         preds_roll = (preds_arr.detach().cpu().numpy() > threshold)
 
-        scores = multipitch_metrics(preds_roll, y_roll, frame_rate=frame_rate)
+        scores = multipitch_metrics_roll(preds_roll, y_roll, frame_rate=frame_rate)
         if scores is None:
             continue
 
@@ -126,23 +126,23 @@ def save(audio: torch.Tensor, y: torch.Tensor, preds: torch.Tensor, \
         preds_roll = (preds_arr > threshold)
 
         Path(save_dir + f"/results/").mkdir(parents=True, exist_ok=True)
-        result_dict = {'audio': audio_arr, 'original_roll': y_arr, 'pred_roll': preds_roll}
+        result_dict: dict[str, Any] = {'audio': audio_arr, 'original_roll': y_arr, 'pred_roll': preds_roll}
         np.savez(save_dir + f"/results/{batch_index}_{each}.npz", **result_dict)
     
 @torch.no_grad()
 def evaluate(model: Any, dataloader: Any, device: str, \
         loss_fn: Any, frame_rate: int | float, threshold: float=0.3, \
-        offset_ratio=None, save_dir: str | None=None) -> tuple[torch.Tensor, dict, dict]:
+        offset_ratio=None, save_dir: str | None=None) -> tuple[float, dict, dict]:
     model.eval()
     total_loss = 0
     num_samples = 0
 
     # Initialize metrics_frames dictionary
-    metrics_frames = {'Precision': [], 'Recall': [], 'Accuracy': []}
+    metrics_frames: dict = {'Precision': [], 'Recall': [], 'Accuracy': []}
 
     # Initialize metrics_note dictionary
     if offset_ratio is not None:
-        metrics_note = {'Precision': [], 'Recall': []}
+        metrics_note: dict = {'Precision': [], 'Recall': []}
     else:
         metrics_note = {'Precision_no_offset': [], 'Recall_no_offset': []}
     

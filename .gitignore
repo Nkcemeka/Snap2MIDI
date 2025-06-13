@@ -5,6 +5,7 @@ maestro_events_segments/
 *_segments/
 logfile*.log
 runs/
+logs/
 wandb/
 notebooks/
 *.sf2

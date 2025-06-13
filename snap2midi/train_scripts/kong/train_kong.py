@@ -14,20 +14,81 @@ from torch.utils.data import DataLoader
 import argparse
 import wandb
 import json
-from torch.nn.utils import clip_grad_norm_
 from torch.optim.lr_scheduler import StepLR
-from snap2midi.utils.eval_mir import transcription_metrics, multipitch_metrics, note_extract, notes_to_frames, notes_to_frames_vels
-from .kong_dataset import KongDataset
+from snap2midi.utils.eval_mir import frame_metrics
+from .datasets.kong_dataset import KongDataset
 from .kong import KongModel
 from typing import Any
-from snap2midi.train_scripts.losses import regress_bce
-from snap2midi.utils.eval_mir import output_dict_to_events
+from .utilities import get_note_events
 import mir_eval
+import torch.nn.functional as F
+
+def bce_mask(output, target, mask):
+    """
+        Binary crossentropy with masking.
+
+        Args:
+            output (torch.Tensor): Model's output
+            target (torch.Tensor): Target tensor
+            mask (torch.Tensor): Mask
+        
+        Returns:
+            BCE Loss   
+    """
+    eps = 1e-7
+    output = torch.clamp(output, eps, 1. - eps)
+    matrix = - target * torch.log(output) - (1. - target) * torch.log(1. - output)
+    return torch.sum(matrix * mask) / torch.sum(mask)
+
+def regress_bce(output_dict, target_dict):
+    """
+        Calculate the regression loss using binary cross-entropy.
+
+        Args:
+        ------
+            output_dict (dict): Model output dictionary containing the predicted values.
+            target_dict (dict): Target dictionary containing the ground truth values.
+
+        Returns:
+        -------
+            loss_dict (dict): Dictionary containing the individual losses and total loss.
+    """
+    onset_loss = bce_mask(output_dict['reg_onset_roll'], \
+                     target_dict['label_reg_onsets'], target_dict['mask_roll'])
+    offset_loss = bce_mask(output_dict['reg_offset_roll'], \
+                      target_dict['label_reg_offsets'], target_dict['mask_roll'])
+    frame_loss = bce_mask(output_dict['frame_roll'], \
+                     target_dict['label_frames'], target_dict['mask_roll'])
+    velocity_loss = bce_mask(output_dict['velocity_roll'], \
+                        target_dict['label_velocities'] / 128, target_dict['label_onsets'])
+    total_loss = onset_loss + offset_loss + frame_loss + velocity_loss
+
+    loss_dict = {
+        'onset_loss': onset_loss,
+        'offset_loss': offset_loss,
+        'frame_loss': frame_loss,
+        'total_loss': total_loss,
+        'velocity_loss': velocity_loss
+    }
+
+    return loss_dict
 
 def transcription_metrics_batch(output_dict: dict, target_dict: dict, \
                                 config: dict, offset_ratio: float|None=None) -> dict:
     """
-    Calculate transcription metrics for a batch of predictions and ground truth.
+        Calculate transcription metrics for a batch of predictions and ground truth.
+
+        Args:
+        -----
+            output_dict (dict): Model ouput dictionary
+            target_dict (dict): Target dictionary
+            config (dict): Config dictionary
+            offset_ratio (float | None): Ratio to use for offset calculation. If None, 
+                                      no offset ratio is used.
+
+        Returns:
+        ---------
+            metrics (dict): Dictionary of transcription metrics
     """
     # Initialize metrics dictionary
     if offset_ratio is not None:
@@ -42,12 +103,10 @@ def transcription_metrics_batch(output_dict: dict, target_dict: dict, \
     keys = output_dict.keys()
     for each in range(target_dict["note_events"].shape[0]):
         output_dict_batch = {key: output_dict[key][each].cpu().detach().numpy() for key in keys}
-        est_note_events = output_dict_to_events(
-            output_dict_batch, onset_threshold=config["onset_threshold"],
-            offset_threshold=config["offset_threshold"],
-            frame_threshold=config["frame_threshold"],
-            pedal_offset_threshold=config["pedal_offset_threshold"],
-            frames_per_second=config["frame_rate"]
+        est_note_events = get_note_events(
+            output_dict_batch, config["onset_threshold"], 
+            config["offset_threshold"], config["frame_threshold"],
+            config["frame_rate"]
         )
 
         if est_note_events is None:
@@ -66,8 +125,12 @@ def transcription_metrics_batch(output_dict: dict, target_dict: dict, \
         ref_pitches = target_note_events[:, 2]
         est_pitches = est_note_events[:, 2]
 
-        assert np.min(ref_intervals) >= 0, "Reference intervals contain negative values!"
-        assert np.min(est_intervals) >= 0, "Estimated intervals contain negative values!"
+        # Check if the intervals are valid
+        # offset time should not be less than onset time
+        if np.any(est_intervals[:, 1] - est_intervals[:, 0] < 0):
+            print(f"Negative intervals found in estimated notes for batch {each}. \
+                  Skipping evaluation for this batch.")
+            continue
 
         # convert pitches to Hertz
         ref_pitches = 440 * (2 ** ((ref_pitches - 69) / 12))
@@ -93,9 +156,19 @@ def transcription_metrics_batch(output_dict: dict, target_dict: dict, \
     
     return metrics
 
-def multipitch_metrics_batch(output_dict: dict, target_dict: dict, config: dict) -> dict:
+def frame_metrics_batch(output_dict: dict, target_dict: dict, config: dict) -> dict:
     """
-        Calculate multipitch metrics for a batch of predictions and ground truth.
+        Calculate frame metrics for a batch of predictions and ground truth.
+
+        Args:
+        -----
+            output_dict (dict): Model ouput dictionary
+            target_dict (dict): Target dictionary
+            config (dict): Config dictionary
+
+        Returns:
+        ---------
+            metrics (dict): Dictionary of frame metrics
 
     """
 
@@ -104,37 +177,13 @@ def multipitch_metrics_batch(output_dict: dict, target_dict: dict, config: dict)
     keys = output_dict.keys()
     for each in range(target_dict["note_events"].shape[0]):
         output_dict_batch = {key: output_dict[key][each].cpu().detach().numpy() for key in keys}
-        est_note_events = output_dict_to_events(
-            output_dict_batch, onset_threshold=config["onset_threshold"],
-            offset_threshold=config["offset_threshold"],
-            frame_threshold=config["frame_threshold"],
-            pedal_offset_threshold=config["pedal_offset_threshold"],
-            frames_per_second=config["frame_rate"]
-        )
+        frame_roll = output_dict_batch["frame_roll"]
+        pred = (frame_roll >= config["frame_threshold"])
+        target = target_dict["label_frames"][each].cpu().detach().numpy()
 
-        if est_note_events is None:
-            continue
-
-        target_note_events = target_dict["note_events"][each].cpu().detach().numpy()
-
-        # Get the locations where target_note_events is not -100
-        # target_note_events is a tensor of shape (num_notes, 4)
-        mask = target_note_events[:, 0] != -100
-        # Filter the target_note_events using the mask
-        target_note_events = target_note_events[mask]
-
-        # Convert notes to frames
-        preds_roll = notes_to_frames(est_note_events[:, 2].astype(int), (est_note_events[:, :2]*config["frame_rate"]).astype(int), 
-                                     target_dict["label_frames"][0].shape)
-        y_roll = notes_to_frames(target_note_events[:, 2].astype(int), (target_note_events[:, :2]*config["frame_rate"]).astype(int), 
-                                     target_dict["label_frames"][0].shape)
-
-        scores = multipitch_metrics(preds_roll, y_roll, frame_rate=config["frame_rate"])
-        if scores is None:
-            continue
-
+        scores = frame_metrics(pred.flatten(), target.flatten())
         metrics["Precision"].append(scores["Precision"])
-        metrics["Recall"].append(scores["Recall"])
+        metrics["Recall"].append(scores["Accuracy"])
         metrics["Accuracy"].append(scores["Accuracy"])
     
     # Average the metrics across the batch
@@ -161,33 +210,9 @@ def save(target_dict: dict, output_dict: dict, config: dict, \
     for each in range(target_dict["label_frames"].shape[0]):
         audio_arr = target_dict["audio"][each].squeeze(0).detach().cpu().numpy()
         output_dict_batch = {key: output_dict[key][each].cpu().detach().numpy() for key in keys}
-
-        est_note_events = output_dict_to_events(
-            output_dict_batch, onset_threshold=config["onset_threshold"],
-            offset_threshold=config["offset_threshold"],
-            frame_threshold=config["frame_threshold"],
-            pedal_offset_threshold=config["pedal_offset_threshold"],
-            frames_per_second=config["frame_rate"]
-        )
-
-        if est_note_events is None:
-            continue
-
-        target_note_events = target_dict["note_events"][each]
-
-        # Get the locations where target_note_events is not -100
-        # target_note_events is a tensor of shape (num_notes, 4)
-        mask = target_note_events[:, 0] != -100
-        # Filter the target_note_events using the mask
-        target_note_events = target_note_events[mask]
-
-        preds_roll = notes_to_frames_vels(est_note_events[:, 2].astype(int), 
-                    (est_note_events[:, :2]*config["frame_rate"]).astype(int), est_note_events[:, 3],
-            target_dict["label_frames"][0].shape)
-        y_roll = notes_to_frames_vels(target_note_events[:, 2].cpu().detach().numpy().astype(int), 
-                    (target_note_events[:, :2]*config["frame_rate"]).cpu().detach().numpy().astype(int), 
-                    target_note_events[:, 3].cpu().detach().numpy(),
-            target_dict["label_frames"][0].shape)
+        
+        preds_roll = output_dict_batch["frame_roll"]
+        y_roll = target_dict["label_frames"][each].cpu().detach().numpy()
 
         Path(save_dir + f"/results/").mkdir(parents=True, exist_ok=True)
         result_dict = {'audio': audio_arr, 'original_roll': y_roll, 'pred_roll': preds_roll}
@@ -197,11 +222,30 @@ def save(target_dict: dict, output_dict: dict, config: dict, \
 def evaluate(model: Any, dataloader: Any, device: str, 
         prefix: str="valid", offset_ratio=None, config=None, save_dir: str | None=None):
     
+    """
+    Evaluate the model on the given dataloader.
+    Args:
+    -----
+        model (torch.nn.Module): The model to evaluate.
+        dataloader (torch.utils.data.DataLoader): The dataloader to use for evaluation.
+        device (str): The device to use for evaluation.
+        prefix (str): Prefix for the loss dictionary keys.
+        offset_ratio (float | None): Ratio to use for offset calculation. If None, no offset ratio is used.
+        config (dict): Configuration dictionary.
+        save_dir (str | None): Directory to save the results. If None, results are not saved.
+
+    Returns:
+    --------
+        loss_dict (dict): Dictionary containing the loss values.
+        metrics_frames (dict): Dictionary containing the frame metrics.
+        metrics_note (dict): Dictionary containing the note metrics.
+    """
     loss_fn = regress_bce
 
     if not config:
         raise ValueError("Config not passed to evaluate function!")
 
+    # Set the model to evaluation mode
     model.eval()
     loss_dict: dict = {f'{prefix}_total_loss': 0, f'{prefix}_onset_loss': 0, \
             f'{prefix}_offset_loss': 0, f'{prefix}_frame_loss': 0, \
@@ -241,8 +285,8 @@ def evaluate(model: Any, dataloader: Any, device: str,
         if save_dir is not None:
             save(batch_dict, output_dict, config, save_dir, i)
 
-        # Calculate multipitch metrics
-        frames_scores = multipitch_metrics_batch(output_dict, batch_dict, config)
+        # Calculate frame metrics
+        frames_scores = frame_metrics_batch(output_dict, batch_dict, config)
         for key in metrics_frames:
             metrics_frames[key].append(frames_scores[key])
         
@@ -283,6 +327,21 @@ def evaluate(model: Any, dataloader: Any, device: str,
 
 def train_step(model: Any, dataloader: Any, device: str, \
     optimizer: Any, scheduler: Any, clip_gradient_norm: float=3.0):
+    """
+    Perform a single training step.
+    Args:
+    -----
+        model (torch.nn.Module): The model to train.
+        dataloader (torch.utils.data.DataLoader): The dataloader to use for training.
+        device (str): The device to use for training.
+        optimizer (torch.optim.Optimizer): The optimizer to use for training.
+        scheduler (torch.optim.lr_scheduler._LRScheduler): The learning rate scheduler.
+        clip_gradient_norm (float): Maximum gradient norm for clipping.
+
+    Returns:
+    --------
+        loss_dict (dict): Dictionary containing the loss values.
+    """
 
     loss_fn = regress_bce # init loss function
     model.train() # set model to training mode
@@ -343,6 +402,15 @@ def custom_collate_fn(batches):
 
         Unfortunatelty, some values in note_events or pedal_events 
         do not have the same length and might also be empty.
+
+        Args:
+        -----
+            batches (list): List of dictionaries containing note_events,
+                            pedal_events and other.
+
+        Returns:
+        --------
+            collated_dict (dict): Collated dictionary.
     """
     max_note_length = max([each['note_events'].shape[0] for each in batches])
     max_pedal_length = max([each['pedal_events'].shape[0] for each in batches])
@@ -377,6 +445,14 @@ def custom_collate_fn(batches):
     return collated_dict
 
 def main(config):
+    """
+        Main function to train the Kong model.
+        
+        Args:
+        -----
+            config (dict): Configuration dictionary containing paths, hyperparameters, etc.
+    """
+
     # Create datasets 
     train_dataset = KongDataset(config["paths"])
     valid_dataset = KongDataset(config["paths"], dataset_type="val")
@@ -391,7 +467,7 @@ def main(config):
             shuffle=False, collate_fn=custom_collate_fn) 
 
     # Load the model
-    model = KongModel(config["classes"], config["clue"], config["momentum"], cmp=config["cmp"], \
+    model = KongModel(config["classes"], config["num_features"], config["momentum"], cmp=config["cmp"], \
                       factors=config["factors"])
     model_name = model.__class__.__name__
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -453,7 +529,7 @@ def main(config):
                 Valid Loss: {valid_loss_dict['valid_total_loss']:.4f}")
 
     print(f"Evaluating best model on test set")
-    best_model = KongModel(config["classes"], config["clue"], config["momentum"], cmp=config["cmp"], \
+    best_model = KongModel(config["classes"], config["num_features"], config["momentum"], cmp=config["cmp"], \
                       factors=config["factors"])
     best_model = best_model.to(device)
     checkpoint_path = config["save_dir"]

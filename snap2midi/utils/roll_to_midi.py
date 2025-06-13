@@ -40,6 +40,7 @@ def conv_to_midi(piano_roll: np.ndarray, filename: str, frame_rate: int, \
             elif piano_roll[frame, pitch] == 0.0 and prev_val > 0.0:
                 # Note off
                 end = frame / frame_rate
+
                 note = pretty_midi.Note(
                     velocity=vel, pitch=pitch, start=start, end=end
                 )

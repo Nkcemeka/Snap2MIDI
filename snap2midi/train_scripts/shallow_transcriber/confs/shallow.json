@@ -3,15 +3,12 @@
   "experiment_name": "ShallowTranscriber",
   "batch_size": 4,
   "paths": [
-    "/home/nkcemeka/Documents/snap/snap2midi/extractors/mnet_segments/",
-    "/home/nkcemeka/Documents/snap/snap2midi/extractors/gset_segments/",
-    "/home/nkcemeka/Documents/snap/snap2midi/extractors/slakh_segments/",
     "/home/nkcemeka/Documents/snap/snap2midi/extractors/maestro_segments/"
   ],
   "epochs": 30,
-  "frame_rate": 32,
+  "frame_rate": 100,
   "lr": 0.001,
-  "in_features": 144,
+  "in_features": 229,
   "hidden_units": 512,
   "out_features": 128,
   "dropout": 0.2,

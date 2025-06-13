@@ -10,10 +10,11 @@ import torch
 import json
 import argparse
 import numpy as np
+from snap2midi.utils.inference_utils import get_mel, stitch
 from snap2midi.train_scripts.kong.kong import KongModel, KongPedal
 from snap2midi.extractors.utils.framed_signal import FramedAudio
 from snap2midi.extractors.utils.handcrafted_features import HandcraftedFeatures
-from snap2midi.utils.eval_mir import output_dict_to_pedals, output_dict_to_events
+from snap2midi.train_scripts.kong.utilities import get_note_events, get_pedal_events
 from collections import defaultdict
 import pretty_midi
 
@@ -22,12 +23,12 @@ def load_kong(config: dict):
     path = config["kong_checkpoint"]
     classes = config["classes"]
     cmp = config["cmp"]
-    clue = config["clue"]
+    num_features = config["num_features"]
     momentum = config["momentum"]
     factors = config["factors"]
 
     # Initialize the Kong model with the loaded components
-    model = KongModel(classes, clue, momentum, cmp=cmp, factors=factors)
+    model = KongModel(classes, num_features, momentum, cmp=cmp, factors=factors)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)
     model.load_state_dict(torch.load(path, weights_only=True)["model_state_dict"])
@@ -38,43 +39,21 @@ def load_pedal(config: dict):
 
     # Load the necessary components from the config
     path = config["pedal_checkpoint"]
-    clue = config["clue"]
+    num_features = config["num_features"]
     cmp = config["cmp"]
     momentum = config["momentum"]
     factors = config["factors"]
 
     # Initialize the KongPedal model with the loaded components
-    model = KongPedal(clue, momentum, cmp=cmp, factors=factors)
+    model = KongPedal(num_features, momentum, cmp=cmp, factors=factors)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)
     model.load_state_dict(torch.load(path, weights_only=True)["model_state_dict"])
     model.eval()
     return model
 
-def get_mel(audio_frame: np.ndarray, hf, n_mels):
-    mel = hf.compute_mel(audio_frame, n_mels=n_mels)
-    mel = torch.tensor(mel, dtype=torch.float32).to("cuda" if torch.cuda.is_available() else "cpu")
-    mel = mel.T
-    mel = mel.unsqueeze(0)
-    return mel
 
-def stitch(arr: np.ndarray):
-    # Stitches the results from the Kong model
-    # so that everything aligns
-    arr = arr[:, :-1]
-    result = []
-    num_segments, num_frames, _ = arr.shape
-    factor_75 = int(num_frames * 0.75)
-    factor_25 = int(num_frames * 0.25)
-    result.append(arr[0, :factor_75])
-    for each in range(1, num_segments - 1):
-        result.append(arr[each, factor_25 : factor_75])
-    result.append(arr[-1, factor_25:])
-    result = np.concatenate(result)
-    return result
-
-
-def inference(audio_path: str, config: dict, feature_str: str):
+def inference(audio_path: str, config: dict, feature_str: str, filename: str):
     window_size = config["window_size"]
     sr = config["sample_rate"]
     pr_rate = config["frame_rate"]
@@ -94,7 +73,7 @@ def inference(audio_path: str, config: dict, feature_str: str):
 
     for each in framed_audio:
         if feature_str == "mel":
-            feature = get_mel(each, hf, config["clue"])
+            feature = get_mel(each, hf, config["num_features"])
         
         with torch.inference_mode():
             output_dict = kong_model(feature)
@@ -114,17 +93,17 @@ def inference(audio_path: str, config: dict, feature_str: str):
         result_dict[key] = stitch(result_dict[key])[:len_audio]
 
     # Get note and pedal events
-    est_note_events = output_dict_to_events(
-            result_dict, onset_threshold=config["onset_threshold"],
-            offset_threshold=config["offset_threshold"],
-            frame_threshold=config["frame_threshold"],
-            pedal_offset_threshold=config["pedal_offset_threshold"],
+    est_note_events = get_note_events(
+            result_dict, config["onset_threshold"],
+            config["offset_threshold"],
+            config["frame_threshold"],
             frames_per_second=pr_rate
         )
 
-    est_pedal_events = output_dict_to_pedals(
+    est_pedal_events = get_pedal_events(
         result_dict,
-        pedal_offset_threshold=config["pedal_offset_threshold"],
+        config["pedal_threshold"],
+        config["frame_threshold"],
         frames_per_second=pr_rate
     )
 
@@ -133,31 +112,40 @@ def inference(audio_path: str, config: dict, feature_str: str):
     prog = pretty_midi.instrument_name_to_program('Acoustic Grand Piano')
     piano = pretty_midi.Instrument(program=prog)
 
-    for (onset, offset, pitch, vel) in est_note_events:
-        note = pretty_midi.Note(
-            velocity=int(vel*127), pitch=int(pitch), start=onset, end=offset
-        )
-        piano.notes.append(note)
+    if est_note_events is not None:
+        for (onset, offset, pitch, vel) in est_note_events:
+
+            note = pretty_midi.Note(
+                velocity=int(vel*127), pitch=int(pitch), start=onset, end=offset
+            )
+            piano.notes.append(note)
+    else:
+        raise RuntimeError("No note events detected. Please check the model output and thresholds.")
     
-    for (onset, offset) in est_pedal_events:
-        sustain_on = pretty_midi.ControlChange(
-            number=64, value=127, time=onset
-        )
-        sustain_off = pretty_midi.ControlChange(
-            number=64, value=0, time=offset
-        )
-        piano.control_changes.append(sustain_on)
-        piano.control_changes.append(sustain_off)
+
+    if est_pedal_events is not None:
+        for (onset, offset) in est_pedal_events:
+            sustain_on = pretty_midi.ControlChange(
+                number=64, value=127, time=onset
+            )
+            sustain_off = pretty_midi.ControlChange(
+                number=64, value=0, time=offset
+            )
+            piano.control_changes.append(sustain_on)
+            piano.control_changes.append(sustain_off)
+    else:
+        raise RuntimeError("No pedal events detected. Please check the model output and thresholds.")
     
     midi_obj.instruments.append(piano)
-    midi_obj.write('final.mid')
-
+    midi_obj.write(f'{filename}.mid')
 
 if __name__ == "__main__":
     # Example config dictionary
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_path")
-    #parser.add_argument("--audio_path", type=str, default=None, help="Path to the audio file")
+    parser.add_argument("--name", type=str, default="transcription", help="Name of the output file")
+    parser.add_argument("--audio_path", type=str, default=None, help="Path to the audio file")
+    parser.add_argument("--feature_str", type=str, default="mel", help="Feature type to use (e.g., 'mel', 'mfcc')")
     args = parser.parse_args()
 
     # load JSON file
@@ -166,14 +154,4 @@ if __name__ == "__main__":
     
     # parse JSON file
     config = json.loads(content)
-    audio_path = "/home/nkcemeka/Documents/snap/snap2midi/runs/ConvShallowTranscriber/results/snap-test.wav"
-    audio_path = "/home/nkcemeka/Documents/snap/snap2midi/train_scripts/kong/Nanana-audio.mp3"
-    audio_path = "/home/nkcemeka/Documents/snap/snap2midi/train_scripts/kong/hymn.mp3"
-    feature_str = 'mel'  # or 'mfcc', etc.
-    
-    inference(audio_path, config, feature_str)
-        
-
-
-
-
+    inference(args.audio_path, config, args.feature_str, args.name)

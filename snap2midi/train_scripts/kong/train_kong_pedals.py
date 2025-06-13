@@ -14,20 +14,61 @@ from torch.utils.data import DataLoader
 import argparse
 import wandb
 import json
-from torch.nn.utils import clip_grad_norm_
 from torch.optim.lr_scheduler import StepLR
-from snap2midi.utils.eval_mir import transcription_metrics, frame_metrics, note_extract, notes_to_frames, notes_to_frames_vels
-from .kong_dataset import KongDataset
+from snap2midi.utils.eval_mir import frame_metrics
+from .datasets.kong_dataset import KongDataset
 from .kong import KongPedal
 from typing import Any
-from snap2midi.train_scripts.losses import regress_pedal_bce
-from snap2midi.utils.eval_mir import output_dict_to_pedals
+from .utilities import get_pedal_events
+import torch.nn.functional as F
 import mir_eval
+
+
+def regress_pedal_bce(output_dict, target_dict):
+    """
+        Calculate the regression loss for pedal events using binary cross-entropy.
+
+        Args:
+        ------
+            output_dict (dict): Model output dictionary containing the predicted values for pedal events.
+            target_dict (dict): Target dictionary containing the ground truth values for pedal events.
+
+        Returns:
+        -------
+            loss_dict (dict): Dictionary containing the individual losses for pedal events and total loss.
+    """
+    onset_pedal_loss = F.binary_cross_entropy(output_dict['reg_pedal_onset_roll'], \
+                     target_dict['pedal_reg_onset'][:, :, None])
+    offset_pedal_loss = F.binary_cross_entropy(output_dict['reg_pedal_offset_roll'], \
+                                               target_dict['pedal_reg_offset'][:, :, None])
+    frame_pedal_loss = F.binary_cross_entropy(output_dict['pedal_frame_roll'], \
+                                              target_dict['pedal_frames'][:, :, None])
+    total_loss = onset_pedal_loss + offset_pedal_loss + frame_pedal_loss
+
+    loss_dict = {
+        'onset_pedal_loss': onset_pedal_loss,
+        'offset_pedal_loss': offset_pedal_loss,
+        'frame_pedal_loss': frame_pedal_loss,
+        'total_loss': total_loss
+    }
+    return loss_dict
 
 def transcription_metrics_batch(output_dict: dict, target_dict: dict, \
                                 config: dict, offset_ratio: float|None=None) -> dict:
     """
-    Calculate transcription metrics for a batch of predictions and ground truth.
+        Calculate transcription metrics for a batch of predictions and ground truth.
+
+        Args:
+        -----
+            output_dict (dict): Model ouput dictionary
+            target_dict (dict): Target dictionary
+            config (dict): Config dictionary
+            offset_ratio (float | None): Ratio to use for offset calculation. If None, 
+                                      no offset ratio is used.
+
+        Returns:
+        ---------
+            metrics (dict): Dictionary of transcription metrics
     """
     # Initialize metrics dictionary
     if offset_ratio is not None:
@@ -42,10 +83,11 @@ def transcription_metrics_batch(output_dict: dict, target_dict: dict, \
     keys = output_dict.keys()
     for each in range(target_dict["pedal_events"].shape[0]):
         output_dict_batch = {key: output_dict[key][each].cpu().detach().numpy() for key in keys}
-        est_pedal_events = output_dict_to_pedals(
+        est_pedal_events = get_pedal_events(
             output_dict_batch,
-            pedal_offset_threshold=config["pedal_offset_threshold"],
-            frames_per_second=config["frame_rate"]
+            config["pedal_threshold"],
+            config["frame_threshold"],
+            config["frame_rate"]
         )
 
         if est_pedal_events is None:
@@ -72,6 +114,11 @@ def transcription_metrics_batch(output_dict: dict, target_dict: dict, \
         assert np.min(ref_intervals) >= 0, "Reference intervals contain negative values!"
         assert np.min(est_intervals) >= 0, "Estimated intervals contain negative values!"
 
+        if np.any(est_intervals[:, 1] - est_intervals[:, 0] < 0):
+            print(f"Negative intervals found in estimated notes for batch {each}. \
+                  Skipping evaluation for this batch.")
+            continue
+
         scores = mir_eval.transcription.precision_recall_f1_overlap(
             ref_intervals, ref_pitches, est_intervals, est_pitches,
             offset_ratio=None)
@@ -97,6 +144,16 @@ def transcription_metrics_batch(output_dict: dict, target_dict: dict, \
 def frame_metrics_batch(output_dict: dict, target_dict: dict, config: dict) -> dict:
     """
         Calculate frame metrics for a batch of predictions and ground truth.
+
+        Args:
+        -----
+            output_dict (dict): Model ouput dictionary
+            target_dict (dict): Target dictionary
+            config (dict): Config dictionary
+
+        Returns:
+        ---------
+            metrics (dict): Dictionary of frame metrics
     """
 
     # Initialize metrics dictionary
@@ -104,28 +161,11 @@ def frame_metrics_batch(output_dict: dict, target_dict: dict, config: dict) -> d
     keys = output_dict.keys()
     for each in range(target_dict["pedal_events"].shape[0]):
         output_dict_batch = {key: output_dict[key][each].cpu().detach().numpy() for key in keys}
-        est_pedal_events = output_dict_to_pedals(
-            output_dict_batch,
-            pedal_offset_threshold=config["pedal_offset_threshold"],
-            frames_per_second=config["frame_rate"]
-        )
+        pedal_frame_roll = output_dict_batch["pedal_frame_roll"]
+        pred = (pedal_frame_roll >= config["frame_threshold"])
+        target = target_dict["pedal_frames"][each].cpu().detach().numpy()
 
-        if est_pedal_events is None:
-            continue
-
-        target_pedal_events = target_dict["pedal_events"][each].cpu().detach().numpy()
-
-        # Get the locations where target_pedal_events is not -100
-        # target_pedal_events is a tensor of shape (num_notes, 4)
-        mask = target_pedal_events[:, 0] != -100
-        # Filter the target_pedal_events using the mask
-        target_pedal_events = target_pedal_events[mask]
-
-        # Convert notes to frames
-        preds_roll = output_dict["pedal_frame_output"][each].cpu().detach().numpy() > config["frame_threshold"]
-        y_roll = target_dict["pedal_frames"][each].cpu().detach().numpy()
-
-        scores = frame_metrics(preds_roll.flatten(), y_roll.flatten())
+        scores = frame_metrics(pred.flatten(), target.flatten())
 
         # Remove this later, scores will never be None
         if scores is None:
@@ -134,17 +174,17 @@ def frame_metrics_batch(output_dict: dict, target_dict: dict, config: dict) -> d
         metrics["Precision"].append(scores["Precision"])
         metrics["Recall"].append(scores["Recall"])
         metrics["Accuracy"].append(scores["Accuracy"])
-    
+
     # Average the metrics across the batch
     for key in metrics:
         metrics[key] = np.mean(metrics[key])
         metrics[key] = np.round(metrics[key], 4)
-    
+
     return metrics
 
 @torch.no_grad()
 def evaluate(model: Any, dataloader: Any, device: str, 
-        prefix: str="valid", offset_ratio=None, config=None, save_dir: str | None=None):
+        prefix: str="valid", offset_ratio=None, config=None):
     
     loss_fn = regress_pedal_bce
 
@@ -333,7 +373,7 @@ def main(config):
             shuffle=False, collate_fn=custom_collate_fn) 
 
     # Load the model
-    model = KongPedal(config["clue"], config["momentum"], cmp=config["cmp"], \
+    model = KongPedal(config["num_features"], config["momentum"], cmp=config["cmp"], \
                       factors=config["factors"])
     model_name = model.__class__.__name__
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -395,7 +435,7 @@ def main(config):
                 Valid Loss: {valid_loss_dict['valid_total_loss']:.4f}")
 
     print(f"Evaluating best model on test set")
-    best_model = KongPedal(config["clue"], config["momentum"], cmp=config["cmp"], \
+    best_model = KongPedal(config["num_features"], config["momentum"], cmp=config["cmp"], \
                       factors=config["factors"])
     best_model = best_model.to(device)
     checkpoint_path = config["save_dir"]
@@ -404,8 +444,7 @@ def main(config):
     best_checkpoint = str(best_checkpoints[-1])
     best_model.load_state_dict(torch.load(best_checkpoint, weights_only=True)["model_state_dict"])
     test_loss_dict, frame_metrics_test, event_metrics_test = evaluate(best_model, test_dataloader, device,\
-                         config=config, \
-                         save_dir=checkpoint_path, prefix='test')
+                         config=config, prefix='test')
     
     print(f"Test Loss: {test_loss_dict['test_total_loss']:.4f}")
     results_test = {

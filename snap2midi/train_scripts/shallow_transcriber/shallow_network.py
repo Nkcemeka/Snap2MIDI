@@ -63,30 +63,30 @@ class ShallowTranscriber(nn.Module):
                 if each.bias is not None:
                     each.bias.data.zero_()
 
-    def forward(self, x: torch.tensor) -> torch.tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
             Forward pass through the shallow 
             transcriber
 
             Args:
-                x (torch.tensor): Input mid-level representation
+                x (torch.Tensor): Input mid-level representation
                                   Shape of (Batch size, Frames, in_features)
 
             Returns:
-                out (torch.tensor): Predictions of shape (frames, out_features)
+                out (torch.Tensor): Predictions of shape (frames, out_features)
         """
         out = self.scn(x)
         return out
 
-    def predict(self, x: torch.tensor) -> torch.tensor:
+    def predict(self, x: torch.Tensor) -> torch.Tensor:
         """
             Return a piano roll given input representation.
             
             Args:
-                x (torch.tensor): Input mid-level representation
+                x (torch.Tensor): Input mid-level representation
 
             Returns:
-                out (torch.tensor): Piano roll of shape (frames, out_features)
+                out (torch.Tensor): Piano roll of shape (frames, out_features)
         """
         return torch.sigmoid(self.forward(x))
 

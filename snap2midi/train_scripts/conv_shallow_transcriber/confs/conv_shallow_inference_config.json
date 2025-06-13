@@ -1,0 +1,9 @@
+{
+  "frame_rate": 100,
+  "in_features": 229,
+  "out_features": 128,
+  "window_size": 10,
+  "threshold": 0.3,
+  "sample_rate": 16000,
+  "conv_checkpoint": "/home/nkcemeka/Documents/snap/snap2midi/runs/ConvShallowTranscriber/checkpoint_24.pt"
+}

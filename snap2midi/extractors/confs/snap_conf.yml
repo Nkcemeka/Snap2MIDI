@@ -7,7 +7,7 @@ SnapExtractor.dataset_name: "maestro"
 #SnapExtractor.dataset_name: "slakh"
 #SnapExtractor.dataset_name: "guitarset"
 #SnapExtractor.dataset_name: "musicnet"
-SnapExtractor.duration: 20.0
+SnapExtractor.duration: 50.0
 SnapExtractor.ext_audio: wav
 #SnapExtractor.ext_audio: flac
 SnapExtractor.ext_midi: midi

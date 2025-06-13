@@ -1,0 +1,19 @@
+{
+    "factors": [16, 32, 32],
+    "frame_rate": 100,
+    "num_features": 229,
+    "window_size": 10.0,
+    "sample_rate": 16000,
+    "onset_threshold": 0.3,
+    "offset_threshold": 0.3,
+    "frame_threshold": 0.1,
+    "pedal_threshold": 0.2,
+    "classes": 128,
+    "cmp": 48,
+    "momentum": 0.01,
+    "threshold": 0.3,
+    "kong_checkpoint": "/home/nkcemeka/Documents/snap/snap2midi/runs/Kong/checkpoint_19.pt",
+    "pedal_checkpoint": "/home/nkcemeka/Documents/snap/snap2midi/runs/KongPedal/checkpoint_15.pt",
+    "save_dir": "/home/nkcemeka/Documents/snap/snap2midi/runs/Kong"
+  }
+  

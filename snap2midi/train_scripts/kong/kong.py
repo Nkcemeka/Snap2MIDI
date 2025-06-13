@@ -1,7 +1,4 @@
-import sys
 import math
-import numpy as np
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -171,14 +168,14 @@ class ConvBlock(nn.Module):
         return x 
     
 class AcousticModel(nn.Module):
-    def __init__(self, classes: int, clue: int, momentum: float, 
+    def __init__(self, classes: int, num_features: int, momentum: float, 
                  cmp: int = 48, factors: list=[16, 32, 32]):
         """
             Default constructor for Acoustic model
 
             Args:
                 classes (int): Number of classes for the model
-                clue (int): Clue for the model which is size of embedding dimension
+                num_features (int): size of embedding dimension
                 momentum (float): Momentum for batch norm
                 cmp (int): Complexity for the model
                 factors (list): To vary the complexity of the conv, model
@@ -205,7 +202,7 @@ class AcousticModel(nn.Module):
         # Since we know we will pool by a factor of 2, let's cheat
         # a little bit to make the model modular in terms of
         # self.midfeat.
-        height = clue
+        height = num_features
         for _ in range(4):
             height = height // 2
         
@@ -257,33 +254,33 @@ class AcousticModel(nn.Module):
         return out
 
 class KongModel(nn.Module):
-    def __init__(self, classes: int, clue: int, momentum: float, cmp: int=48, 
+    def __init__(self, classes: int, num_features: int, momentum: float, cmp: int=48, 
                  factors: list=[16, 32, 32]):
         """
             Base model for Kong.
 
             Args:
                 classes (int): Number of classes for the model
-                clue (int): Clue for the model which is size of embedding dimension
+                num_features (int): Size of embedding dimension
                 momentum (float): Momentum for batch norm layers
                 cmp (int): Complexity for Acoustic model
                 factors (list): List of factors for the complexity of the conv block
         """
         super().__init__()
-        self.clue = clue
+        self.num_features = num_features
         self.classes = classes
         self.momentum = momentum
     
-        self.frame_model = AcousticModel(self.classes, self.clue, self.momentum,
+        self.frame_model = AcousticModel(self.classes, self.num_features, self.momentum,
                                          cmp=cmp, factors=factors)
-        self.reg_onset_model = AcousticModel(self.classes, self.clue, self.momentum,
+        self.reg_onset_model = AcousticModel(self.classes, self.num_features, self.momentum,
                                          cmp=cmp, factors=factors)
-        self.reg_offset_model = AcousticModel(self.classes, self.clue, self.momentum,
+        self.reg_offset_model = AcousticModel(self.classes, self.num_features, self.momentum,
                                          cmp=cmp, factors=factors)
-        self.velocity_model = AcousticModel(self.classes, self.clue, self.momentum,
+        self.velocity_model = AcousticModel(self.classes, self.num_features, self.momentum,
                                          cmp=cmp, factors=factors)
         
-        self.bn0 = nn.BatchNorm2d(self.clue, momentum)
+        self.bn0 = nn.BatchNorm2d(self.num_features, momentum)
         self.reg_onset_gru = nn.GRU(input_size=self.classes*2, hidden_size=256, num_layers=1,
                                     bias=True, batch_first=True, dropout=0., bidirectional=True)
         self.reg_onset_fc = nn.Linear(512, self.classes)
@@ -315,7 +312,7 @@ class KongModel(nn.Module):
             Returns:
                 dict: Dictionary containing the outputs for 
                       reg_onset, reg_offset, frame and velocity
-                      outputs.
+                      rolls.
         """
         x = x.unsqueeze(1)  # (batch_size, 1, time_steps, embed_dim)
         x = x.transpose(1, 3)
@@ -325,54 +322,54 @@ class KongModel(nn.Module):
         x = self.bn0(x)
         x = x.transpose(1, 3)
 
-        frame_output = self.frame_model(x)  # (batch, time_steps, classes)
-        reg_onset_output = self.reg_onset_model(x)  # (batch, time_steps, classes)
-        reg_offset_output = self.reg_offset_model(x)    # (batch, time_steps, classes)
-        velocity_output = self.velocity_model(x)    # (batch, time_steps, classes)
+        frame_roll = self.frame_model(x)  # (batch, time_steps, classes)
+        reg_onset_roll = self.reg_onset_model(x)  # (batch, time_steps, classes)
+        reg_offset_roll = self.reg_offset_model(x)    # (batch, time_steps, classes)
+        velocity_roll = self.velocity_model(x)    # (batch, time_steps, classes)
  
         # Use velocities to condition onset regression
         # The velocities were scaled by Kong based on the onsets: interesting stuff
-        x = torch.cat((reg_onset_output, (reg_onset_output ** 0.5) * velocity_output.detach()), dim=2)
+        x = torch.cat((reg_onset_roll, (reg_onset_roll ** 0.5) * velocity_roll.detach()), dim=2)
         (x, _) = self.reg_onset_gru(x)
         x = F.dropout(x, p=0.5, training=self.training, inplace=False)
-        reg_onset_output = torch.sigmoid(self.reg_onset_fc(x)) #(batch, time_steps, classes)
+        reg_onset_roll = torch.sigmoid(self.reg_onset_fc(x)) #(batch, time_steps, classes)
 
         # Use onsets and offsets to condition frame-wise classification
-        x = torch.cat((frame_output, reg_onset_output.detach(), reg_offset_output.detach()), dim=2)
+        x = torch.cat((frame_roll, reg_onset_roll.detach(), reg_offset_roll.detach()), dim=2)
         (x, _) = self.frame_gru(x)
         x = F.dropout(x, p=0.5, training=self.training, inplace=False)
-        frame_output = torch.sigmoid(self.frame_fc(x))  # (batch, time_steps, classes)
+        frame_roll = torch.sigmoid(self.frame_fc(x))  # (batch, time_steps, classes)
 
         return {
-            'reg_onset_output': reg_onset_output, 
-            'reg_offset_output': reg_offset_output, 
-            'frame_output': frame_output, 
-            'velocity_output': velocity_output
+            'reg_onset_roll': reg_onset_roll, 
+            'reg_offset_roll': reg_offset_roll, 
+            'frame_roll': frame_roll, 
+            'velocity_roll': velocity_roll
         }
 
 class KongPedal(nn.Module):
-    def __init__(self, clue: int, momentum: float, cmp: int=48, 
+    def __init__(self, num_features: int, momentum: float, cmp: int=48, 
                  factors: list=[16, 32, 32]):
         """
             Base model for Kong.
 
             Args:
-                clue (int): Clue for the model which is size of embedding dimension
+                num_features (int): Size of embedding dimension
                 momentum (float): Momentum for batch norm layers
                 cmp (int): Complexity for Acoustic model
                 factors (list): List of factors for the complexity of the conv block
         """
         super().__init__()
-        self.clue = clue
+        self.num_features = num_features
         self.momentum = momentum
-        self.reg_pedal_onset_model = AcousticModel(1, self.clue, self.momentum,
+        self.reg_pedal_onset_model = AcousticModel(1, self.num_features, self.momentum,
                                          cmp=cmp, factors=factors)
-        self.reg_pedal_offset_model = AcousticModel(1, self.clue, self.momentum,
+        self.reg_pedal_offset_model = AcousticModel(1, self.num_features, self.momentum,
                                          cmp=cmp, factors=factors)
-        self.reg_pedal_frame_model = AcousticModel(1, self.clue, self.momentum,
+        self.reg_pedal_frame_model = AcousticModel(1, self.num_features, self.momentum,
                                          cmp=cmp, factors=factors)
         
-        self.bn0 = nn.BatchNorm2d(self.clue, momentum)
+        self.bn0 = nn.BatchNorm2d(self.num_features, momentum)
 
         # initialize the weights for architecture
         self.weights_init()
@@ -393,9 +390,9 @@ class KongPedal(nn.Module):
                 x (torch.Tensor): (batch, time, classes)
 
             Returns:
-                dict: Dictionary containing the outputs for 
-                      reg_pedal_onset_output, reg_pedal_offset_output, 
-                      and pedal_frame_output.
+                dict: Dictionary containing the rolls for 
+                      reg_pedal_onset_roll, reg_pedal_offset_roll, 
+                      and pedal_frame_roll.
         """
         x = x.unsqueeze(1)  # (batch_size, 1, time_steps, embed_dim)
         x = x.transpose(1, 3)
@@ -405,19 +402,19 @@ class KongPedal(nn.Module):
         x = self.bn0(x)
         x = x.transpose(1, 3)
 
-        reg_pedal_onset_output = self.reg_pedal_onset_model(x)  # (batch, time_steps, 1)
-        reg_pedal_offset_output = self.reg_pedal_offset_model(x)  # (batch, time_steps, 1)
-        pedal_frame_output = self.reg_pedal_frame_model(x)  # (batch, time_steps, 1)
+        reg_pedal_onset_roll = self.reg_pedal_onset_model(x)  # (batch, time_steps, 1)
+        reg_pedal_offset_roll = self.reg_pedal_offset_model(x)  # (batch, time_steps, 1)
+        pedal_frame_roll = self.reg_pedal_frame_model(x)  # (batch, time_steps, 1)
         
         return {
-            'reg_pedal_onset_output': reg_pedal_onset_output, 
-            'reg_pedal_offset_output': reg_pedal_offset_output,
-            'pedal_frame_output': pedal_frame_output
+            'reg_pedal_onset_roll': reg_pedal_onset_roll, 
+            'reg_pedal_offset_roll': reg_pedal_offset_roll,
+            'pedal_frame_roll': pedal_frame_roll
         }
 
 # Test Kong's pedal model
 if __name__ == "__main__":
-    model = KongPedal(clue=229, momentum=0.1)
+    model = KongPedal(num_features=229, momentum=0.1)
     x = torch.randn(4, 640, 229)  # (batch, time_steps, embed_dim)
     out = model(x)
 

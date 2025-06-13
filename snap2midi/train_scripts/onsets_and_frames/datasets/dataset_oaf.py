@@ -12,10 +12,10 @@ import numpy as np
 from pathlib import Path
 import torch
 from torch.utils.data import Dataset
-from typing import Sequence
+from typing import Sequence, Optional
 
 class OAFDataset(Dataset):
-    def __init__(self, emb_paths: list[str]=None, dataset_type: str="train") -> None:
+    def __init__(self, emb_paths: Optional[list[str]]=None, dataset_type: str="train") -> None:
         """
         Args:
             emb_paths (list): List of paths to npz files containing audio and feature data.
@@ -63,5 +63,5 @@ class OAFDataset(Dataset):
 
 
 if __name__ == "__main__":
-    dataset = OAFDataset("./extractors/maestro/maestro_events_segments/train/")
+    dataset = OAFDataset(["./extractors/maestro_events_segments/train/"])
     print(dataset[0][0].shape, dataset[0][1].shape)
