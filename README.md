@@ -66,3 +66,8 @@ Each model has a directory structure similar to that below! The confs directory 
 └── train.sh
 ```
 
+## Gradio Application
+Snap2MIDI now has an application interface. After training any of the models above, you can run the gradio application to access a simple user interface and test them out. To run the application, go to the gradio_app directory and run the ./run.sh file. Make sure you update the file with the correct path to the soundfont file. Alternatively, you can try:
+```
+python app.py --soundfont_path=<SOUNDFONT_PATH>
+```
