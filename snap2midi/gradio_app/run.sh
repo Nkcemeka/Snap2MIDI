@@ -1,0 +1,1 @@
+python app.py --soundfont_path="../notebooks/soundfonts/MuseScore_General.sf2"

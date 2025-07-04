@@ -7,6 +7,7 @@ from snap2midi.extractors.utils.framed_signal import FramedAudio
 from snap2midi.extractors.utils.handcrafted_features import HandcraftedFeatures
 import argparse
 import json
+from typing import Optional
 
 
 def load_shallow(config: dict):
@@ -24,7 +25,7 @@ def load_shallow(config: dict):
     return model
 
 
-def inference(audio_path: str, config: dict, feature_str: str, filename: str):
+def inference(audio_path: str, config: dict, feature_str: str, filename: Optional[str]):
     window_size = config["window_size"]
     sr = config["sample_rate"]
     pr_rate = config["frame_rate"]
@@ -62,6 +63,8 @@ def inference(audio_path: str, config: dict, feature_str: str, filename: str):
     # Save events to MIDI file
     midi_obj = conv_to_midi(result_stitch.cpu().detach().numpy()*127, 
                         "", pr_rate)
+    if filename is None:
+        return midi_obj
     midi_obj.write(f'{filename}.mid')
 
 if __name__ == "__main__":

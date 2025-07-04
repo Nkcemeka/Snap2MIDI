@@ -10,6 +10,7 @@
     "cmp": 48,
     "momentum": 0.01,
     "threshold": 0.2,
-    "onset_checkpoint": "/home/nkcemeka/Documents/snap/snap2midi/runs/OnsetsAndFrames/checkpoint_59.pt"
+    "feature_str": "mel",
+    "onset_checkpoint": "/home/nkcemeka/Documents/snap/snap2midi/runs/OnsetsAndFrames/checkpoint_77.pt"
   }
   

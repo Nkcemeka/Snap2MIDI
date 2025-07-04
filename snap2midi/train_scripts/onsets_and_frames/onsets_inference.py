@@ -16,6 +16,7 @@ from snap2midi.extractors.utils.framed_signal import FramedAudio
 from snap2midi.extractors.utils.handcrafted_features import HandcraftedFeatures
 from snap2midi.utils.eval_mir import note_extract
 from collections import defaultdict
+from typing import Optional
 import pretty_midi
 
 def load_onset(config: dict):
@@ -33,7 +34,7 @@ def load_onset(config: dict):
     model.eval()
     return model
 
-def inference(audio_path: str, config: dict, feature_str: str, filename: str):
+def inference(audio_path: str, config: dict, feature_str: str, filename: Optional[str]):
     window_size = config["window_size"]
     sr = config["sample_rate"]
     pr_rate = config["frame_rate"]
@@ -96,6 +97,8 @@ def inference(audio_path: str, config: dict, feature_str: str, filename: str):
         piano.notes.append(note)
     
     midi_obj.instruments.append(piano)
+    if filename is None:
+        return midi_obj
     midi_obj.write(f'{filename}.mid')
 
 if __name__ == "__main__":

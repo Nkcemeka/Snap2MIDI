@@ -17,6 +17,7 @@ from snap2midi.extractors.utils.handcrafted_features import HandcraftedFeatures
 from snap2midi.train_scripts.kong.utilities import get_note_events, get_pedal_events
 from collections import defaultdict
 import pretty_midi
+from typing import Optional
 
 def load_kong(config: dict):
     # Load the necessary components from the config
@@ -53,7 +54,7 @@ def load_pedal(config: dict):
     return model
 
 
-def inference(audio_path: str, config: dict, feature_str: str, filename: str):
+def inference(audio_path: str, config: dict, feature_str: str, filename: Optional[str] = None):
     window_size = config["window_size"]
     sr = config["sample_rate"]
     pr_rate = config["frame_rate"]
@@ -137,6 +138,9 @@ def inference(audio_path: str, config: dict, feature_str: str, filename: str):
         raise RuntimeError("No pedal events detected. Please check the model output and thresholds.")
     
     midi_obj.instruments.append(piano)
+
+    if filename is None:
+        return midi_obj
     midi_obj.write(f'{filename}.mid')
 
 if __name__ == "__main__":

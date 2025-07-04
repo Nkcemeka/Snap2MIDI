@@ -5,5 +5,6 @@
   "window_size": 10,
   "threshold": 0.3,
   "sample_rate": 16000,
+  "feature_str": "mel",
   "conv_checkpoint": "/home/nkcemeka/Documents/snap/snap2midi/runs/ConvShallowTranscriber/checkpoint_24.pt"
 }

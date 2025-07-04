@@ -8,3 +8,5 @@ tqdm==4.67.1
 jams @ git+https://github.com/marl/jams.git
 mypy==1.16.0
 wandb==0.20.1
+gradio==5.35.0
+pillow==11.2.1
