@@ -1,0 +1,22 @@
+{
+   "dataset_name": "maps",
+   "duration": 50.0,
+   "ext_audio": "wav",
+   "ext_midi": "mid",
+   "hop_size": 1.0,
+   "path": "/home/nkcemeka/Documents/Datasets/MAPS",
+   "sample_rate": 16000.0,
+   "window_size": 10.0,
+   "train_split": 0.8,
+   "val_split": 0.1,
+   "test_split": 0.1,
+   "feature": "mel",
+   "pr_rate": 100,
+   "feature_params": {
+      "n_mels": 229,
+      "mel_n_fft": 2048,
+      "cqt_bins_oct": 24,
+      "cqt_num_octaves": 6
+   },
+   "save_name": "maps_segments"
+}
