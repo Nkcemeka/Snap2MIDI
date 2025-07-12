@@ -27,11 +27,13 @@ Snap2MIDI is a package that allows you take a "snap" of audio and convert it to 
     ```
 
 ## Extraction
-To extract the audio snapshots/segments and the corresponding labels for a dataset of your choice, go to the extractors folder and run the necessary code using the following below as a guide (note that the configuration can be used for any dataset; currently, the extraction code supports MAESTRO, GuitarSet, MusicNet, and Slakh):
+To extract the audio snapshots/segments and the corresponding labels for a dataset of your choice, go to the extractors folder and run the necessary code using the following below as a guide (note that the configuration can be used for any dataset; currently, the extraction code supports MAESTRO, GuitarSet, MusicNet, MAPS and Slakh). Also be aware of the different modes for extraction; for example, the HfT mode allows you to extract your features based on the hFT-Transformer architecture design. This 'modal feature' was done to accomodate modes that might not follow the general narrative:
 
 ```
-python snap_extract.py --args.load "./confs/snap_conf.yml"
+python -u snap_extract.py --mode="general" --config_path="./confs/snap_conf.json"
 ```
+
+You can also edit and run the extract.sh file.
 
 ## Training
 To train an architecture (e.g OnsetsAndFrames), you can go to the train_scripts/onsets_and_frames folder
