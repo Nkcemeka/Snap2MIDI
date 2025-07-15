@@ -18,7 +18,7 @@ def local_maxima(reg_roll: np.ndarray, frame: int, window: int) -> bool:
 
         Args:
         -----
-            reg_roll (np.ndarray): Regression roll of shape (num_frames, classes)
+            reg_roll (np.ndarray): Regression roll of shape (num_frames) at a given pitch
             frame (int): frame position
             window (int): size of window to consider to left
                              and right of x(n)

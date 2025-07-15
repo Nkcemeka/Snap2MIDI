@@ -345,6 +345,9 @@ def main(train_config: dict):
                                         train_config["weight_A"], train_config["weight_B"], valid_dataloader, \
                                         device, train_config["verbose"], prefix="valid")
         
+        # Step the scheduler
+        scheduler.step(valid_loss_dict['valid_total_loss'])
+        
         # Log results to wandb
         results = {}
 

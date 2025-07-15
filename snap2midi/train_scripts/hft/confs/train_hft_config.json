@@ -25,7 +25,7 @@
     "weight_B": 1.0,
     "verbose": 1,
     "resume": 0,
-    "resume_path": "/home/nkcemeka/Documents/snap/snap2midi/runs/HFT/checkpoint_19.pt",
+    "resume_path": "/home/nkcemeka/Documents/snap/snap2midi/runs/HFT/checkpoint_5.pt",
     "save_dir": "/home/nkcemeka/Documents/snap/snap2midi/runs/HFT"
   }
   
