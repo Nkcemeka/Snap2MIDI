@@ -1,11 +1,11 @@
-"""
-File: shallow_network.py
-Author: Chukwuemeka L. Nkama
-Date: 4/1/2025
+# """
+# File: shallow_network.py
+# Author: Chukwuemeka L. Nkama
+# Date: 4/1/2025
 
-Description: A shallow neural network performing multi-pitch
-             estimation/transcription!
-"""
+# Description: A shallow neural network performing multi-pitch
+#              estimation/transcription!
+# """
 
 # Imports
 import torch

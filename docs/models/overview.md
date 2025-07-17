@@ -1,0 +1,1 @@
+The models currently supported by Snap2MIDI include: a shallow neural network transcriber, a convolutional based network, Onsets and Frames, Kong (a model by [Quiqiang Kong](https://scholar.google.co.uk/citations?user=B6O3SycAAAAJ&hl=en)) and the HFT-Transformer architecture by Sony.

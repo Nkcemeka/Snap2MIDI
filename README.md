@@ -1,4 +1,8 @@
 # Snap2MIDI
+<p align="center">
+  <img src="./s2m.jpg" alt="My Image" width="700">
+</p>
+
 Snap2MIDI is a package that allows you take a "snap" of audio and convert it to MIDI. It contains different architectures including SOTA models such as OnsetsAndFrames, Kong, etc. The package is also designed such that you can quickly train these Automatic Music Transcription (AMT) architectures without having to write a lot of code. By training a small version of these models on small snapshots of audio, you can quickly verify if an architecture will perform well when scaled. The codebase is also designed such that it is extensible if you follow the coding paradigm; you should be able to add new datasets and new AMT models to train on.
 
 ## Installation

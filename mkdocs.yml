@@ -1,0 +1,46 @@
+site_name: Snap2MIDI Docs
+
+theme:
+  name: material
+  logo: assets/s2m-white.svg
+  palette: 
+
+    # Palette toggle for light mode
+    - scheme: default
+      primary: black
+      toggle:
+        icon: material/brightness-7 
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: black
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+# Remove the Made with Material Footer
+extra:
+  generator: false
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Models: 
+      - Overview: models/overview.md
+      - Shallow: models/shallow.md
+      - Conv_Shallow: models/conv_shallow.md
+      - OAF: models/oaf.md
+      - Kong: models/kong.md
+      - HFT: models/hft.md
+  - Tutorials:
+      - Getting Started: tutorials/getting_started.md
+      - Training: tutorials/training.md
+      - Inference: tutorials/inference.md
+  - Reference: reference.md
+  - Contributing: contributing.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
