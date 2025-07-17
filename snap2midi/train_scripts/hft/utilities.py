@@ -9,6 +9,8 @@
 import torch
 import numpy as np
 import pretty_midi
+import mir_eval
+from pathlib import Path
 
 
 def half_stride(model, feature, shift: int, config: dict):
@@ -24,8 +26,6 @@ def half_stride(model, feature, shift: int, config: dict):
     """
 
     # feature is of shape [num_frames, n_mels]
-    feature = np.array(feature, dtype=np.float32)
-
     # For the half-sride, we hop by half the number of frames
     half_frames = int(config["input"]["num_frame"]/2)
 
@@ -279,7 +279,13 @@ def frames_to_note(onset, offset, frames, velocity, threshold_onset, threshold_o
                 'offset': final_offset,
                 'velocity': velocity_value
             })
-    
+
+            # Fix the offset of the previous note if it comes after the onset of the current note
+            if len(notes) > 1 and \
+            (notes[len(notes)-1]['pitch'] == notes[len(notes)-2]['pitch']) and \
+                   (notes[len(notes)-1]['onset'] < notes[len(notes)-2]['offset']):
+                    notes[len(notes)-2]['offset'] = notes[len(notes)-1]['onset']
+
     # sort the notes by pitch and then by onset time
     notes.sort(key=lambda x: (x['pitch'], x['onset']))
     return notes
@@ -310,4 +316,104 @@ def notes_to_midi(notes, filename):
     return midi_obj
 
 
+def transcription_metrics(est_notes: list, ref_notes: list):
+    """
+        Calculate the transcription metrics using mir_eval.
+
+        Args:
+            est_notes (list): List of estimated notes
+            ref_notes (list): List of reference notes
+
+        Returns:
+            scores (dict): Dictionary containing the transcription metrics.
+    """
+    est_int = []
+    ref_int = []
+    est_p = []
+    ref_p = []
+
+    for note in est_notes:
+        onset_time = note['onset']
+        offset_time = note['offset']
+        est_pitch = note['pitch']
+        # convert est_pitch to frequency 
+        est_freq = pretty_midi.note_number_to_hz(est_pitch)
+        est_int.append([onset_time, offset_time])
+        est_p.append(est_freq)
+
+    for note in ref_notes:
+        onset_time = note['onset'] if type(note['onset']) is float else note['onset'].item()
+        offset_time = note['offset'] if type(note['offset']) is float else note['offset'].item()
+        ref_pitch = note['pitch'] if type(note['pitch']) is int else note['pitch'].item()
+
+        # convert ref_pitch to frequency
+        ref_freq = pretty_midi.note_number_to_hz(ref_pitch)
+        ref_int.append([onset_time, offset_time])
+        ref_p.append(ref_freq)
+
+    est_int = np.array(est_int, dtype=np.float32)
+    ref_int = np.array(ref_int, dtype=np.float32)
+    est_p = np.array(est_p, dtype=np.float32)
+    ref_p = np.array(ref_p, dtype=np.float32)
+
+    # Calculate the transcription metrics using mir_eval
+    scores = mir_eval.transcription.evaluate(
+        ref_intervals=ref_int, ref_pitches=ref_p,
+        est_intervals=est_int, est_pitches=est_p)
+    
+    return scores
+
+
+
+def transcription_velocity_metrics(est_notes: list, ref_notes: list):
+    """
+        Calculate the transcription velocity metrics using mir_eval.
+
+        Args:
+            est_notes (list): List of estimated notes
+            ref_notes (list): List of reference notes
+
+        Returns:
+            scores (dict): Dictionary containing the transcription velocity metrics.
+    """
+    est_int = []
+    ref_int = []
+    est_p = []
+    ref_p = []
+    est_vel = []
+    ref_vel = []
+
+    for note in est_notes:
+        onset_time = note['onset'] if type(note['onset']) is float else note['onset'].item()
+        offset_time = note['offset'] if type(note['offset']) is float else note['offset'].item()
+        est_pitch = note['pitch'] if type(note['pitch']) is int else note['pitch'].item()
+        est_velocity = note['velocity'] if type(note['velocity']) is int else note['velocity'].item()
+        # convert est_pitch to frequency 
+        est_freq = pretty_midi.note_number_to_hz(est_pitch)
+        est_int.append([onset_time, offset_time])
+        est_p.append(est_freq)
+
+    for note in ref_notes:
+        onset_time = note['onset']
+        offset_time = note['offset']
+        ref_pitch = note['pitch']
+        ref_velocity = note['velocity']
+        # convert ref_pitch to frequency
+        ref_freq = pretty_midi.note_number_to_hz(ref_pitch)
+        ref_int.append([onset_time, offset_time])
+        ref_p.append(ref_freq)
+
+    est_int = np.array(est_int, dtype=np.float32)
+    ref_int = np.array(ref_int, dtype=np.float32)
+    est_p = np.array(est_p, dtype=np.float32)
+    ref_p = np.array(ref_p, dtype=np.float32)
+
+    # Calculate the transcription metrics using mir_eval
+    scores = mir_eval.transcription_velocity.evaluate(
+        ref_intervals=ref_int, ref_pitches=ref_p, ref_velocities=ref_vel,
+        est_intervals=est_int, est_pitches=est_p, est_velocities= est_vel
+    )
+
+    return scores
             
+

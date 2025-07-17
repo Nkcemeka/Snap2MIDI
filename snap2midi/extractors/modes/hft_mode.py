@@ -416,7 +416,8 @@ class HFTMode(BaseMode):
             'label_frames': label_frames.tolist(),
             'label_onset': label_onset.tolist(),
             'label_offset': label_offset.tolist(),
-            'label_velocity': label_velocity.tolist()
+            'label_velocity': label_velocity.tolist(),
+            'notes': notes
         }
         return label
 

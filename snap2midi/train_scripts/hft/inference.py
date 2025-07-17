@@ -1,9 +1,13 @@
-from snap2midi.train_scripts.hft.utilities import frames_to_note, notes_to_midi, half_stride
+from snap2midi.train_scripts.hft.utilities import frames_to_note, notes_to_midi, half_stride, transcription_metrics
 from snap2midi.train_scripts.hft.hft import *
 import torch.nn as nn
 import torch
 import json
 import torchaudio
+from pathlib import Path
+import numpy as np
+from collections import defaultdict
+from tqdm import tqdm
 
 def get_feature_hft(audio_file: str, config: dict) -> torch.Tensor:
         """
@@ -103,8 +107,52 @@ def inference(model, audio_file, config: dict, shift=32):
 
     # Convert notes to MIDI format
     midi = notes_to_midi(notes, "happy")
-
     return midi
 
 
-inference(model, "./happy-know.wav", config)
+def test_set_metrics(model: nn.Module, test_dir: str, config: dict):
+    """
+        Calculate the transcription metrics for a test set.
+
+        Args:
+            test_dir (str): Directory containing the test set files.
+
+        Returns:
+            scores (dict): Dictionary containing the transcription metrics.
+    """
+    test_files = sorted(Path(test_dir).glob("*.npz"))
+    trans_metrics = defaultdict(list)
+
+    for file in tqdm(test_files, total=len(test_files)-1):
+        if "dataset_feature.npz" in str(file):
+            continue
+
+        data = np.load(file, allow_pickle=True)
+        feature = data['feature']
+        ref_notes = data['notes'] # dictionary of note events
+        ref_frames = data['label_frames'].astype(int) # binary array of shape [num_frames, num_pitches]
+
+        # Get the model output
+        output = half_stride(model, feature, shift=32, config=config)
+        onset = output[-4]
+        offset = output[-3]
+        frames = output[-2]
+        velocity = output[-1]   
+
+        # Convert regression roll to MIDI notes
+        est_notes = frames_to_note(onset, offset, frames, velocity, 
+                           0.5, 0.5, 0.5, config)
+
+
+        for key, value in transcription_metrics(est_notes, ref_notes).items():
+            trans_metrics[key].append(value)
+
+    # Calculate the average scores
+    scores = {key: np.mean(value) for key, value in trans_metrics.items()}
+    print("Transcription Metrics:"  , scores)
+    return scores
+
+
+#inference(model, "./happy-know.wav", config)
+test_set_metrics(model, "../../extractors/maps_segments/feature/test", config)
+
