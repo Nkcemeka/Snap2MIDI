@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "snap2midi"
+version = "0.1.0"
+dynamic = ["dependencies"]
+
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+# Setup overrides due to mypy typing errors
+[[tool.mypy.overrides]]
+module = [
+    "pretty_midi",
+    "yaml",
+    "jams",
+    "argbind",
+    "tqdm",
+    "mir_eval"
+]
+ignore_missing_imports = true
+
+
