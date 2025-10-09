@@ -4,6 +4,7 @@ mir_eval==0.8.2
 numpy==2.2.5
 pretty_midi==0.2.10
 torch==2.6.0
+torchaudio==2.6.0
 tqdm==4.67.1
 jams @ git+https://github.com/marl/jams.git
 mypy==1.16.0
@@ -14,3 +15,6 @@ mkdocs==1.6.1
 mkdocs-material==9.6.15
 mkdocstrings-python==1.16.12
 huggingface_hub
+h5py
+torchlibrosa
+torchinfo
