@@ -3,7 +3,7 @@
   <img src="./s2m.jpg" alt="My Image" width="700">
 </p>
 
-Snap2MIDI is a library that converts audio “snapshots” into MIDI. It includes several state-of-the-art (SOTA) models such as Onsets and Frames and Kong. The library is designed for ease of use, allowing users to quickly train these AMT (Automatic Music Transcription) architectures without writing any code. Its codebase is also extensible: by following the established coding paradigm, users can add new datasets and integrate additional AMT models for training.
+Snap2MIDI is a library that converts audio “snapshots” into MIDI. It includes several state-of-the-art (SOTA) models such as the hFT-Transformer by Sony, Onsets and Frames by Google and Kong by Bytedance. The library is designed for ease of use, allowing users to quickly train these AMT (Automatic Music Transcription) architectures without writing much code. Its codebase is also extensible: by following the established coding paradigm, users can add new datasets and integrate additional AMT models for training.
 
 ## Installation for Development Purposes
 -  First of all, clone this repo:
@@ -31,7 +31,6 @@ The examples below show you how to use the Snap2MIDI API.
 ### Data Extraction
 ```
 from snap2midi.extractor import SnapExtractor
-import snap2midi as s2m
 
 # init dataset path
 dataset_path = "./Datasets/MAPS"
@@ -66,13 +65,13 @@ inference.inference_oaf(audio_path="./Nanana-audio.mp3", checkpoint_path="runs/o
 ```
 
 ## Gradio Application
-Snap2MIDI has an application interface. 
+Snap2MIDI has an application interface you can play around with. 
 
 <p align="center">
   <img src="./s2m_gradio.png" alt="Snap2MIDI Gradio Image" width="700">
 </p>
 
-However this uses the default checkpoints associated with the library. If you want to use your own trained checkpoints, you need to use the API. To run the application, go to the gradio_app directory and run the ./run.sh file. Make sure you update the file with the correct path to the soundfont file and checkpoint; the pedal checkpoint is optional and only needed for models like KONG. Alternatively, you can try:
+However this uses the default checkpoints associated with the library. If you want to use your own trained checkpoints, you need to use the API. To run the application, go to the gradio_app directory and run the ./run.sh file. Make sure you update the file with the correct path to the soundfont file and checkpoint; the pedal checkpoint is optional and only needed for models like Kong. Alternatively, you can try:
 ```
 python app.py --soundfont_path=<SOUNDFONT_PATH> --checkpoint_path=<CHECKPOINT_PATH> --checkpoint_pedal=<CHECKPOINT_PEDAL>
 ```
@@ -81,3 +80,4 @@ You can download the official checkpoints from HuggingFace. You can view the Hug
 ```
 https://huggingface.co/nkcemeka/Snap2MIDI
 ```
+
