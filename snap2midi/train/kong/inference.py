@@ -65,6 +65,14 @@ def inference(config: dict):
                             on_thresh, off_thresh, pedal_thresh, frame_thresh, pedal_flag=False)
     pedal_events = events(pedal_model, audio, sample_rate, window_size, device, frame_rate,
                             on_thresh, off_thresh, pedal_thresh, frame_thresh, pedal_flag=True)
+    
+    if note_events is None:
+        # return an empty pretty midi object
+        print("No note events detected. Returning empty MIDI object.")
+        midi_obj = pretty_midi.PrettyMIDI()
+        if output_file is None:
+            return midi_obj
+        midi_obj.write(output_file + ".mid")
 
     locs_invalid_note_events = np.where(note_events[:, 1] < note_events[:, 0])[0]
     locs_invalid_pedal_events = np.where(pedal_events[:, 1] < pedal_events[:, 0])[0]

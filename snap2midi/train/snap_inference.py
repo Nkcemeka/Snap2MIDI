@@ -24,7 +24,7 @@ class Inference:
             config[key] = value
         return config
 
-    def inference_oaf(self, audio_path, checkpoint_path: str, filename: str = "output",  sample_rate: int = 16000,\
+    def inference_oaf(self, audio_path: str, checkpoint_path: str, filename: str | None = "output",  sample_rate: int = 16000,\
                     frame_rate=31.25, in_features=229, out_features=88, threshold=0.5, temporal_sizes=[3, 3, 3], \
                     freq_sizes=[3, 3, 3], out_channels=[32, 32, 64], pool_sizes=[1, 2, 2], dropout_probs=[0, 0.25, 0.25],\
                     dropout_fc=0.5, fc_size=512, onset_lstm_units=128, combined_lstm_units=128, pitch_offset: int = 21, \
@@ -35,7 +35,7 @@ class Inference:
 
             Args:
                 audio_path (str): Path to the input audio file.
-                filename (str): Name of the output MIDI file. Default is "output.mid".
+                filename (str): Name of the output MIDI file. Default is "output.mid". Can be None.
                 checkpoint_path (str): Path to the model checkpoint file. Default is "runs/checkpoint_90.pt".
                 sample_rate (int): Sample rate of the input audio. Default is 16000.
                 frame_rate (float): Frame rate for the model. Default is 31.25.
@@ -90,11 +90,11 @@ class Inference:
         """
             Perform inference using Kong's model with specified configuration.
 
-            Args:
+            Args: 
                 audio_path (str): Path to the input audio file.
                 checkpoint_note_path (str): Path to the note model checkpoint file.
                 checkpoint_pedal_path (str): Path to the pedal model checkpoint file.
-                filename (str): Name of the output MIDI file without extension. Default is "output".
+                filename (str): Name of the output MIDI file without extension. Default is "output". Can be None.
                 factors (list): List of factors for the model. Default is [16, 32, 32].
                 frame_rate (float): Frame rate for the model. Default is 100.
                 onset_threshold (float): Threshold for onset detection. Default is 0.3.
@@ -130,7 +130,7 @@ class Inference:
         )
         return kong_infer(config)
 
-    def inference_hft(self, audio_path: str, checkpoint_path: str, filename: str = "output", margin_b: int = 32, margin_f: int = 32, \
+    def inference_hft(self, audio_path: str, checkpoint_path: str, filename: str | None = "output", margin_b: int = 32, margin_f: int = 32, \
                   n_bins: int = 256, fft_bins: int = 2048, window_length: int = 2048, n_slice: int=16, frame_threshold: float = 0.5, \
                   onset_threshold: float = 0.5, offset_threshold: float = 0.5, num_frame: int = 128, epochs: int = 50, \
                   frame_rate: int = 100, shift: int = 32, num_velocity: int = 128, note_min: int = 21, note_max: int = 108, \
@@ -143,7 +143,7 @@ class Inference:
             Args:
                 audio_path (str): Path to the input audio file.
                 checkpoint_path (str): Path to the model checkpoint file.
-                filename (str): Name of the output MIDI file without extension. Default is "output".
+                filename (str | None): Name of the output MIDI file without extension. Default is "output". Can be None.
                 margin_b (int): Back margin for input feature. Default is 32.
                 margin_f (int): Front margin for input feature. Default is 32.
                 n_bins (int): Number of frequency bins for input feature. Default is 256.

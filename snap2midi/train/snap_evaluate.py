@@ -68,7 +68,7 @@ class Evaluator:
             combined_lstm_units=combined_lstm_units,
             pitch_offset=pitch_offset
         )
-        checkpoint_path = f"runs/{checkpoint_name}"
+        checkpoint_path = f"runs/oaf/{checkpoint_name}"
         config["checkpoint_path"] = checkpoint_path
         results = oaf_eval(config)
         return results

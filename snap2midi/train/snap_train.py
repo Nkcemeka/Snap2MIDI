@@ -27,19 +27,18 @@ class Trainer:
             config[key] = value
         return config
 
-    def train_oaf(self, batch_size=8, epochs=170, lr=0.0006, frame_rate=31.25, in_features=229, out_features=88, \
+    def train_oaf(self, batch_size=8, iterations=50000, lr=0.0006, frame_rate=31.25, in_features=229, out_features=88, \
                   learning_rate_decay_rate=0.98, learning_rate_decay_steps=10000, \
                     clip_gradient_norm=3, threshold=0.5, temporal_sizes=[3, 3, 3], freq_sizes=[3, 3, 3], \
                     out_channels=[32, 32, 64], pool_sizes=[1, 2, 2], dropout_probs=[0, 0.25, 0.25], dropout_fc=0.5, \
                     fc_size=512, onset_lstm_units=128, combined_lstm_units=128, resume=0, \
                     checkpoint_name: str = "checkpoint_23.pt", pitch_offset: int = 21):
-
         """
             Train Onsets and Frames model with specified configuration.
 
             Args:
                 batch_size (int): Batch size for training.
-                epochs (int): Number of epochs for training. Default is 170.
+                iterations (int): Number of iterations for training. Default is 50000.
                 lr (float): Learning rate for the optimizer. Default is 0.0006.
                 frame_rate (float): Frame rate for the model. Default is 31.25.
                 in_features (int): Number of input features. Default is 229.
@@ -65,7 +64,7 @@ class Trainer:
             project_name="snap2midi",
             experiment_name="OnsetsAndFrames",
             batch_size=batch_size,
-            epochs=epochs,
+            iterations=iterations,
             lr=lr,
             frame_rate=frame_rate,
             in_features=in_features,

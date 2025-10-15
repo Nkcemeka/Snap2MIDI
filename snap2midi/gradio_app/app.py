@@ -142,9 +142,6 @@ if __name__ == "__main__":
                         help="Path to the pedal model checkpoint file (if applicable)")
     args = parser.parse_args()
 
-    # Download checkpoints from Hugging Face
-    
-
     # Set soundfont path
     soundfont_path = args.soundfont_path
     checkpoint_path = args.checkpoint_path

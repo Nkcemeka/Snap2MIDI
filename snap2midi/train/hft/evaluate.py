@@ -26,7 +26,7 @@ def evaluate_test(config: dict):
     trans_metrics = defaultdict(list)
     frame_metrics = defaultdict(list)
 
-    for file in tqdm(test_files, total=len(test_files)-1):
+    for file in tqdm(test_files, total=len(test_files)-1, desc="Extracting results...."):
         if "dataset_feature.npz" in str(file):
             continue
 

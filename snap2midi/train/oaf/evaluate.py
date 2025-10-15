@@ -8,11 +8,12 @@ from mir_eval.transcription_velocity import precision_recall_f1_overlap as prf_v
 from pathlib import Path
 from torch.utils.data import DataLoader
 from .dataset_oaf import OAFDataset
+from tqdm import tqdm
 
 @torch.no_grad()
 def evaluate_test(config):
     # set model to eval mode
-    dataset = OAFDataset(["./data/test"])
+    dataset = OAFDataset(["./data/oaf/test"])
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=2)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     checkpoint_path = config.get("checkpoint_path", None)
@@ -29,7 +30,7 @@ def evaluate_test(config):
     frame_rate = config.get("frame_rate", 31.25)
 
     for i, (x, y_frame, y_onset, y_velocity,\
-             label_weights, audio) in enumerate(dataloader):
+             label_weights, audio) in tqdm(enumerate(dataloader), total=len(dataloader), desc="Extracting results...."):
         x = x.to(device)
         y_frame = y_frame.to(device)
         y_onset = y_onset.to(device)

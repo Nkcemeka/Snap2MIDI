@@ -70,6 +70,8 @@ class OnsetsAndFrames(nn.Module):
         # JongWook's implementation of Onsets and Frames
         # has 26M parameters but it should be smaller if 
         # we follow the original paper strictly
+        # It should be about 6,796,096 parameters which is approx
+        # 6.8M parameters
         super().__init__()
         out_features = params.get("out_features", 88)
         fc_size = params.get("fc_size", 512)

@@ -8,7 +8,7 @@ import argparse
 import wandb
 import json
 from torch.nn.utils import clip_grad_norm_
-from torch.optim.lr_scheduler import StepLR
+from torch.optim.lr_scheduler import ExponentialLR
 from snap2midi.utils.eval_mir import transcription_metrics, multipitch_metrics, note_extract, notes_to_frames
 from .dataset_oaf import OAFDataset
 from .oaf import OnsetsAndFrames
@@ -127,7 +127,7 @@ def multipitch_metrics_batch(pred: tuple, gt: tuple, \
         preds_roll = notes_to_frames(note_preds, int_preds, y_onsets[0].shape)
         y_roll = notes_to_frames(note_gt, int_gt, y_onsets[0].shape)
 
-        scores = multipitch_metrics(preds_roll, y_roll, frame_rate=frame_rate, pitch_offset=pitch_offset)
+        scores = multipitch_metrics(y_roll, preds_roll, frame_rate=frame_rate, pitch_offset=pitch_offset)
         if scores is None:
             continue
 
@@ -269,8 +269,11 @@ def train_step(model: Any, dataloader: Any, device: str, \
     loss_dict: dict = {'train_total_loss': 0, 'train_onset_loss': 0, \
             'train_frame_loss': 0, 'train_velocity_loss': 0}
     num_samples = 0
+    num_iter_batch = 0
+
     for i, (x, y_frame, y_onset, y_velocity,\
              label_weights, audio) in enumerate(dataloader):
+
         x = x.to(device)
         y_frame = y_frame.to(device)
         y_onset = y_onset.to(device)
@@ -293,6 +296,7 @@ def train_step(model: Any, dataloader: Any, device: str, \
         loss_dict['train_velocity_loss'] += velocity_loss.item()
 
         num_samples += x.shape[0]
+        num_iter_batch += 1
 
         # Zero gradients
         optimizer.zero_grad()
@@ -308,13 +312,28 @@ def train_step(model: Any, dataloader: Any, device: str, \
         optimizer.step()
 
         # Update the scheduler
-        scheduler.step()
+        global last_iter, decay_rate_steps, save_dir
+        if (last_iter+1) % decay_rate_steps == 0:
+            # We have to do this manually for ExponentialLR
+            scheduler.step()
+
+        if (last_iter+1) % 5000 == 0:
+            # Save a checkpoint every 5000 iterations
+            # We do this because there is no validation set according to the paper
+            torch.save({
+                'iter': last_iter,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'scheduler_state_dict': scheduler.state_dict(),
+            }, save_dir + f"/checkpoint_{last_iter+1}.pt")
+        
+        last_iter += 1
 
     # Average the loss
     for key in loss_dict:
         loss_dict[key] = loss_dict[key] / num_samples
         loss_dict[key] = round(loss_dict[key], 4)
-    return loss_dict
+    return loss_dict, num_iter_batch
 
 def main(config):
     # Initialize wandb
@@ -340,31 +359,41 @@ def main(config):
     model = model.to(device)
     model.initialize_weights()
     print(f"Number of trainable parameters: {count_parameters(model)}\n")
-
     
     optimizer = torch.optim.Adam(model.parameters(), lr=config["lr"])
-    scheduler = StepLR(optimizer, step_size=config['learning_rate_decay_steps'], \
-                       gamma=config['learning_rate_decay_rate'])
+    scheduler = ExponentialLR(optimizer, gamma=config['learning_rate_decay_rate'])
+    
     loss_fn = torch.nn.BCEWithLogitsLoss()
-    last_epoch = -1
+
+    # set this to be global variables so that we can access them in the training loop
+    global last_iter, decay_rate_steps, save_dir
+    last_iter = -1
+    decay_rate_steps = config['learning_rate_decay_steps']
+    save_dir = config["save_dir"]
 
     if config['resume']:
         checkpoint = torch.load(config['resume_path'], weights_only=True)
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-        last_epoch = checkpoint['epoch']
+        last_iter = checkpoint['iter']
 
     # Create runs directory if it does not exist
     Path(config["save_dir"]).mkdir(exist_ok=True, parents=True)
 
-    last_epoch = max(1, last_epoch) # we use 1 since we save with epoch + 1
+    last_iter = max(0, last_iter)
 
     best_loss = float('inf')
-    for epoch in tqdm(range(last_epoch-1, config["epochs"]), \
-            total=config["epochs"]-(last_epoch-1)):
-        train_loss_dict = train_step(model, train_dataloader, device, \
-                loss_fn, optimizer, scheduler, clip_gradient_norm=config["clip_gradient_norm"])        
+    total_iterations = config["iterations"] - last_iter
+    pbar = tqdm(total=total_iterations, initial=last_iter)
+    
+    while (last_iter) < (total_iterations):
+
+        train_loss_dict, num_iter_batch = train_step(model, train_dataloader, device, \
+                loss_fn, optimizer, scheduler, clip_gradient_norm=config["clip_gradient_norm"])   
+
+        # update last_iter
+        iteration = last_iter
 
         test_loss_dict, frame_metrics, note_metrics = evaluate(model, test_dataloader, device, loss_fn, \
                               config["frame_rate"], threshold=config["threshold"], pitch_offset=config["pitch_offset"]) 
@@ -384,21 +413,14 @@ def main(config):
         results = results | train_loss_dict | test_loss_dict
         wandb.log(results)
 
-        if test_loss_dict['test_total_loss'] <= best_loss:
-            best_loss = test_loss_dict['test_total_loss']
-            torch.save({
-                'epoch': epoch + 1,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'scheduler_state_dict': scheduler.state_dict(),
-                'train_total_loss': train_loss_dict['train_total_loss'],
-                'test_total_loss': test_loss_dict['test_total_loss'],
-            }, config["save_dir"] + f"/checkpoint_{epoch}.pt")
+        print(f"Iteration {iteration+1}/{config['iterations']}, Train Loss: {train_loss_dict['train_total_loss']:.4f}, \
+                Test Loss: {test_loss_dict['test_total_loss']:.4f}, Learning Rate: {scheduler.get_last_lr()[0]:.6f}")
         
-        print(f"Epoch {epoch+1}/{config['epochs']}, Train Loss: {train_loss_dict['train_total_loss']:.4f}, \
-                Test Loss: {test_loss_dict['test_total_loss']:.4f}")
+        pbar.update(num_iter_batch)
     
+    pbar.close()
     wandb.finish()
+
         
 
 if __name__ == "__main__":

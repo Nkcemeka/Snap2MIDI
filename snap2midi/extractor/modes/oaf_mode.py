@@ -748,8 +748,8 @@ class _OAFMode(_BaseMode):
             if feature == "mel":
                 n_mels = feature_params["n_mels"]
                 n_fft = feature_params["mel_n_fft"]
-                return hf.compute_mel(audio, \
-                                    n_mels=n_mels, n_fft=n_fft, hop_length=feature_params.get("hop_length", None))
+                return hf.compute_mel(audio, n_mels=n_mels, n_fft=n_fft, \
+                                      hop_length=feature_params.get("hop_length", None))
             elif feature == "cqt":
                 bins_per_octave = feature_params["cqt_bins_oct"]
                 num_octaves = feature_params["cqt_num_octaves"]
