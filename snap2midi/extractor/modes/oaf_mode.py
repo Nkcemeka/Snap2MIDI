@@ -474,6 +474,7 @@ class _OafFramedEvents:
                             # if the note is not the same as the one being extended,
                             # we can just add it to the list of notes to extend
                             ext_notes_inst.append(note)
+                    extend_insts[event[1]] = ext_notes_inst
                 
                 # Add the new set of notes to extend to the list
                 extend_insts[event[1]].append(event[0])
