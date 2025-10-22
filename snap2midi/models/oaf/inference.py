@@ -2,7 +2,7 @@
 import torch
 import numpy as np
 from snap2midi.utils.inference_utils import get_mel
-from snap2midi.train.oaf.oaf import OnsetsAndFrames
+from snap2midi.models.oaf.oaf import OnsetsAndFrames
 from snap2midi.extractor.utils.handcrafted_features import HandcraftedFeatures
 from snap2midi.utils.eval_mir import note_extract
 import pretty_midi

@@ -6,7 +6,7 @@ from pathlib import Path
 import json
 from tqdm import tqdm
 import wandb
-from snap2midi.train.hft.hft import *
+from snap2midi.models.hft.hft import *
 from .hft_dataset import HFTDataset
 import torch.optim as optim
 

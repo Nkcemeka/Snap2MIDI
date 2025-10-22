@@ -30,11 +30,11 @@ Snap2MIDI is a library that converts audio “snapshots” into MIDI. It include
 The examples below show you how to use the Snap2MIDI API.
 ### Data Extraction
 ```
-from snap2midi.extractor import SnapExtractor
+import snap2midi as s2m
 
 # init dataset path
 dataset_path = "./Datasets/MAPS"
-snap_extractor = SnapExtractor()
+snap_extractor = s2m.extract.SnapExtractor()
 
 # perform extraction and use the MAPS dataset
 snap_extractor.extract_oaf(dataset_path, dataset_name="maps")
@@ -42,25 +42,25 @@ snap_extractor.extract_oaf(dataset_path, dataset_name="maps")
 
 ### Training
 ```
-from snap2midi import Trainer
+import snap2midi as s2m
 
-trainer = Trainer()
+trainer = s2m.trainer.Trainer()
 trainer.train_oaf()
 ```
 
 ### Evaluation
 ```
-from snap2midi import Evaluator
+import snap2midi as s2m
 
-evaluator = Evaluator()
+evaluator = s2m.evaluator.Evaluator()
 evaluator.evaluate_oaf(checkpoint_name="checkpoint_90.pt")
 ```
 
 ### Inference
 ```
-from snap2midi import Inference
+import snap2midi as s2m
 
-inference = Inference()
+inference = s2m.inference.Inference()
 inference.inference_oaf(audio_path="./Nanana-audio.mp3", checkpoint_path="runs/oaf/checkpoint_90.pt")
 ```
 
