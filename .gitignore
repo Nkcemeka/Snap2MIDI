@@ -1,4 +1,6 @@
-docs/
+build/
+_static/
+_templates/
 venv/
 test/
 data/
