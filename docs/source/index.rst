@@ -61,7 +61,7 @@ To train the Onsets and Frames model using the extracted data, use the following
 This creates a **runs** directory with training logs and checkpoints stored in a subdirectory 
 called **oaf**.
 
-After training, perform evaluation on the test set for comparisons with other models:
+After training, you can perform evaluation on the test set for comparisons with other models:
 
 .. code-block:: python
 
