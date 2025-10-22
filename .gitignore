@@ -1,3 +1,4 @@
+docs/
 venv/
 test/
 data/
@@ -16,3 +17,4 @@ notebooks/
 pid.txt
 snap2midi.egg-info/
 happy-know.mp3
+update_requirements.py
