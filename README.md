@@ -71,9 +71,14 @@ Snap2MIDI has an application interface you can play around with.
   <img src="./s2m_gradio.png" alt="Snap2MIDI Gradio Image" width="700">
 </p>
 
-However this uses the default checkpoints associated with the library. If you want to use your own trained checkpoints, you need to use the API. To run the application, go to the gradio_app directory and run the ./run.sh file. Make sure you update the file with the correct path to the soundfont file and checkpoint; the pedal checkpoint is optional and only needed for models like Kong. Alternatively, you can try:
+To start the web server, you can leverage the API that snap2midi provides. The code below shows you how to launch the app:
 ```
-python app.py --soundfont_path=<SOUNDFONT_PATH> --checkpoint_path=<CHECKPOINT_PATH> --checkpoint_pedal=<CHECKPOINT_PEDAL>
+import snap2midi as s2m
+
+SOUNDFONT_PATH="../soundfonts/MuseScore_General.sf2" 
+CHECKPOINT_PATH = "runs/kong/checkpoint_180000.pt"
+CHECKPOINT_PEDAL = "runs/kong_pedal/checkpoint_180000.pt"
+launcher = s2m.launch_gradio.launcher(SOUNDFONT_PATH, CHECKPOINT_PATH, CHECKPOINT_PEDAL)
 ```
 
 You can download the official checkpoints from HuggingFace. You can view the HuggingFace repo here:

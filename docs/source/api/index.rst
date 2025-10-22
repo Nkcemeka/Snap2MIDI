@@ -11,4 +11,5 @@ Below is the reference documentation for all **Snap2MIDI** submodules:
    trainer
    evaluator
    inference
+   launch_gradio
    

@@ -14,3 +14,5 @@ pillow==11.2.1
 h5py==3.13.0
 torchlibrosa==0.1.0
 torchinfo==1.8.0
+sphinx==8.2.3
+sphinx-rtd-theme==3.0.2

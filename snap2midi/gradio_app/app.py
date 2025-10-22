@@ -1,10 +1,9 @@
 import gradio as gr
 import numpy as np
-from snap2midi import Inference
+from snap2midi.inference import Inference
 import pretty_midi
 import argparse
 from PIL import Image
-from huggingface_hub import hf_hub_download
 
 def update_btn_visibility():
     """

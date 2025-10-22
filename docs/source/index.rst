@@ -82,6 +82,22 @@ You can also perform inference on your own audio files to get MIDI transcription
        checkpoint_path="runs/oaf/checkpoint_90.pt"
    )
 
+Another functionality Snap2MIDI provides is a Gradio-based web application for easy inference. 
+You can launch the Gradio app using the following code:
+
+.. code-block:: python
+
+   import snap2midi as s2m
+
+   SOUNDFONT_PATH="../soundfonts/MuseScore_General.sf2" 
+   CHECKPOINT_PATH = "runs/kong/checkpoint_180000.pt"
+   CHECKPOINT_PEDAL = "runs/kong_pedal/checkpoint_180000.pt"
+   launcher = s2m.launch_gradio.launcher(SOUNDFONT_PATH, CHECKPOINT_PATH, CHECKPOINT_PEDAL)
+
+
+This spawns a local web server where you can upload audio files and get MIDI transcriptions
+using the trained models.
+
 API Reference
 =============
 
@@ -92,6 +108,7 @@ worrying a lot about implementation details. These are the relevant API function
 * :mod:`snap2midi.trainer.Trainer` - Model training class for the supported state-of-the-art Audio-to-MIDI transcription models
 * :mod:`snap2midi.evaluator.Evaluator` - Model evaluation class to evaluate the models on the test sets of the extracted data
 * :mod:`snap2midi.inference.Inference` - Inference class to perform MIDI transcription on audio files using trained models
+* :mod:`snap2midi.launch_gradio.launcher` - Gradio app launcher for MIDI transcription with a user-friendly web interface
 
 .. toctree::
    :maxdepth: 2
