@@ -37,11 +37,11 @@ you can use the following code:
 
 .. code-block:: python
 
-   from snap2midi.extract import SnapExtractor
+   import snap2midi as s2m
 
    # Initialize dataset path
    dataset_path = "./Datasets/MAPS"
-   snap_extractor = SnapExtractor()
+   snap_extractor = s2m.extract.SnapExtractor()
 
    # Perform extraction using the MAPS dataset
    snap_extractor.extract_oaf(dataset_path, dataset_name="maps")
@@ -53,9 +53,9 @@ To train the Onsets and Frames model using the extracted data, use the following
 
 .. code-block:: python
 
-   from snap2midi.trainer import Trainer
+   import snap2midi as s2m
 
-   trainer = Trainer()
+   trainer = s2m.trainer.Trainer()
    trainer.train_oaf()
 
 This creates a **runs** directory with training logs and checkpoints stored in a subdirectory 
@@ -65,18 +65,18 @@ After training, you can perform evaluation on the test set for comparisons with 
 
 .. code-block:: python
 
-   from snap2midi.evaluator import Evaluator
+   import snap2midi as s2m
 
-   evaluator = Evaluator()
+   evaluator = s2m.evaluator.Evaluator()
    evaluator.evaluate_oaf(checkpoint_name="checkpoint_90.pt")
 
 You can also perform inference on your own audio files to get MIDI transcriptions:
 
 .. code-block:: python
 
-   from snap2midi.inference import Inference
+   import snap2midi as s2m
 
-   inference = Inference()
+   inference = s2m.inference.Inference()
    inference.inference_oaf(
        audio_path="./Nanana-audio.mp3", 
        checkpoint_path="runs/oaf/checkpoint_90.pt"

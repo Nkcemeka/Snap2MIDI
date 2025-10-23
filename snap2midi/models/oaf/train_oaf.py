@@ -420,23 +420,3 @@ def main(config):
     
     pbar.close()
     wandb.finish()
-
-        
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config_path")
-    args = parser.parse_args()
-
-    # load JSON file
-    with open(args.config_path, 'r') as filename:
-        content = filename.read()
-    
-    # parse JSON file
-    config = json.loads(content)
-
-    # Initialize wandb
-    wandb.init(project=config["project_name"], \
-            config=config)
-    main(config)
-    wandb.finish()

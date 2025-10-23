@@ -396,17 +396,3 @@ def main(config: dict):
     wandb.finish()
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Train HFT model")
-    parser.add_argument('--config_path', type=str, required=True, help='Path to the training config file')
-    args = parser.parse_args()
-
-    # Load configuration
-    with open(args.config_path, 'r') as f:
-        train_config = json.load(f)
-
-    # Train model
-    # initialize wandb
-    wandb.init(project=train_config['project_name'], config=train_config)
-    main(train_config)
-    wandb.finish()

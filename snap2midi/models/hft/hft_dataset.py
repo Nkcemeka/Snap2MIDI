@@ -84,25 +84,3 @@ class HFTDataset(Dataset):
         label_velocity = self.label_velocity[idx_label_s:idx_label_e].long()
         return spec, label_onset, label_offset, label_frames, label_velocity
     
-
-if __name__ == "__main__":
-    # Example usage
-    config = {
-        'input': {
-            'num_frame': 128,
-            'margin_b': 32,
-            'margin_f': 32
-        },
-        'midi': {
-            'num_note': 128
-        },
-        'feature': {
-            'log_offset': 0.1
-        }
-    }
-
-    base_path = '/home/nkcemeka/Documents/snap/snap2midi/extractors/maps_segments'
-    dataset = HFTDataset(n_slice=16, base_path=base_path, config=config, split='train')
-    print(f"Dataset length: {len(dataset)}")
-    spec, onset, offset, frames, velocity = dataset[0]
-    print(f"Spec shape: {spec.shape}, Onset shape: {onset.shape}")

@@ -1,12 +1,3 @@
-"""
-    File: dataset_oaf.py
-    Author: Chukwuemeka L. Nkama
-    Date: 4/3/2025
-    Description: A dataset class to load
-                 audio segments for training
-                 the Onsets and Frames model.
-"""
-
 # Imports
 import numpy as np
 from pathlib import Path
