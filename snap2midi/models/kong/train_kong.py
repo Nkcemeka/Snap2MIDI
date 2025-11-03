@@ -210,8 +210,8 @@ def main(config):
                        gamma=config['learning_rate_decay_rate'])
     
     # Create datasets 
-    train_dataset = KongDataset("data/kong/train/")
-    valid_dataset = KongDataset("data/kong/val/")
+    train_dataset = KongDataset("data/kong/train/", extend_pedal=config.get("extend_pedal", True))
+    valid_dataset = KongDataset("data/kong/val/", extend_pedal=config.get("extend_pedal", True))
 
     # Sampler for training
     train_sampler = Sampler("data/kong/train/", split="train", batch_size=config["batch_size"])

@@ -98,7 +98,7 @@ class Evaluator:
         results = oaf_eval(config)
         return results
 
-    def evaluate_kong(self, checkpoint_name: str = "checkpoint_180000.pt", factors: list = [16, 32, 32], \
+    def evaluate_kong(self, checkpoint_name: str = "checkpoint_180000.pt", extend_pedal: bool = True, factors: list = [16, 32, 32], \
         frame_rate: float=100, onset_threshold: float = 0.3, offset_threshold: float = 0.3, frame_threshold: float = 0.3, \
         pedal_offset_threshold: float = 0.3, cmp: int=48, momentum: float = 0.01):
         """
@@ -108,6 +108,8 @@ class Evaluator:
             -----------
                 checkpoint_name (str): 
                     Name of the checkpoint file to resume from. Default is "checkpoint_140000.pt".
+                extend_pedal (bool):
+                    Whether to extend note offsets. Default is True.
                 factors (list): 
                     List of factors for the model. Default is [16, 32, 32].
                 frame_rate (float): 
@@ -131,6 +133,7 @@ class Evaluator:
                     Evaluation results.
         """
         config = self._build_config_from_kwargs(
+            extend_pedal=extend_pedal,
             factors=factors,
             frame_rate=frame_rate,
             onset_threshold=onset_threshold,

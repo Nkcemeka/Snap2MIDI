@@ -125,7 +125,7 @@ class Trainer:
         config["save_dir"] = save_dir
         oaf_train.main(config)
     
-    def train_kong(self, batch_size: int = 4, factors: list = [16, 32, 32], iterations: int = 200000, frame_rate: float = 100, \
+    def train_kong(self, batch_size: int = 4, extend_pedal: bool = True, factors: list = [16, 32, 32], iterations: int = 200000, frame_rate: float = 100, \
                 lr: float = 5e-4,  onset_threshold: float = 0.3, offset_threshold: float = 0.3, \
                 frame_threshold: float = 0.3, pedal_offset_threshold: float = 0.3, cmp: int = 48, \
                 momentum: float = 0.01, learning_rate_decay_rate: float = 0.9, learning_rate_decay_steps: int = 10000, \
@@ -137,6 +137,8 @@ class Trainer:
             ----------
                 batch_size (int): 
                     Batch size for training. Default is 4.
+                extend_pedal (bool): 
+                    Whether to extend note offsets. Default is True.
                 factors (list): 
                     List of factors for the model. Default is [16, 32, 32].
                 iterations (int): 
@@ -176,6 +178,7 @@ class Trainer:
             project_name="snap2midi",
             experiment_name="Kong",
             batch_size=batch_size,
+            extend_pedal=extend_pedal,
             factors=factors,
             iterations=iterations,
             frame_rate=frame_rate,

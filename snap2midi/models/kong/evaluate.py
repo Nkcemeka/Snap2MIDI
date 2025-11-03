@@ -143,7 +143,10 @@ def evaluate(config: dict):
         # load midi
         # sustain MIDI
         #midi = pedal_extend(midi_path)
-        midi = extend_pedal(pretty_midi.PrettyMIDI(midi_path))
+        if config.get("extend_pedal", True):
+            midi = extend_pedal(pretty_midi.PrettyMIDI(midi_path))
+        else:
+            midi = pretty_midi.PrettyMIDI(midi_path)
         result_dict: dict = defaultdict(list)
         window_samples = int(window_size * extraction_config["sample_rate"])
         hop_samples = window_samples//2

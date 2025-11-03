@@ -108,16 +108,18 @@ class NoteSeg:
 
 
 class KongDataset(Dataset):
-    def __init__(self, emb_path: str) -> None:
+    def __init__(self, emb_path: str, extend_pedal: bool = True) -> None:
         """
         Args:
             emb_path (str): path to npz files containing audio and feature data.
+            extend_pedal (bool): Whether to extend note offsets. Default is True.
         """
         super().__init__()
         if emb_path is None:
             raise ValueError(f"{self.__class__.__name__} needs path to embeddings!")
 
         self.data = [] # path to npz files
+        self.extend_pedal = extend_pedal
         assert Path(emb_path).exists(), f"{emb_path} does not exist."
         self.data.extend(sorted(Path(emb_path).rglob("*.h5")))
 
@@ -238,7 +240,9 @@ class KongDataset(Dataset):
         note_seg_obj = NoteSeg(midi, start, end)
         new_midi = note_seg_obj.new_midi
         #new_midi = self._pedal_extend(midi)
-        new_midi = self.extend_pedal(new_midi)
+
+        if self.extend_pedal:
+            new_midi = self.extend_pedal(new_midi)
 
         # set the mask roll for chopped notes
         for note in note_seg_obj.chopped_notes:
