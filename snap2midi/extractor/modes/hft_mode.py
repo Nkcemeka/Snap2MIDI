@@ -4,7 +4,33 @@ import numpy as np
 from tqdm import tqdm
 import torch
 import mido
+import pretty_midi
 import torchaudio
+
+class Message:
+    def __init__(self, time, type, note, velocity=0):
+        """
+            Initializes a MIDI message. This is an utility class
+            to help with MIDI message processing using pretty_midi
+            instead of MIDO used in the hfTransformer implementation
+            by Sony.
+
+            Args:
+                time (float): The time of the message in seconds.
+                type (str): The type of the message (e.g., 'note_on', 'note_off').
+                note (int): The MIDI note number.
+                velocity (int, optional): The velocity of the note. Defaults to 0.
+        """
+        self.time = time
+        self.type = type
+        self.note = note
+        self.velocity = velocity
+    
+    def __str__(self):
+        return f"Message(time={self.time}, type={self.type}, note={self.note}, velocity={self.velocity})"
+
+    def __repr__(self):
+        return self.__str__()
 
 class _HFTMode(_BaseMode):
     """
@@ -298,128 +324,308 @@ class _HFTMode(_BaseMode):
         feature = mel_transform(audio)
         feature = (torch.log(feature + config['feature']['log_offset'])).T
         return feature
+        
+    def _extend_note_offsets(events, config: dict) -> list:
+        """ 
+            This method sort of mirrors _midi2note from hfTransformer implementation by Sony.
+            However, the events represent a list of MIDI messages created using the Message class.
+            The main purpose is to make the logic clearer. Extending note offsets can be simple
+            yet tricky. Below is a detailed explanation of the logic.
 
-    def _midi2note(self, config, f_midi, verbose_flag = False):
-        NUM_PITCH = 128
-        # (1) read MIDI file
-        midi_file = mido.MidiFile(f_midi)
-        ticks_per_beat = midi_file.ticks_per_beat
-        num_tracks = len(midi_file.tracks)
+            We have four types of events: 'note_on', 'note_off', 
+            'control_change_on', 'control_change_off'.
 
-        # (2) tempo curve
-        max_ticks_total = 0
-        for it in range(len(midi_file.tracks)):
-            ticks_total = 0
-            for message in midi_file.tracks[it]:
-                ticks_total += int(message.time)
-            if max_ticks_total < ticks_total:
-                max_ticks_total = ticks_total
-        a_time_in_sec = [0.0 for i in range(max_ticks_total+1)]
-        ticks_curr = 0
-        ticks_prev = 0
-        tempo_curr = 0
-        tempo_prev = 0
-        time_in_sec_prev = 0.0
-        for im, message in enumerate(midi_file.tracks[0]):
-            ticks_curr += message.time
-            if 'set_tempo' in str(message):
-                tempo_curr = int(message.tempo)
-                for i in range(ticks_prev, ticks_curr):
-                    a_time_in_sec[i] = time_in_sec_prev + ((i-ticks_prev) / ticks_per_beat * tempo_prev / 1e06)
-                if ticks_curr > 0:
-                    time_in_sec_prev = time_in_sec_prev + ((ticks_curr-ticks_prev) / ticks_per_beat * tempo_prev / 1e06)
-                tempo_prev = tempo_curr
-                ticks_prev = ticks_curr
-        for i in range(ticks_prev, max_ticks_total+1):
-            a_time_in_sec[i] = time_in_sec_prev + ((i-ticks_prev) / ticks_per_beat * tempo_curr / 1e06)
+            If the pedal is pressed (control_change_on), notes that are 
+            ACTIVE should be extended.
 
-        # (3) obtain MIDI message
-        a_note = []
-        a_onset = []
-        a_velocity = []
-        a_reonset = []
-        a_push = []
-        a_sustain = []
-        for i in range(NUM_PITCH):
-            a_onset.append(-1)
-            a_velocity.append(-1)
-            a_reonset.append(False)
-            a_push.append(False)
-            a_sustain.append(False)
+            If the pedal is released (control_change_off), notes that are
+            SUSTAINED and NOT ACTIVE should be ended. Because if they are
+            ACTIVE, we should allow them continue...
 
-        ticks = 0
-        sustain_flag = False
-        for message in midi_file.tracks[num_tracks-1]:
-            ticks += message.time
-            time_in_sec = a_time_in_sec[ticks]
-            if ('control_change' in str(message)) and ('control=64' in str(message)):
-                if message.value < 64:
-                    # sustain off
-                    for i in range(config['midi']['note_min'], config['midi']['note_max']+1):
-                        if (a_push[i] is False) and (a_sustain[i] is True):
-                            a_note.append({'onset': a_onset[i],
-                                        'offset': time_in_sec,
-                                        'pitch': i,
-                                        'velocity': a_velocity[i],
-                                        'reonset': a_reonset[i]})
-                            a_onset[i] = -1
-                            a_velocity[i] = -1
-                            a_reonset[i] = False
-                    sustain_flag = False
-                    for i in range(config['midi']['note_min'], config['midi']['note_max']+1):
-                        a_sustain[i] = False
+            If it is a 'note_on' event, we mark the note as ACTIVE if it was
+            neither ACTIVE nor SUSTAINED. Otherwise, it is a re-onset.
+
+            If it is a 'note_off' event, we mark the note as not ACTIVE. If
+            the pedal is pressed, we leave it as SUSTAINED.
+
+            Args:
+                events (list): List of MIDI events sorted by time.
+                config (dict): Configuration dictionary containing useful info.
+
+            Returns:
+                notes (dict): Dictionary containing note information.
+        """
+        notes = [] # list containing note events ('onset', 'offset', 'pitch', 'velocity', 'reonset')
+        active_notes = [False for _ in range(128)]
+        sustained_notes = [False for _ in range(128)]
+        reonset_notes = [False for _ in range(128)]
+        onset_notes = [-1 for _ in range(128)]
+        velocity_notes = [-1 for _ in range(128)]
+        min_pitch = config['midi']['note_min']
+        max_pitch = config['midi']['note_max']
+
+        for i, event in enumerate(events):
+            time = event.time.item()
+
+            if event.type == 'control_change_off':
+                # Sustain is off, so end all sustained notes that are not active
+                for pitch in range(min_pitch, max_pitch + 1):
+                    if sustained_notes[pitch] and not active_notes[pitch]:
+                        notes.append({
+                            'onset': onset_notes[pitch],
+                            'offset': time,
+                            'pitch': pitch,
+                            'velocity': velocity_notes[pitch],
+                            'reonset': reonset_notes[pitch]
+                        })
+                        onset_notes[pitch] = -1
+                        velocity_notes[pitch] = -1
+                        reonset_notes[pitch] = False
+                sustained_notes = [False for _ in range(128)]
+            elif event.type == 'control_change_on':
+                # Sustain is on, so mark all active notes as sustained
+                for pitch in range(min_pitch, max_pitch + 1):
+                    if active_notes[pitch]:
+                        sustained_notes[pitch] = True
+            elif event.type == 'note_on':
+                # Note on event
+                # Check if it's a re-onset
+                if active_notes[event.note] or sustained_notes[event.note]:
+                    # Re-onset
+                    notes.append({
+                        'onset': onset_notes[event.note],
+                        'offset': time,
+                        'pitch': event.note,
+                        'velocity': velocity_notes[event.note],
+                        'reonset': reonset_notes[event.note]
+                    })
+                    reonset_notes[event.note] = True
                 else:
-                    # sustain on
-                    sustain_flag = True
-                    for i in range(config['midi']['note_min'], config['midi']['note_max']+1):
-                        if a_push[i] is True:
-                            a_sustain[i] = True
-            elif ('note_on' in str(message)) and (int(message.velocity) > 0):
-                # note on
-                note = message.note
-                velocity = message.velocity
-                if (a_push[note] is True) or (a_sustain[note] is True):
-                    # reonset
-                    a_note.append({'onset': a_onset[note],
-                                'offset': time_in_sec,
-                                'pitch': note,
-                                'velocity': a_velocity[note],
-                                'reonset': a_reonset[note]})
-                    a_reonset[note] = True
-                else:
-                    a_reonset[note] = False
-                a_onset[note] = time_in_sec
-                a_velocity[note] = velocity
-                a_push[note] = True
-                if sustain_flag is True:
-                    a_sustain[note] = True
-            elif (('note_off' in str(message)) or \
-                (('note_on' in str(message)) and (int(message.velocity) == 0))):
-                # note off
-                note = message.note
-                velocity = message.velocity
-                if (a_push[note] is True) and (a_sustain[note] is False):
-                    # offset
-                    a_note.append({'onset': a_onset[note],
-                                'offset': time_in_sec,
-                                'pitch': note,
-                                'velocity': a_velocity[note],
-                                'reonset': a_reonset[note]})
-                    a_onset[note] = -1
-                    a_velocity[note] = -1
-                    a_reonset[note] = False
-                a_push[note] = False
+                    reonset_notes[event.note] = False
+                onset_notes[event.note] = time
+                velocity_notes[event.note] = event.velocity
+                active_notes[event.note] = True
+                if sustained_notes[event.note]:
+                    sustained_notes[event.note] = True
+            elif event.type == 'note_off':
+                # Note off event
+                # End ONLY notes that are active and not sustained
+                if active_notes[event.note] and not sustained_notes[event.note]:
+                    notes.append({
+                        'onset': onset_notes[event.note],
+                        'offset': time,
+                        'pitch': event.note,
+                        'velocity': velocity_notes[event.note],
+                        'reonset': reonset_notes[event.note]
+                    })
+                    onset_notes[event.note] = -1
+                    velocity_notes[event.note] = -1
+                    reonset_notes[event.note] = False
+                active_notes[event.note] = False
 
-        for i in range(config['midi']['note_min'], config['midi']['note_max']+1):
-            if (a_push[i] is True) or (a_sustain[i] is True):
-                a_note.append({'onset': a_onset[i],
-                            'offset': time_in_sec,
-                            'pitch': i,
-                            'velocity': a_velocity[i],
-                            'reonset': a_reonset[i]})
-        a_note_sort = sorted(sorted(a_note, key=lambda x: x['pitch']), key=lambda x: x['onset'])
+        # Handle any remaining active or sustained notes at the end
+        final_time = events[-1].time
+        for pitch in range(min_pitch, max_pitch + 1):
+            if active_notes[pitch] or sustained_notes[pitch]:
+                notes.append({
+                    'onset': onset_notes[pitch],
+                    'offset': final_time,
+                    'pitch': pitch,
+                    'velocity': velocity_notes[pitch],
+                    'reonset': reonset_notes[pitch]
+                })
 
-        return a_note_sort
+        # Perform sorting operations
+        notes.sort(key=lambda x: x['pitch']) # sort by pitch
+        notes.sort(key=lambda x: x['onset']) # sort by onset time
+        return notes
+    
+    def _get_notes(self, midi_obj: pretty_midi.PrettyMIDI):
+        """
+            Retrieve notes from a PrettyMIDI object and
+            returns as a list of note dictionaries.
+
+            Args:
+                midi_obj (pretty_midi.PrettyMIDI): The PrettyMIDI object to extract notes from.
+
+            Returns:
+                notes (list): List of note dictionaries with keys 'onset', 'offset', 'pitch', 'velocity', 'reonset'.
+        """
+        notes = []
+        for instrument in midi_obj.instruments:
+            if not instrument.is_drum:
+                for note in instrument.notes:
+                    notes.append({
+                        'onset': note.start,
+                        'offset': note.end,
+                        'pitch': note.pitch,
+                        'velocity': note.velocity,
+                        'reonset': False  # Placeholder, reonset handling can be added if needed
+                    })
+        
+        # Sort notes by pitch and onset time
+        notes.sort(key=lambda x: x['pitch']) # sort by pitch
+        notes.sort(key=lambda x: x['onset']) # sort by onset time
+        return notes
+
+    def _midi2note(self, config, f_midi):
+        # Get the midi object
+        midi_obj = pretty_midi.PrettyMIDI(f_midi)
+        events = []
+        extend_pedal = config['extend_pedal']
+
+        if not extend_pedal:
+            # If we are not extending pedal, we can directly get the notes
+            return self._get_notes(midi_obj)
+
+        # store note events
+        for instrument in midi_obj.instruments:
+            if not instrument.is_drum:
+                for note in instrument.notes:
+                    msg_note_on = Message(time=note.start, type='note_on', note=note.pitch, velocity=note.velocity)
+                    msg_note_off = Message(time=note.end, type='note_off', note=note.pitch, velocity=0)
+                    events.append(msg_note_on)
+                    events.append(msg_note_off)
+
+        # store control change events for sustain pedal
+        for instrument in midi_obj.instruments:
+            if not instrument.is_drum:
+                for cc in instrument.control_changes:
+                    if cc.number == 64:  # Sustain pedal
+                        value = cc.value
+                        time = cc.time
+                        msg_type = 'control_change_on' if value >= 64 else 'control_change_off'
+                        msg_cc = Message(time=time, type=msg_type, note=None, velocity=value)
+                        events.append(msg_cc)
+        
+        # For this to work correctly, we need to sort the events by time
+        events.sort(key=lambda x: x.time)
+
+        # Now, extend the note offsets based on the pedal events
+        notes = self._extend_note_offsets(events, config)
+        return notes
+    
+    # def _midi2note(self, config, f_midi, verbose_flag = False):
+    #     NUM_PITCH = 128
+    #     # (1) read MIDI file
+    #     midi_file = mido.MidiFile(f_midi)
+    #     ticks_per_beat = midi_file.ticks_per_beat
+    #     num_tracks = len(midi_file.tracks)
+
+    #     # (2) tempo curve
+    #     max_ticks_total = 0
+    #     for it in range(len(midi_file.tracks)):
+    #         ticks_total = 0
+    #         for message in midi_file.tracks[it]:
+    #             ticks_total += int(message.time)
+    #         if max_ticks_total < ticks_total:
+    #             max_ticks_total = ticks_total
+    #     a_time_in_sec = [0.0 for i in range(max_ticks_total+1)]
+    #     ticks_curr = 0
+    #     ticks_prev = 0
+    #     tempo_curr = 0
+    #     tempo_prev = 0
+    #     time_in_sec_prev = 0.0
+    #     for im, message in enumerate(midi_file.tracks[0]):
+    #         ticks_curr += message.time
+    #         if 'set_tempo' in str(message):
+    #             tempo_curr = int(message.tempo)
+    #             for i in range(ticks_prev, ticks_curr):
+    #                 a_time_in_sec[i] = time_in_sec_prev + ((i-ticks_prev) / ticks_per_beat * tempo_prev / 1e06)
+    #             if ticks_curr > 0:
+    #                 time_in_sec_prev = time_in_sec_prev + ((ticks_curr-ticks_prev) / ticks_per_beat * tempo_prev / 1e06)
+    #             tempo_prev = tempo_curr
+    #             ticks_prev = ticks_curr
+    #     for i in range(ticks_prev, max_ticks_total+1):
+    #         a_time_in_sec[i] = time_in_sec_prev + ((i-ticks_prev) / ticks_per_beat * tempo_curr / 1e06)
+
+    #     # (3) obtain MIDI message
+    #     a_note = []
+    #     a_onset = []
+    #     a_velocity = []
+    #     a_reonset = []
+    #     a_push = []
+    #     a_sustain = []
+    #     for i in range(NUM_PITCH):
+    #         a_onset.append(-1)
+    #         a_velocity.append(-1)
+    #         a_reonset.append(False)
+    #         a_push.append(False)
+    #         a_sustain.append(False)
+
+    #     ticks = 0
+    #     sustain_flag = False
+    #     for message in midi_file.tracks[num_tracks-1]:
+    #         ticks += message.time
+    #         time_in_sec = a_time_in_sec[ticks]
+    #         if ('control_change' in str(message)) and ('control=64' in str(message)):
+    #             if message.value < 64:
+    #                 # sustain off
+    #                 for i in range(config['midi']['note_min'], config['midi']['note_max']+1):
+    #                     if (a_push[i] is False) and (a_sustain[i] is True):
+    #                         a_note.append({'onset': a_onset[i],
+    #                                     'offset': time_in_sec,
+    #                                     'pitch': i,
+    #                                     'velocity': a_velocity[i],
+    #                                     'reonset': a_reonset[i]})
+    #                         a_onset[i] = -1
+    #                         a_velocity[i] = -1
+    #                         a_reonset[i] = False
+    #                 sustain_flag = False
+    #                 for i in range(config['midi']['note_min'], config['midi']['note_max']+1):
+    #                     a_sustain[i] = False
+    #             else:
+    #                 # sustain on
+    #                 sustain_flag = True
+    #                 for i in range(config['midi']['note_min'], config['midi']['note_max']+1):
+    #                     if a_push[i] is True:
+    #                         a_sustain[i] = True
+    #         elif ('note_on' in str(message)) and (int(message.velocity) > 0):
+    #             # note on
+    #             note = message.note
+    #             velocity = message.velocity
+    #             if (a_push[note] is True) or (a_sustain[note] is True):
+    #                 # reonset
+    #                 a_note.append({'onset': a_onset[note],
+    #                             'offset': time_in_sec,
+    #                             'pitch': note,
+    #                             'velocity': a_velocity[note],
+    #                             'reonset': a_reonset[note]})
+    #                 a_reonset[note] = True
+    #             else:
+    #                 a_reonset[note] = False
+    #             a_onset[note] = time_in_sec
+    #             a_velocity[note] = velocity
+    #             a_push[note] = True
+    #             if sustain_flag is True:
+    #                 a_sustain[note] = True
+    #         elif (('note_off' in str(message)) or \
+    #             (('note_on' in str(message)) and (int(message.velocity) == 0))):
+    #             # note off
+    #             note = message.note
+    #             velocity = message.velocity
+    #             if (a_push[note] is True) and (a_sustain[note] is False):
+    #                 # offset
+    #                 a_note.append({'onset': a_onset[note],
+    #                             'offset': time_in_sec,
+    #                             'pitch': note,
+    #                             'velocity': a_velocity[note],
+    #                             'reonset': a_reonset[note]})
+    #                 a_onset[note] = -1
+    #                 a_velocity[note] = -1
+    #                 a_reonset[note] = False
+    #             a_push[note] = False
+
+    #     for i in range(config['midi']['note_min'], config['midi']['note_max']+1):
+    #         if (a_push[i] is True) or (a_sustain[i] is True):
+    #             a_note.append({'onset': a_onset[i],
+    #                         'offset': time_in_sec,
+    #                         'pitch': i,
+    #                         'velocity': a_velocity[i],
+    #                         'reonset': a_reonset[i]})
+    #     a_note_sort = sorted(sorted(a_note, key=lambda x: x['pitch']), key=lambda x: x['onset'])
+
+    #     return a_note_sort
 
     def _get_label_hft(self, midi_file: str, config: dict) -> dict:
         # midi_data = pretty_midi.PrettyMIDI(midi_file)
@@ -457,7 +663,7 @@ class _HFTMode(_BaseMode):
 
         notes = []
         max_offset = 0
-        pm_notes = self._midi2note(config, midi_file, verbose_flag=False)
+        pm_notes = self._midi2note(config, midi_file)
 
         # Extract the notes from the MIDI file
         for note in pm_notes:

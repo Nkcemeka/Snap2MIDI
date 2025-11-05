@@ -35,7 +35,7 @@ class SnapExtractor:
             config[key] = value
         return config
 
-    def extract_hft(self, path: str, dataset_name: str="maps", margin_b: int = 32, margin_f: int = 32, 
+    def extract_hft(self, path: str, dataset_name: str="maps", extend_pedal: bool=True, margin_b: int = 32, margin_f: int = 32, 
             sample_rate: int = 16000, hop_sample: int = 256, num_frame: int = 128, note_min: int = 21,
             note_max: int = 108, num_velocity: int = 128, mel_bins: int = 256, n_bins: int = 256, 
             fft_bins: int = 2048, window_length: int = 2048, log_offset: float = 1e-8,
@@ -49,6 +49,8 @@ class SnapExtractor:
                     Path to the MAPS dataset. Other datasets not supported yet.
                 dataset_name (str): 
                     Name of the dataset. Default is "maps".
+                extend_pedal (bool):
+                    Extend the note offsets based on pedal information. Default is True.
                 margin_b (int): 
                     Backward margin in frames. Default is 32.
                 margin_f (int): 
@@ -98,10 +100,11 @@ class SnapExtractor:
         config["feature"] = feature_config
         config["input"] = input_config
         config["midi"] = midi_config
+        config["extend_pedal"] = extend_pedal
 
         _HFTMode(config)
 
-    def extract_oaf(self, path: str, dataset_name: str="maps", sample_rate: int = 16000, feature: str = "mel",
+    def extract_oaf(self, path: str, dataset_name: str="maps", extend_pedal: bool=True, sample_rate: int = 16000, feature: str = "mel",
                 min_frame_secs: float = 5.0, max_frame_secs: float = 20.0, min_pitch: int = 21, max_pitch: int = 108,
                 onset_length: int = 32, offset_length: int = 32, frame_rate: float = 31.25,
                 n_mels: int = 229, mel_n_fft: int = 2048, hop_length: int = 512):
@@ -114,6 +117,8 @@ class SnapExtractor:
                     Path to the MAPS dataset. Other datasets not supported yet.
                 dataset_name (str): 
                     Name of the dataset. Default is "maps".
+                extend_pedal (bool):
+                    Extend the note offsets based on pedal information. Default is True.
                 sample_rate (int): 
                     Sample rate of the audio. Default is 16000.
                 feature (str): 
@@ -144,7 +149,7 @@ class SnapExtractor:
                 None
         """
         feature_params = self._build_config_from_kwargs(n_mels=n_mels, mel_n_fft=mel_n_fft, hop_length=hop_length)
-        extra_config = self._build_config_from_kwargs(dataset_name=dataset_name, ext_audio="wav", ext_midi="mid",
+        extra_config = self._build_config_from_kwargs(dataset_name=dataset_name, extend_pedal=extend_pedal, ext_audio="wav", ext_midi="mid",
                 path=path, sample_rate=sample_rate, feature=feature, min_frame_secs=min_frame_secs,
                 max_frame_secs=max_frame_secs, min_pitch=min_pitch, max_pitch=max_pitch,
                 onset_length=onset_length, offset_length=offset_length, frame_rate=frame_rate,

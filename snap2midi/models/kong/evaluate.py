@@ -143,7 +143,7 @@ def evaluate(config: dict):
         # load midi
         # sustain MIDI
         #midi = pedal_extend(midi_path)
-        if config.get("extend_pedal", True):
+        if extraction_config["extend_pedal"].item():
             midi = extend_pedal(pretty_midi.PrettyMIDI(midi_path))
         else:
             midi = pretty_midi.PrettyMIDI(midi_path)

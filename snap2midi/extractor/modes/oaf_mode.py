@@ -25,7 +25,7 @@ class _OafFramedEvents:
     """
     def __init__(self, audio_path: str, midi_path: str, min_frame_secs: float, max_frame_secs: float, \
                  sample_rate: float, frame_rate: float, min_pitch: float = 21, max_pitch: float = 108,
-                 onset_length: float = 32, offset_length: float = 32, ignore_duration: bool = False) -> None:
+                 onset_length: float = 32, offset_length: float = 32, ignore_duration: bool = False, extend_pedal: bool = True) -> None:
         """
             Args:
                 audio_path (str): Path to audio file
@@ -38,7 +38,9 @@ class _OafFramedEvents:
                 max_pitch (int): Maximum pitch value (default is 108, C8)
                 onset_length (float): Length of onset in ms (default is 32)
                 offset_length (float): Length of offset in ms (default is 32)
-            
+                ignore_duration (bool): If True, ignore min and max frame duration and use the whole file as a single frame
+                extend_pedal (bool): If True, extend the note offsets based on pedal information. Default is True.
+
             Returns:
                 None
         """
@@ -96,7 +98,11 @@ class _OafFramedEvents:
             self.split_windows = [(0, midi_length_secs)]
             self.max_frame_secs = midi_length_secs
 
-        self.sustained_midi = self._pedal_extend(CC_SUSTAIN=64)  # Extend the MIDI with sustain events
+        if extend_pedal:
+            self.sustained_midi = self._pedal_extend(CC_SUSTAIN=64)  # Extend the MIDI with sustain events
+        else:
+            self.sustained_midi = midi
+
         self.audio_frames = []
         self.label_frames = []
         for i, (start, end) in enumerate(self.split_windows):
@@ -678,7 +684,8 @@ class _OAFMode(_BaseMode):
                         min_pitch=self.config["min_pitch"],
                         max_pitch=self.config["max_pitch"],
                         onset_length=self.config["onset_length"],
-                        offset_length=self.config["offset_length"]
+                        offset_length=self.config["offset_length"],
+                        extend_pedal=self.config["extend_pedal"]
                     )
                 else:
                     framed_events = _OafFramedEvents(
@@ -692,7 +699,8 @@ class _OAFMode(_BaseMode):
                         max_pitch=self.config["max_pitch"],
                         onset_length=self.config["onset_length"],
                         offset_length=self.config["offset_length"],
-                        ignore_duration=True  # For test split, we ignore duration
+                        ignore_duration=True,  # For test split, we ignore duration
+                        extend_pedal=self.config["extend_pedal"]
                     )
 
                 for idx_event, framed_event in enumerate(framed_events):
