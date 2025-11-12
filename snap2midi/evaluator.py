@@ -293,7 +293,7 @@ class Evaluator:
             weight_A=weight_A,
             weight_B=weight_B
         )
-        checkpoint_path = f"runs/{checkpoint_name}"
+        checkpoint_path = f"runs/hft/{checkpoint_name}"
         config["checkpoint_path"] = checkpoint_path
         results = hft_eval(config)
         return results

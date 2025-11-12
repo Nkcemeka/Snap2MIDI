@@ -30,7 +30,7 @@ def evaluate_test(config):
     frame_rate = config.get("frame_rate", 31.25)
 
     for i, (x, y_frame, y_onset, y_velocity,\
-             label_weights, audio) in tqdm(enumerate(dataloader), total=len(dataloader), desc="Extracting results...."):
+             label_weights, audio) in tqdm(enumerate(dataloader), total=len(dataloader), desc="Evaluating results...."):
         x = x.to(device)
         y_frame = y_frame.to(device)
         y_onset = y_onset.to(device)
