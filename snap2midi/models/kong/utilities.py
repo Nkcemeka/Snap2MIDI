@@ -420,6 +420,9 @@ def extend_pedal(midi: pretty_midi.PrettyMIDI):
 def stitch(arr: np.ndarray):
     # Stitches the results from the model
     # so that everything aligns
+    if arr.shape[0] == 1:
+        return arr[0]
+    
     arr = arr[:, :-1, :]
     result = []
     num_segments, num_frames, _ = arr.shape
