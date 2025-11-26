@@ -118,44 +118,46 @@ def local_maxima(reg_roll: np.ndarray, frame: int) -> bool:
     return maxim
 
 # change this to event_time_from_regression
-def onset_time_from_regression(onset: np.ndarray, frame: int, dist_frames_secs: float, pitch: int) -> float:
+def event_time_from_regression(event: np.ndarray, frame: int, dist_frames_secs: float, pitch: int) -> float:
     """
-        Calculate the onset time from the regression output.
+        Calculate the event time from the regression output.
         Args:
         -----
-            onset (np.ndarray): Regression output of shape (num_frames, num_pitches)
-            frame (int): The frame at which the onset is detected
+            event (np.ndarray): Regression output of shape (num_frames, num_pitches)
+            frame (int): The frame at which the event is detected
             dist_frames_secs (float): The distance in seconds between frames
-            pitch (int): The pitch index for which the onset time is calculated
+            pitch (int): The pitch index for which the event time is calculated
         Returns:
         --------
-            onset_time (float): The calculated onset time in seconds
+            event_time (float): The calculated event time in seconds
     """
-    if onset[frame - 1, pitch] == onset[frame + 1, pitch]:
-        onset_time = frame * dist_frames_secs
-    elif onset[frame - 1, pitch] < onset[frame+1, pitch]:
+    if (frame == 0) or (frame == len(event)-1):
+        event_time = frame * dist_frames_secs
+    elif event[frame - 1, pitch] == event[frame + 1, pitch]:
+        event_time = frame * dist_frames_secs
+    elif event[frame - 1, pitch] < event[frame+1, pitch]:
         # (A, B, C) where A is prev and C is next
         # Here A is less than C
         # See docs for this repo for the comple derivations
         # eqn: (yc - ya)/ 2*(yb - ya) 
-        yc = onset[frame+1, pitch]
-        ya = onset[frame - 1, pitch]
-        yb = onset[frame, pitch]
-        onset_dist_from_b = (yc - ya) / (2*(yb - ya))
+        yc = event[frame+1, pitch]
+        ya = event[frame - 1, pitch]
+        yb = event[frame, pitch]
+        event_dist_from_b = (yc - ya) / (2*(yb - ya))
 
-        # Onset for this case occurs to the right of B
-        onset_time = (frame * dist_frames_secs) + (onset_dist_from_b * dist_frames_secs)
+        # Event for this case occurs to the right of B
+        event_time = (frame * dist_frames_secs) + (event_dist_from_b * dist_frames_secs)
     else:
         # A is greater than C
         # eqn: (ya - yc) / 2*(yb - yc)
-        yc = onset[frame+1, pitch]
-        ya = onset[frame - 1, pitch]
-        yb = onset[frame, pitch]
-        onset_dist_from_b = (ya - yc) / (2*(yb - yc))
+        yc = event[frame+1, pitch]
+        ya = event[frame - 1, pitch]
+        yb = event[frame, pitch]
+        event_dist_from_b = (ya - yc) / (2*(yb - yc))
 
-        # Onset for this case occurs to the left of B
-        onset_time = (frame * dist_frames_secs) - (onset_dist_from_b * dist_frames_secs)
-    return onset_time
+        # Event for this case occurs to the left of B
+        event_time = (frame * dist_frames_secs) - (event_dist_from_b * dist_frames_secs)
+    return event_time
 
 
 def frames_to_note(onset, offset, frames, velocity, config):
@@ -191,7 +193,7 @@ def frames_to_note(onset, offset, frames, velocity, config):
             if (onset[frame, pitch]) >= threshold_onset:
                 if local_maxima(onset[:, pitch], frame):
                     # calc. the actual onset time is based on Kong's eqns (see Section C)
-                    onset_time = onset_time_from_regression(onset, frame, dist_frames_secs, pitch)
+                    onset_time = event_time_from_regression(onset, frame, dist_frames_secs, pitch)
                     onset_detect.append({'frame': frame, 'onset': onset_time})
         
         offset_detect = []
@@ -199,7 +201,7 @@ def frames_to_note(onset, offset, frames, velocity, config):
             if (offset[frame, pitch]) >= threshold_offset:
                 if local_maxima(offset[:, pitch], frame):
                     # calc. the actual offset time is based on Kong's eqns (see Section C)
-                    offset_time = onset_time_from_regression(offset, frame, dist_frames_secs, pitch)
+                    offset_time = event_time_from_regression(offset, frame, dist_frames_secs, pitch)
                     offset_detect.append({'frame': frame, 'offset': offset_time})
 
         # We will now get the onsets and offsets and store them in notes
