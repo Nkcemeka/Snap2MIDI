@@ -75,15 +75,16 @@ def inference(config: dict):
         midi_obj.write(output_file + ".mid")
 
     locs_invalid_note_events = np.where(note_events[:, 1] < note_events[:, 0])[0]
-    locs_invalid_pedal_events = np.where(pedal_events[:, 1] < pedal_events[:, 0])[0]
+
+    if pedal_events is not None:
+        locs_invalid_pedal_events = np.where(pedal_events[:, 1] < pedal_events[:, 0])[0]
+        if len(locs_invalid_pedal_events) > 0:
+            print(f"Warning: Found {len(locs_invalid_pedal_events)} invalid pedal events. Deleting them.")
+            pedal_events = np.delete(pedal_events, locs_invalid_pedal_events, axis=0)
 
     if len(locs_invalid_note_events) > 0:
         print(f"Warning: Found {len(locs_invalid_note_events)} invalid note events. Deleting them.")
         note_events = np.delete(note_events, locs_invalid_note_events, axis=0)
-
-    if len(locs_invalid_pedal_events) > 0:
-        print(f"Warning: Found {len(locs_invalid_pedal_events)} invalid pedal events. Deleting them.")
-        pedal_events = np.delete(pedal_events, locs_invalid_pedal_events, axis=0)
 
     # Create a PrettyMIDI object
     midi_obj = pretty_midi.PrettyMIDI()
@@ -100,14 +101,15 @@ def inference(config: dict):
         piano.notes.append(note)
 
     # Add the pedal events
-    for each in range(len(pedal_events)):
-        onset, offset = pedal_events[each, 0], pedal_events[each, 1]
+    if pedal_events is not None:
+        for each in range(len(pedal_events)):
+            onset, offset = pedal_events[each, 0], pedal_events[each, 1]
 
-        # Create a ControlChange object and add it to the piano instrument
-        cc = pretty_midi.ControlChange(number=64, value=127, time=onset)
-        piano.control_changes.append(cc)
-        cc = pretty_midi.ControlChange(number=64, value=0, time=offset)
-        piano.control_changes.append(cc)
+            # Create a ControlChange object and add it to the piano instrument
+            cc = pretty_midi.ControlChange(number=64, value=127, time=onset)
+            piano.control_changes.append(cc)
+            cc = pretty_midi.ControlChange(number=64, value=0, time=offset)
+            piano.control_changes.append(cc)
 
     midi_obj.instruments.append(piano)
     if output_file is None:
