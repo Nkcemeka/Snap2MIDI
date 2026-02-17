@@ -8,6 +8,8 @@ import collections
 import pretty_midi
 import copy
 import torch
+pretty_midi.pretty_midi.MAX_TICK = 1e10
+
 
 class NoteSeg:
     """
