@@ -121,7 +121,7 @@ class KongDataset(Dataset):
             raise ValueError(f"{self.__class__.__name__} needs path to embeddings!")
 
         self.data = [] # path to npz files
-        self.extend_pedal = extend_pedal
+        self.extend_pedal_flag = extend_pedal
         assert Path(emb_path).exists(), f"{emb_path} does not exist."
         self.data.extend(sorted(Path(emb_path).rglob("*.h5")))
 
@@ -243,7 +243,7 @@ class KongDataset(Dataset):
         new_midi = note_seg_obj.new_midi
         #new_midi = self._pedal_extend(midi)
 
-        if self.extend_pedal:
+        if self.extend_pedal_flag:
             new_midi = self.extend_pedal(new_midi)
 
         # set the mask roll for chopped notes
