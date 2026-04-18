@@ -423,9 +423,12 @@ def stitch(arr: np.ndarray):
     if arr.shape[0] == 1:
         return arr[0]
     
+    # remove one extra frame caused by center=True in spectrogram for Kong
     arr = arr[:, :-1, :]
     result = []
     num_segments, num_frames, _ = arr.shape
+
+    assert num_frames % 4 == 0
     factor_75 = int(num_frames * 0.75)
     factor_25 = int(num_frames * 0.25)
     result.append(arr[0, :factor_75])

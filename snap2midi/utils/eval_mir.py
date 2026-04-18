@@ -242,64 +242,123 @@ def multipitch_metrics_roll(pred: np.ndarray, gt: np.ndarray, \
     return scores
 
 # Function to extract notes from piano roll
-def note_extract(onset_roll: torch.Tensor, frame_roll: torch.Tensor, \
-                 velocity_roll: torch.Tensor, onset_thresh: float=0.5, \
-                 frame_thresh: float=0.5) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-        Extract notes from the piano roll.
+# def note_extract(onset_roll: torch.Tensor, frame_roll: torch.Tensor, \
+#                  velocity_roll: torch.Tensor, onset_thresh: float=0.5, \
+#                  frame_thresh: float=0.5) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+#     """
+#         Extract notes from the piano roll.
 
-        Args:
-        ------
-            onset_roll (torch.Tensor): Onset roll.
-            frame_roll (torch.Tensor): Frame roll.
-            velocity_roll (torch.Tensor): Velocity roll.
-            onset_thresh (float): Onset threshold.
-            frame_thresh (float): Frame threshold.
+#         Args:
+#         ------
+#             onset_roll (torch.Tensor): Onset roll.
+#             frame_roll (torch.Tensor): Frame roll.
+#             velocity_roll (torch.Tensor): Velocity roll.
+#             onset_thresh (float): Onset threshold.
+#             frame_thresh (float): Frame threshold.
 
-        Returns:
-        --------
-            notes (numpy.ndarray): Notes.
-            intervals (numpy.ndarray): Intervals of the notes.
-            vels (numpy.ndarray): Velocities of the notes.
+#         Returns:
+#         --------
+#             notes (numpy.ndarray): Notes.
+#             intervals (numpy.ndarray): Intervals of the notes.
+#             vels (numpy.ndarray): Velocities of the notes.
 
-        Credits: https://github.com/jongwook/onsets-and-frames
-    """
-    # Get the onsets and frames    
-    onsets = (onset_roll > onset_thresh).cpu().int()
-    frames = (frame_roll > frame_thresh).cpu().int()
-    # Due to frame resolution, we could have continuous onsets
-    # if notes are sustained. That makes no sense, right?
-    onset_events = (torch.cat([onsets[:1, :], onsets[1:, :] -  onsets[:-1, :]], \
-                             dim = 0) == 1).nonzero()
+#         Credits: https://github.com/jongwook/onsets-and-frames
+#     """
+#     # Get the onsets and frames    
+#     onsets = (onset_roll > onset_thresh).cpu().int()
+#     frames = (frame_roll > frame_thresh).cpu().int()
+#     # Due to frame resolution, we could have continuous onsets
+#     # if notes are sustained. That makes no sense, right?
+#     onset_events = (torch.cat([onsets[:1, :], onsets[1:, :] -  onsets[:-1, :]], \
+#                              dim = 0) == 1).nonzero()
     
-    notes = []
+#     notes = []
+#     intervals = []
+#     vels = []
+
+#     for loc in onset_events:
+#         time = loc[0].item()
+#         note = loc[1].item()
+
+#         onset = time 
+#         offset = time
+#         velocities = []
+
+#         # As long as the note is on, we keep adding the velocities
+#         while onsets[offset, note].item() or frames[offset, note].item():
+#             if onsets[offset, note].item():
+#                 # If the onset is on, we add the velocity
+#                 velocities.append(velocity_roll[offset, note].item())
+#             offset += 1
+#             if offset == onsets.shape[0]:
+#                 break
+        
+#         # If the note is off, we store results
+#         if offset > onset:
+#             notes.append(note)
+#             intervals.append([onset, offset])
+#             vels.append(np.mean(velocities) if len(velocities) > 0 else 0)
+    
+#     return np.array(notes), np.array(intervals), np.array(vels)
+
+def note_extract(onsets, frames, velocity,
+                onset_thresh=0.5, frame_thresh=0.5):
+    """
+        Extract notes while MERGING re-onsets into the same note.
+        Ensures at most one active note per pitch at any time.
+    """
+
+    # Binarize
+    onsets = (onsets > onset_thresh).cpu().to(torch.uint8)
+    frames = (frames > frame_thresh).cpu().to(torch.uint8)
+
+    # Rising edges = onset events
+    onset_diff = torch.cat([onsets[:1, :], onsets[1:, :] - onsets[:-1, :]], dim=0) == 1
+
+    pitches = []
     intervals = []
-    vels = []
+    velocities = []
 
-    for loc in onset_events:
-        time = loc[0].item()
-        note = loc[1].item()
+    # Track active notes per pitch
+    active = {}   # pitch -> (onset_time, velocity_samples)
 
-        onset = time 
-        offset = time
-        velocities = []
+    T, P = onsets.shape
 
-        # As long as the note is on, we keep adding the velocities
-        while onsets[offset, note].item() or frames[offset, note].item():
-            if onsets[offset, note].item():
-                # If the onset is on, we add the velocity
-                velocities.append(velocity_roll[offset, note].item())
-            offset += 1
-            if offset == onsets.shape[0]:
-                break
-                
-        # If the note is off, we store results
-        if offset > onset:
-            notes.append(note)
-            intervals.append([onset, offset])
-            vels.append(np.mean(velocities) if len(velocities) > 0 else 0)
-    
-    return np.array(notes), np.array(intervals), np.array(vels)
+    for t in range(T):
+        for p in range(P):
+
+            # --- CASE 1: onset event ---
+            if onset_diff[t, p].item():
+
+                if p in active:
+                    # Re-onset while note is active → merge by adding velocity
+                    if onsets[t, p].item():
+                        active[p][1].append(velocity[t, p].item())
+                else:
+                    # Start a new note
+                    active[p] = [t, [velocity[t, p].item()]]
+
+            # --- CASE 2: note continuation or ending ---
+            if p in active:
+                still_on = onsets[t, p].item() or frames[t, p].item()
+
+                if not still_on:
+                    # Note ends here
+                    onset_time, vel_list = active[p]
+                    pitches.append(p)
+                    intervals.append([onset_time, t])
+                    velocities.append(np.mean(vel_list) if vel_list else 0)
+                    del active[p]
+
+    # Close any notes that reach the final frame
+    for p, (onset_time, vel_list) in active.items():
+        pitches.append(p)
+        intervals.append([onset_time, T])
+        velocities.append(np.mean(vel_list) if vel_list else 0)
+
+    return (np.array(pitches),
+            np.array(intervals),
+            np.array(velocities))
 
 
 def notes_to_frames(notes: np.ndarray, intervals: np.ndarray, shape: tuple) -> np.ndarray:

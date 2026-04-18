@@ -11,12 +11,19 @@ def events(model, audio, sample_rate, window_size, device, frame_rate,\
     result_dict: dict = defaultdict(list)
     window_samples = int(window_size * sample_rate)
     hop_samples = window_samples//2
+    # start_offset=0
+
     for start in range(0, len(audio), hop_samples):
         end = start + window_samples
         audio_segment = audio[start:end]
 
         if len(audio_segment) < window_samples:
             padding = window_samples - len(audio_segment)
+            # if start == 0:
+            #     audio_segment = np.pad(audio_segment, (padding, 0))
+            #     start_offset = padding
+            #     print(start_offset)
+            # else:
             audio_segment = np.pad(audio_segment, (0, padding))
 
         # perform inference
@@ -27,7 +34,7 @@ def events(model, audio, sample_rate, window_size, device, frame_rate,\
     
     for key in result_dict:
         result_dict[key] = np.concatenate(result_dict[key])
-    
+
     # perform stitching
     for key in result_dict:
         result_dict[key] = stitch(result_dict[key])[:len(audio)]

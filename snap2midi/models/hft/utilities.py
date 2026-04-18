@@ -28,7 +28,7 @@ def half_stride(model, feature, shift: int, config: dict):
 
     # We will pad the feature with -18.42 behind (to see reason, why we added shift 
     # behind, see the paper)
-    # -18.42 was used in the main code; not sure why....tbh
+    # -18.42 was used in the main code; this is the log of 1e-8 which is the log_offset....
     pad_behind = np.full((back_margin + shift, num_bins), -18.42068099975586, dtype=np.float32)
 
     # now, we want to move our window such that the entire length is a multiple of the half_frames
