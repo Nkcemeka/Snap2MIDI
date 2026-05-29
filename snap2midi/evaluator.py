@@ -30,17 +30,22 @@ class Evaluator:
             config[key] = value
         return config
 
-    def evaluate_oaf(self, frame_rate=31.25, in_features=229, out_features=88, \
+    def evaluate_oaf(self, test_path, checkpoint_path, frame_rate=31.25, 
+                    in_features=229, out_features=88, \
                     threshold=0.5, temporal_sizes=[3, 3, 3], freq_sizes=[3, 3, 3], \
                     out_channels=[32, 32, 64], pool_sizes=[1, 2, 2], dropout_probs=[0, 0.25, 0.25], dropout_fc=0.5, \
                     fc_size=512, onset_lstm_units=128, combined_lstm_units=128, \
-                    checkpoint_name: str = "checkpoint_23.pt", pitch_offset: int = 21):
+                    pitch_offset: int = 21):
 
         """
             Evaluate Onsets and Frames model with specified configuration.
 
             Parameters
             -----------
+                test_path (str):
+                    Path to test set.
+                checkpoint_path (str): 
+                    Path to the checkpoint file.
                 frame_rate (float): 
                     Frame rate for the model. Default is 31.25.
                 in_features (int): 
@@ -67,8 +72,6 @@ class Evaluator:
                     Number of LSTM units for onset detection. Default is 128.
                 combined_lstm_units (int): 
                     Number of LSTM units for combined model. Default is 128.
-                checkpoint_name (str): 
-                    Name of the checkpoint file to resume from. Default is "checkpoint_23.pt".
                 pitch_offset (int): 
                     Pitch offset for MIDI notes. Default is 21. Used to evalutate test set.
             
@@ -78,6 +81,7 @@ class Evaluator:
                     Evaluation results.
         """    
         config = self._build_config_from_kwargs(
+            test_path=test_path,
             frame_rate=frame_rate,
             in_features=in_features,
             out_features=out_features,
@@ -91,14 +95,13 @@ class Evaluator:
             fc_size=fc_size,
             onset_lstm_units=onset_lstm_units,
             combined_lstm_units=combined_lstm_units,
-            pitch_offset=pitch_offset
+            pitch_offset=pitch_offset,
+            checkpoint_path=checkpoint_path
         )
-        checkpoint_path = f"runs/oaf/{checkpoint_name}"
-        config["checkpoint_path"] = checkpoint_path
         results = oaf_eval(config)
         return results
 
-    def evaluate_kong(self, checkpoint_name: str = "checkpoint_180000.pt", factors: list = [16, 32, 32], \
+    def evaluate_kong(self, test_path: str, checkpoint_note_path: str, factors: list = [16, 32, 32], \
         frame_rate: float=100, onset_threshold: float = 0.3, offset_threshold: float = 0.3, frame_threshold: float = 0.3, \
         pedal_offset_threshold: float = 0.3, cmp: int=48, momentum: float = 0.01):
         """
@@ -106,8 +109,10 @@ class Evaluator:
 
             Parameters
             -----------
-                checkpoint_name (str): 
-                    Name of the checkpoint file to resume from. Default is "checkpoint_140000.pt".
+                test_path (str):
+                    Path to test set.
+                checkpoint_note_path (str): 
+                    Path to the note checkpoint file.
                 factors (list): 
                     List of factors for the model. Default is [16, 32, 32].
                 frame_rate (float): 
@@ -131,6 +136,7 @@ class Evaluator:
                     Evaluation results.
         """
         config = self._build_config_from_kwargs(
+            test_path=test_path,
             factors=factors,
             frame_rate=frame_rate,
             onset_threshold=onset_threshold,
@@ -138,14 +144,13 @@ class Evaluator:
             frame_threshold=frame_threshold,
             pedal_offset_threshold=pedal_offset_threshold,
             cmp=cmp,
-            momentum=momentum
+            momentum=momentum,
+            checkpoint_note_path=checkpoint_note_path
         )
-        checkpoint_path = f"runs/kong/{checkpoint_name}"
-        config["checkpoint_note_path"] = checkpoint_path
         results = kong_eval(config)
         return results
     
-    def evaluate_kong_pedal(self, checkpoint_name: str = "checkpoint_180000.pt", factors: list = [16, 32, 32], \
+    def evaluate_kong_pedal(self, test_path: str, checkpoint_pedal_path: str, factors: list = [16, 32, 32], \
         frame_rate: float=100, onset_threshold: float = 0.3, offset_threshold: float = 0.3, frame_threshold: float = 0.3, \
         pedal_offset_threshold: float = 0.3, cmp: int=48, momentum: float = 0.01):
         """
@@ -153,8 +158,10 @@ class Evaluator:
 
             Parameters
             -----------
-                checkpoint_name (str): 
-                    Name of the checkpoint file to resume from. Default is "checkpoint_140000.pt".
+                test_path (str):
+                    Path to test set.
+                checkpoint_pedal_path (str): 
+                    Path to the pedal checkpoint file.
                 factors (list): 
                     List of factors for the model. Default is [16, 32, 32].
                 frame_rate (float): 
@@ -178,6 +185,7 @@ class Evaluator:
                     Evaluation results.
         """
         config = self._build_config_from_kwargs(
+            test_path=test_path,
             factors=factors,
             frame_rate=frame_rate,
             onset_threshold=onset_threshold,
@@ -185,14 +193,13 @@ class Evaluator:
             frame_threshold=frame_threshold,
             pedal_offset_threshold=pedal_offset_threshold,
             cmp=cmp,
-            momentum=momentum
+            momentum=momentum,
+            checkpoint_pedal_path=checkpoint_pedal_path
         )
-        checkpoint_path = f"runs/kong_pedal/{checkpoint_name}"
-        config["checkpoint_pedal_path"] = checkpoint_path
         results = kong_pedal_eval(config)
         return results
 
-    def evaluate_hft(self, checkpoint_name: str = "checkpoint_7.pt", margin_b: int = 32, margin_f: int = 32, \
+    def evaluate_hft(self, test_path: str, checkpoint_path: str, margin_b: int = 32, margin_f: int = 32, \
                   n_bins: int = 256, n_slice: int=16, frame_threshold: float = 0.5, onset_threshold: float = 0.5, \
                   offset_threshold: float = 0.5, num_frame: int = 128, epochs: int = 50, frame_rate: int = 100, \
                   num_velocity: int = 128, note_min: int = 21, note_max: int = 108, hop_sample: int = 256, sr: int = 16000, 
@@ -204,8 +211,10 @@ class Evaluator:
 
             Parameters
             -----------
-                checkpoint_name (str): 
-                    Name of the checkpoint file to resume from. Default is "checkpoint_7.pt".
+                test_path(str):
+                    Path to test set.
+                checkpoint_path (str):
+                    Path to checkpoint
                 margin_b (int): 
                     Back margin for input feature. Default is 32.
                 margin_f (int): 
@@ -264,7 +273,8 @@ class Evaluator:
                 results (dict): 
                     Evaluation results.
         """
-        config = self._build_config_from_kwargs( 
+        config = self._build_config_from_kwargs(
+            test_path=test_path,
             margin_b=margin_b,
             margin_f=margin_f,
             n_bins=n_bins,
@@ -291,9 +301,8 @@ class Evaluator:
             enc_head=enc_head,
             dec_head=dec_head,
             weight_A=weight_A,
-            weight_B=weight_B
+            weight_B=weight_B,
+            checkpoint_path=checkpoint_path
         )
-        checkpoint_path = f"runs/hft/{checkpoint_name}"
-        config["checkpoint_path"] = checkpoint_path
         results = hft_eval(config)
         return results

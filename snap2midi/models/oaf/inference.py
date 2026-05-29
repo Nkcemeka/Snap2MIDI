@@ -9,16 +9,38 @@ import pretty_midi
 import librosa
 
 def load_oaf(config: dict):
+    """ 
+        Load the onset and frames model.
+
+        Args
+        ----
+            config (dict): Config dictionary
+        
+        Returns
+        -------
+            model (nn.Module): Onsets and Frames model.
+    """
     # Load the necessary components from the config
     path = config["checkpoint_path"]
     model = OnsetsAndFrames(config)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)
-    model.load_state_dict(torch.load(path, weights_only=True)["model_state_dict"])
+    model.load_state_dict(torch.load(path, weights_only=True)["state_dict"])
     model.eval()
     return model
 
 def inference(config: dict):
+    """ 
+        Perform inference
+
+        Args
+        ----
+            config (dict): Config dictionary
+        
+        Returns
+        -------
+            midi_obj (pretty_midi.PrettyMIDI): PrettyMIDI object.
+    """
     filename = config["filename"]
     audio_path = config["audio_path"]
     feature_str = config["feature_str"]
@@ -40,7 +62,6 @@ def inference(config: dict):
         feature = get_mel(audio, hf, config["in_features"], config["mel_n_fft"], config["hop_length"])
 
     with torch.inference_mode():
-        #on_preds, _, _, frame_preds, vel_preds = onset_model(feature)
         on_preds, _, frame_preds, vel_preds = onset_model(feature)
         on_preds = torch.sigmoid(on_preds)[0]
         frame_preds = torch.sigmoid(frame_preds)[0]

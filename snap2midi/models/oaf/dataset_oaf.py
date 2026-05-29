@@ -11,8 +11,10 @@ class OAFDataset(Dataset):
             Dataset class to load training segments for
             the Onsets and Frames model.
 
-        Args:
-            emb_paths (list): List of paths to npz files containing audio and feature data.
+        Args
+        ----
+            emb_paths (list): 
+                List of paths to npz files containing audio and feature data.
         """
         super().__init__()
         if emb_paths is None:
@@ -25,6 +27,22 @@ class OAFDataset(Dataset):
             self.data.extend(sorted(Path(emb_path).glob("*.npz")))
 
     def __getitem__(self, index: int) -> Sequence[np.ndarray]:
+        """ 
+            Gets item from dataset based on index.
+
+            Args
+            ----
+                index (int): Index 
+            
+            Returns
+            -------
+                feature (np.ndarray): Feature for training
+                label_frame (np.ndarray): Frame labels
+                label_onset (np.ndarray): Onset labels
+                label_velocity (np.ndarray): Label for velocity
+                label_weights (np.ndarray): Label weights
+                audio (np.ndarray): audio waveform
+        """
         item_path = str(self.data[index])
         item = np.load(item_path)
 
@@ -46,6 +64,13 @@ class OAFDataset(Dataset):
                 label_velocity, label_weights, audio)
 
     def __len__(self) -> int:
+        """ 
+            Length of dataset.
+
+            Args
+            ----
+                length (int): Length of data
+        """
         return len(self.data)
 
 if __name__ == "__main__":

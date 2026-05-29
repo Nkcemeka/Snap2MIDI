@@ -9,7 +9,8 @@ def half_stride(model, feature, shift: int, config: dict):
         Transcription through the half-stride strategy 
         from the HfT paper.
 
-        Args:
+        Args
+        -----
             model (torch.nn.Module): The trained HfT model.
             feature (np.ndarray): The input feature of shape [num_frames, n_mels].
             shift (int): The number of frames to shift the window.
@@ -86,13 +87,13 @@ def local_maxima(reg_roll: np.ndarray, frame: int) -> bool:
         local_maxima checks if there is a local maximum
         at [reg_roll[n] (a triangle shape with x[n] as the peak)
 
-        Args:
-        -----
+        Args
+        ----
             reg_roll (np.ndarray): Regression roll of shape (num_frames) at a given pitch
             frame (int): frame position
         
-        Returns:
-        --------
+        Returns
+        -------
             maxim (bool): True/False at x[n]
     """
     # initialize the maxim flags
@@ -122,14 +123,16 @@ def local_maxima(reg_roll: np.ndarray, frame: int) -> bool:
 def event_time_from_regression(event: np.ndarray, frame: int, dist_frames_secs: float, pitch: int) -> float:
     """
         Calculate the event time from the regression output.
-        Args:
-        -----
+        
+        Args
+        ----
             event (np.ndarray): Regression output of shape (num_frames, num_pitches)
             frame (int): The frame at which the event is detected
             dist_frames_secs (float): The distance in seconds between frames
             pitch (int): The pitch index for which the event time is calculated
-        Returns:
-        --------
+        
+        Returns
+        -------
             event_time (float): The calculated event time in seconds
     """
     if (frame == 0) or (frame == len(event)-1):
@@ -165,8 +168,8 @@ def frames_to_note(onset, offset, frames, velocity, config):
     """
         Convert the onset, offset, frames, and velocity outputs to a list of notes.
 
-        Args:
-        -----
+        Args
+        ----
             onset (np.ndarray): Onset regression output of shape (num_frames, num_pitches).
             offset (np.ndarray): Offset regression output of shape (num_frames, num_pitches).
             frames (np.ndarray): Frames binary output of shape (num_frames, num_pitches).
@@ -176,8 +179,8 @@ def frames_to_note(onset, offset, frames, velocity, config):
             threshold_frames (float): Threshold for detecting frames.
             config (dict): Configuration dictionary containing MIDI parameters.
 
-        Returns:
-        --------
+        Returns
+        -------
             notes (list): List of detected notes with their pitch, onset, offset, and velocity.
     """
     threshold_onset = config["onset_threshold"]
@@ -301,10 +304,14 @@ def notes_to_midi(notes):
     """
         Convert a list of notes to a MIDI file.
 
-        Args:
-        -----
+        Args
+        ----
             notes (list): List of notes, where each note is a dictionary with keys 'pitch', 'onset', 'offset', and 'velocity'.
             filename (str): The name of the output MIDI file.
+        
+        Returns
+        -------
+            midi_obj (pretty_midi.PrettyMIDI): PrettyMIDI object
     """
     # Create a PrettyMIDI object and add the notes to it
     midi_obj = pretty_midi.PrettyMIDI()
@@ -325,11 +332,13 @@ def transcription_metrics(est_notes: list, ref_notes: list):
     """
         Calculate the transcription metrics using mir_eval.
 
-        Args:
+        Args
+        ----
             est_notes (list): List of estimated notes
             ref_notes (list): List of reference notes
 
-        Returns:
+        Returns
+        -------
             scores (dict): Dictionary containing the transcription metrics.
     """
     est_int = []
@@ -371,7 +380,7 @@ def transcription_metrics(est_notes: list, ref_notes: list):
     
     results = {}
     for key in scores:
-        if key in ['Precision', 'Recall', 'Precision_no_offset', 'Recall_no_offset']:
+        if key in ['Precision', 'Recall', 'Precision_no_offset', 'Recall_no_offset', 'F-measure', 'F-measure_no_offset']:
             results[key] = scores[key]
     return results
 
@@ -381,11 +390,13 @@ def transcription_velocity_metrics(est_notes: list, ref_notes: list):
     """
         Calculate the transcription velocity metrics using mir_eval.
 
-        Args:
+        Args
+        ----
             est_notes (list): List of estimated notes
             ref_notes (list): List of reference notes
 
-        Returns:
+        Returns
+        -------
             scores (dict): Dictionary containing the transcription velocity metrics.
     """
     est_int = []
@@ -442,6 +453,16 @@ def hft_frame_metrics(ref_notes, est_frames, config):
     """
         Calculate the frame metrics according to the 
         HfT paper or more specifically, the codebase.
+
+        Args
+        ----
+            ref_notes: Reference notes
+            est_frames : Estimated frames
+            config (dict): Configuration dictionary
+        
+        Returns
+        -------
+            results (dict): Results containing frame metrics
     """
     thresh_frames = config["frame_threshold"]
     # Get duration of reference notes

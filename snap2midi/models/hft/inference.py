@@ -2,9 +2,20 @@ from .utilities import frames_to_note, notes_to_midi, half_stride
 from .hft import *
 import torch
 import torchaudio
-from .train_hft import init_weights
 
-def load_hft(config):
+def load_hft(config: dict):
+    """ 
+        Loads the HFT model given the 
+        config dictionary.
+
+        Args
+        ----
+            config (dict): Config dictionary
+        
+        Returns
+        -------
+            model (HFT): HFT model
+    """
     # Load/initialize the model
     encoder = HFTEncoder(n_margin=config['margin_b'],
                          n_frame=config['num_frame'],
@@ -15,8 +26,7 @@ def load_hft(config):
                          n_layers=config["enc_layer"],
                          num_heads=config["enc_head"],
                          pff_dim=config["pff_dim"],
-                         dropout=config["dropout"],
-                         device="cuda" if torch.cuda.is_available() else "cpu")
+                         dropout=config["dropout"])
 
     decoder = HFTDecoder(n_frame=config['num_frame'],
                          n_bin=config['n_bins'],
@@ -26,14 +36,16 @@ def load_hft(config):
                          n_layers=config["dec_layer"],
                          num_heads=config["dec_head"],
                          pff_dim=config["pff_dim"],
-                         dropout=config["dropout"],
-                         device="cuda" if torch.cuda.is_available() else "cpu")
+                         dropout=config["dropout"])
     
-    model = HFT(encoder=encoder, decoder=decoder)
+    model = HFT.load_from_checkpoint(
+        config["checkpoint_path"],
+        encoder=encoder,
+        decoder=decoder,
+        params=config
+    )
+    
     model = model.to("cuda" if torch.cuda.is_available() else "cpu")
-    model.apply(init_weights)
-    checkpoint = torch.load(config["checkpoint_path"], map_location="cuda" if torch.cuda.is_available() else "cpu")
-    model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
     return model
 
@@ -41,10 +53,13 @@ def get_feature_hft(audio_file: str, config: dict) -> torch.Tensor:
         """
             Get the feature for the audio file for the hFT-Transformer model by Sony.
 
-            Args:
+            Args
+            ----
                 audio_file (str): Path to the audio file
                 config (dict): Configuration dictionary containing the parameters
-            Returns:
+
+            Returns
+            -------
                 feature (torch.Tensor): Feature for the audio file
         """
         # Get the feature for the audio file
@@ -67,6 +82,19 @@ def get_feature_hft(audio_file: str, config: dict) -> torch.Tensor:
         return feature
 
 def inference(config: dict):
+    """ 
+        Performs inference given the 
+        config.
+
+        Args
+        ----
+            config (dict): Configuration dictionary
+        
+        Returns
+        --------
+            midi_obj (pretty_midi.PrettyMIDI | None): 
+                Pretty MIDI object or None
+    """
     model = load_hft(config)
     shift = config["shift"]
     audio_file = config["audio_path"]

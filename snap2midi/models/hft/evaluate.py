@@ -7,20 +7,20 @@ from collections import defaultdict
 from tqdm import tqdm
 from .inference import load_hft
 
-
 @torch.no_grad()
 def evaluate_test(config: dict):
     """
         Calculate the transcription metrics for a test set.
 
         Args:
-            test_dir (str): Directory containing the test set files.
+            config (dict): Configuration dictionary containing
+                           useful parameters and info.
 
         Returns:
             scores (dict): Dictionary containing the transcription metrics.
     """
     model = load_hft(config)
-    test_dir = "data/hft/feature/test/"
+    test_dir = config["test_path"]
     test_files = sorted(Path(test_dir).glob("*.npz"))
 
     trans_metrics = defaultdict(list)
@@ -58,7 +58,6 @@ def evaluate_test(config: dict):
             frame_metrics[f"frame_{key}"].append(value)
 
     # Calculate the average scores
-    scores = {key: round(np.mean(value).item(), 2) for key, value in trans_metrics.items()}
-    frame_scores = {key: round(np.mean(value).item(), 2) for key, value in frame_metrics.items()}
+    scores = {key: round(np.mean(value).item(), 3) for key, value in trans_metrics.items()}
+    frame_scores = {key: round(np.mean(value).item(), 3) for key, value in frame_metrics.items()}
     return scores, frame_scores
-

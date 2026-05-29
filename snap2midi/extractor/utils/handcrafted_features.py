@@ -1,7 +1,6 @@
 # Imports
 import numpy as np
 import librosa
-from typing import List, Optional, Tuple
 
 # Define a list of supported features
 SUPPORTED_FEATURES = ["mel", "cqt"]
@@ -25,13 +24,15 @@ class HandcraftedFeatures:
         """
             Default constructor for HandcraftedFeatures
 
-            Args:
+            Args
+            ----
                 sample_rate (int): Sample rate of audio
                 window_size (float): Window size of audio if you don't want to calculate the 
                                      hop_length
                 frame_rate (int): Frame rate of audio
 
-            Returns:
+            Returns
+            --------
                 None
         """
         self.sample_rate = sample_rate
@@ -44,14 +45,16 @@ class HandcraftedFeatures:
             Compute the CQT for a given audio segment.
             This returns the log of the squared magnitude of the CQT.
 
-            Args:
+            Args
+            -----
                 audio (np.ndarray): Audio segment
                 bins_per_octave (int): Number of bins per octave
                 num_octaves (int): Number of octaves
                 hop_length (int | None): Hop length for CQT computation
 
-            Returns:
-                np.ndarray: CQT of the audio segment
+            Returns
+            --------
+                cqt (np.ndarray): CQT of the audio segment
         """
         # compute hop length to get CQT
         if hop_length is None:
@@ -76,14 +79,16 @@ class HandcraftedFeatures:
             Compute the Mel spectrogram for a given audio segment.
             This returns the log of the squared magnitude of the Mel spectrogram.
 
-            Args:
+            Args
+            -----
                 audio (np.ndarray): Audio segment
                 n_mels (int): Number of mel bands
                 n_fft (int): FFT size
                 hop_length (int | None): Hop length for Mel spectrogram computation
 
-            Returns:
-                np.ndarray: Mel spectrogram of the audio segment
+            Returns
+            --------
+                mel (np.ndarray): Mel spectrogram of the audio segment
         """
         # This assumes padding on both ends
         # (without padding, size of window needs to be subtracted)

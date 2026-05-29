@@ -8,6 +8,26 @@ from collections import defaultdict
 
 def events(model, audio, sample_rate, window_size, device, frame_rate,\
                   on_thresh, off_thresh, pedal_thresh, frame_thresh, pedal_flag=False):
+    """ 
+        Gets note/pedal events.
+
+        Args
+        ----
+            audio (np.ndarray): Audio waveform
+            sample_rate (float): Sample rate
+            window_size (float): Window size in seconds
+            device (str): Device on the current host
+            frame_rate (float): frame rate
+            on_thresh (float): Onset threshold
+            off_thresh (float): Offset threshold
+            pedal_thresh (float): Pedal threshold
+            frame_thresh (float): Frame threshold
+            pedal_flag (bool): Get events for pedals/notes flag
+
+        Returns
+        --------
+            events (np.ndarray): List of note or pedal events.
+    """
     result_dict: dict = defaultdict(list)
     window_samples = int(window_size * sample_rate)
     hop_samples = window_samples//2
@@ -49,6 +69,19 @@ def events(model, audio, sample_rate, window_size, device, frame_rate,\
 
 @torch.no_grad()
 def inference(config: dict):
+    """ 
+        Performs inference given the 
+        config.
+
+        Args
+        ----
+            config (dict): Configuration dictionary
+        
+        Returns
+        --------
+            midi_obj (pretty_midi.PrettyMIDI | None): 
+                Pretty MIDI object or None
+    """
     note_model = load_kong(config)
     pedal_model = load_pedal(config)
 

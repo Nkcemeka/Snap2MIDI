@@ -3,19 +3,20 @@ from pathlib import Path
 import numpy as np
 from tqdm import tqdm
 import torch
-import mido
 import pretty_midi
 import torchaudio
 
 class Message:
+    """ 
+        Initializes a MIDI message. This is an utility class
+        to help with MIDI message processing using pretty_midi
+        instead of MIDO used in the hfTransformer implementation
+        by Sony.
+    """
     def __init__(self, time, type, note, velocity=0):
         """
-            Initializes a MIDI message. This is an utility class
-            to help with MIDI message processing using pretty_midi
-            instead of MIDO used in the hfTransformer implementation
-            by Sony.
-
-            Args:
+            Args
+            ------
                 time (float): The time of the message in seconds.
                 type (str): The type of the message (e.g., 'note_on', 'note_off').
                 note (int): The MIDI note number.
@@ -46,9 +47,12 @@ class _HFTMode(_BaseMode):
             Extract the features and labels from the audio and midi files
             specific to the hFT-Transformer model by Sony.
 
-            Args:
+            Args
+            -----
                 config (dict): Configuration dictionary containing the parameters   
-            Returns:
+
+            Returns
+            --------
                 None
         """
         self._extract_hft(config)
@@ -60,9 +64,12 @@ class _HFTMode(_BaseMode):
             This method processes the features and labels extracted from the audio and MIDI files
             and stores them in a single npz file for each split (train, val, test).
 
-            Args:
+            Args
+            -----
                 config (dict): Configuration dictionary containing the parameters
-            Returns:
+
+            Returns
+            ------
                 None
         """
         # Process the train, val and test splits
@@ -71,6 +78,14 @@ class _HFTMode(_BaseMode):
         self._collate_hft_split(config, "test")
     
     def _collate_hft_split(self, config: dict, split: str):
+        """ 
+            Does the collation for each split (train/test/validation)
+
+            Args
+            -----
+                config (dict): Configuration dictionary containing the parameters
+                split (str): training, validation or teat split.
+        """
         num_frame_list = [] # stores the number of frames for each file
 
         # the total number of frames read including the margins
@@ -234,9 +249,12 @@ class _HFTMode(_BaseMode):
             Extract the features and labels from the audio and midi files
             specific to the hFT-Transformer model by Sony.
 
-            Args:
+            Args
+            -----
                 config (dict): Configuration dictionary containing the parameters   
-            Returns:
+
+            Returns
+            --------
                 None
         """
         split_files = self._get_splits_hft() # train, val, test
@@ -300,10 +318,13 @@ class _HFTMode(_BaseMode):
         """
             Get the feature for the audio file for the hFT-Transformer model by Sony.
 
-            Args:
+            Args
+            ------
                 audio_file (str): Path to the audio file
                 config (dict): Configuration dictionary containing the parameters
-            Returns:
+
+            Returns
+            --------
                 feature (torch.Tensor): Feature for the audio file
         """
         # Get the feature for the audio file
@@ -325,7 +346,7 @@ class _HFTMode(_BaseMode):
         feature = (torch.log(feature + config['feature']['log_offset'])).T
         return feature
         
-    def _extend_note_offsets(events, config: dict) -> list:
+    def _extend_note_offsets(self, events, config: dict) -> list:
         """ 
             This method sort of mirrors _midi2note from hfTransformer implementation by Sony.
             However, the events represent a list of MIDI messages created using the Message class.
@@ -348,11 +369,13 @@ class _HFTMode(_BaseMode):
             If it is a 'note_off' event, we mark the note as not ACTIVE. If
             the pedal is pressed, we leave it as SUSTAINED.
 
-            Args:
+            Args
+            -----
                 events (list): List of MIDI events sorted by time.
                 config (dict): Configuration dictionary containing useful info.
 
-            Returns:
+            Returns
+            --------
                 notes (dict): Dictionary containing note information.
         """
         notes = [] # list containing note events ('onset', 'offset', 'pitch', 'velocity', 'reonset')
@@ -445,10 +468,12 @@ class _HFTMode(_BaseMode):
             Retrieve notes from a PrettyMIDI object and
             returns as a list of note dictionaries.
 
-            Args:
+            Args
+            ------
                 midi_obj (pretty_midi.PrettyMIDI): The PrettyMIDI object to extract notes from.
 
-            Returns:
+            Returns
+            ---------
                 notes (list): List of note dictionaries with keys 'onset', 'offset', 'pitch', 'velocity', 'reonset'.
         """
         notes = []
@@ -468,7 +493,21 @@ class _HFTMode(_BaseMode):
         notes.sort(key=lambda x: x['onset']) # sort by onset time
         return notes
 
-    def _midi2note(self, config, f_midi):
+    def _midi2note(self, config: dict, f_midi: str):
+        """ 
+            Converts MIDI file to mote-leve
+            events.
+
+            Args
+            ----
+                config (dict): Configuration dictionary
+                f_midi (str): MIDI file
+            
+            Returns
+            --------
+                notes (dict): Dictionary containing note 
+                              information.
+        """
         # Get the midi object
         midi_obj = pretty_midi.PrettyMIDI(f_midi)
         events = []
@@ -504,173 +543,27 @@ class _HFTMode(_BaseMode):
         # Now, extend the note offsets based on the pedal events
         notes = self._extend_note_offsets(events, config)
         return notes
-    
-    # def _midi2note(self, config, f_midi, verbose_flag = False):
-    #     NUM_PITCH = 128
-    #     # (1) read MIDI file
-    #     midi_file = mido.MidiFile(f_midi)
-    #     ticks_per_beat = midi_file.ticks_per_beat
-    #     num_tracks = len(midi_file.tracks)
-
-    #     # (2) tempo curve
-    #     max_ticks_total = 0
-    #     for it in range(len(midi_file.tracks)):
-    #         ticks_total = 0
-    #         for message in midi_file.tracks[it]:
-    #             ticks_total += int(message.time)
-    #         if max_ticks_total < ticks_total:
-    #             max_ticks_total = ticks_total
-    #     a_time_in_sec = [0.0 for i in range(max_ticks_total+1)]
-    #     ticks_curr = 0
-    #     ticks_prev = 0
-    #     tempo_curr = 0
-    #     tempo_prev = 0
-    #     time_in_sec_prev = 0.0
-    #     for im, message in enumerate(midi_file.tracks[0]):
-    #         ticks_curr += message.time
-    #         if 'set_tempo' in str(message):
-    #             tempo_curr = int(message.tempo)
-    #             for i in range(ticks_prev, ticks_curr):
-    #                 a_time_in_sec[i] = time_in_sec_prev + ((i-ticks_prev) / ticks_per_beat * tempo_prev / 1e06)
-    #             if ticks_curr > 0:
-    #                 time_in_sec_prev = time_in_sec_prev + ((ticks_curr-ticks_prev) / ticks_per_beat * tempo_prev / 1e06)
-    #             tempo_prev = tempo_curr
-    #             ticks_prev = ticks_curr
-    #     for i in range(ticks_prev, max_ticks_total+1):
-    #         a_time_in_sec[i] = time_in_sec_prev + ((i-ticks_prev) / ticks_per_beat * tempo_curr / 1e06)
-
-    #     # (3) obtain MIDI message
-    #     a_note = []
-    #     a_onset = []
-    #     a_velocity = []
-    #     a_reonset = []
-    #     a_push = []
-    #     a_sustain = []
-    #     for i in range(NUM_PITCH):
-    #         a_onset.append(-1)
-    #         a_velocity.append(-1)
-    #         a_reonset.append(False)
-    #         a_push.append(False)
-    #         a_sustain.append(False)
-
-    #     ticks = 0
-    #     sustain_flag = False
-    #     for message in midi_file.tracks[num_tracks-1]:
-    #         ticks += message.time
-    #         time_in_sec = a_time_in_sec[ticks]
-    #         if ('control_change' in str(message)) and ('control=64' in str(message)):
-    #             if message.value < 64:
-    #                 # sustain off
-    #                 for i in range(config['midi']['note_min'], config['midi']['note_max']+1):
-    #                     if (a_push[i] is False) and (a_sustain[i] is True):
-    #                         a_note.append({'onset': a_onset[i],
-    #                                     'offset': time_in_sec,
-    #                                     'pitch': i,
-    #                                     'velocity': a_velocity[i],
-    #                                     'reonset': a_reonset[i]})
-    #                         a_onset[i] = -1
-    #                         a_velocity[i] = -1
-    #                         a_reonset[i] = False
-    #                 sustain_flag = False
-    #                 for i in range(config['midi']['note_min'], config['midi']['note_max']+1):
-    #                     a_sustain[i] = False
-    #             else:
-    #                 # sustain on
-    #                 sustain_flag = True
-    #                 for i in range(config['midi']['note_min'], config['midi']['note_max']+1):
-    #                     if a_push[i] is True:
-    #                         a_sustain[i] = True
-    #         elif ('note_on' in str(message)) and (int(message.velocity) > 0):
-    #             # note on
-    #             note = message.note
-    #             velocity = message.velocity
-    #             if (a_push[note] is True) or (a_sustain[note] is True):
-    #                 # reonset
-    #                 a_note.append({'onset': a_onset[note],
-    #                             'offset': time_in_sec,
-    #                             'pitch': note,
-    #                             'velocity': a_velocity[note],
-    #                             'reonset': a_reonset[note]})
-    #                 a_reonset[note] = True
-    #             else:
-    #                 a_reonset[note] = False
-    #             a_onset[note] = time_in_sec
-    #             a_velocity[note] = velocity
-    #             a_push[note] = True
-    #             if sustain_flag is True:
-    #                 a_sustain[note] = True
-    #         elif (('note_off' in str(message)) or \
-    #             (('note_on' in str(message)) and (int(message.velocity) == 0))):
-    #             # note off
-    #             note = message.note
-    #             velocity = message.velocity
-    #             if (a_push[note] is True) and (a_sustain[note] is False):
-    #                 # offset
-    #                 a_note.append({'onset': a_onset[note],
-    #                             'offset': time_in_sec,
-    #                             'pitch': note,
-    #                             'velocity': a_velocity[note],
-    #                             'reonset': a_reonset[note]})
-    #                 a_onset[note] = -1
-    #                 a_velocity[note] = -1
-    #                 a_reonset[note] = False
-    #             a_push[note] = False
-
-    #     for i in range(config['midi']['note_min'], config['midi']['note_max']+1):
-    #         if (a_push[i] is True) or (a_sustain[i] is True):
-    #             a_note.append({'onset': a_onset[i],
-    #                         'offset': time_in_sec,
-    #                         'pitch': i,
-    #                         'velocity': a_velocity[i],
-    #                         'reonset': a_reonset[i]})
-    #     a_note_sort = sorted(sorted(a_note, key=lambda x: x['pitch']), key=lambda x: x['onset'])
-
-    #     return a_note_sort
 
     def _get_label_hft(self, midi_file: str, config: dict) -> dict:
-        # midi_data = pretty_midi.PrettyMIDI(midi_file)
-        # instrument = midi_data.instruments[0]
-        # pm_notes = instrument.notes
+        """ 
+            Gets the labels for a given MIDI file.
 
-        # # Extract the sustain pedal events and adjust note offsets
-        # # MIDI CC 64 is the sustain pedal control change
-        # # We will use the sustain pedal events to extend the note offsets
-        # # to the end of the sustain pedal events
-        # CC_SUSTAIN_PEDAL = 64
-        # pedal_ccs = sorted(
-        #     (cc for cc in instrument.control_changes
-        #         if cc.number == CC_SUSTAIN_PEDAL),
-        #     key=lambda cc: cc.time
-        # )
-
-        # sustain_events = []
-        # pedal_down = None
-        # for cc in pedal_ccs:
-        #     if cc.value >= 64 and pedal_down is None:
-        #         pedal_down = cc.time
-        #     elif cc.value < 64 and pedal_down is not None:
-        #         sustain_events.append((pedal_down, cc.time))
-        #         pedal_down = None
-        
-        # if pedal_down is not None:
-        #     sustain_events.append((pedal_down, midi_data.get_end_time()))
-        
-        # for note in pm_notes:
-        #     for start, end in sustain_events:
-        #         if note.start < end and note.end >= start:
-        #             note.end = max(note.end, end)
-                    
-
+            Args
+            -----
+                midi_file (str): midi file path
+                config (dict): Configuration dictionary
+            
+            Returns
+            -------
+                label (dict): Dictionary containing note-level
+                              events.
+        """
         notes = []
         max_offset = 0
         pm_notes = self._midi2note(config, midi_file)
 
         # Extract the notes from the MIDI file
         for note in pm_notes:
-            # pitch = note.pitch
-            # start = note.start
-            # end = note.end  
-            # velocity = note.velocity
             pitch = note["pitch"]
             start = note["onset"]
             end = note["offset"]

@@ -2,6 +2,8 @@
 import numpy as np
 import mir_eval
 import torch
+import pretty_midi
+from collections import defaultdict
 
 # Function that takes a piano roll and gets the
 # ref and est intervals and pitches
@@ -10,12 +12,12 @@ def get_intervals_and_pitches(piano_roll: np.ndarray, \
     """
         Get the intervals and pitches from a piano roll.
         
-        Args:
-        ------
+        Args
+        -----
             piano_roll (np.ndarray): Piano roll.
             frame_rate (float): Frames per second
 
-        Returns:
+        Returns
         -------
             intervals (np.ndarray): Onset and offset events.
             pitches (np.ndarray): Pitches of events.
@@ -51,14 +53,14 @@ def transcription_metrics_roll(pred: np.ndarray, gt: np.ndarray, \
     """
         Calculate transcription metrics using mir_eval.
 
-        Args:
-        -----
+        Args
+        ----
             pred (np.ndarray): Predicted piano roll.
             gt (np.ndarray): Ground truth piano roll.
             frame_rate (float): Frames per second
 
-        Returns:
-        --------
+        Returns
+        -------
             scores (dict): Dictionary containing the calculated metrics.
     """
     
@@ -78,18 +80,19 @@ def transcription_metrics_roll(pred: np.ndarray, gt: np.ndarray, \
 def transcription_metrics(note_arr_pred: np.ndarray, int_arr_pred: np.ndarray, 
                           note_arr_gt: np.ndarray, int_arr_gt: np.ndarray, frame_rate: float):
     """
-        Calculate transcription metrics using mir_eval.
+        Calculate transcription metrics using mir_eval based on
+        the array of notes and their intervals.
 
-        Args:
-        -----
+        Args
+        ----
             note_arr_pred (np.ndarray): Array of predicted notes.
             int_arr_pred (np.ndarray): Array of predicted intervals.
             note_arr_gt (np.ndarray): Array of ground truth notes.
             int_arr_gt (np.ndarray): Array of ground truth intervals.
             frame_rate (float): Frames per second
 
-        Returns:
-        --------
+        Returns
+        -------
             scores (dict): Dictionary containing the calculated metrics.
     """
 
@@ -119,13 +122,13 @@ def frame_metrics(pred: np.ndarray, gt: np.ndarray) -> dict:
     """
         Calculate frame-level metrics.
 
-        Args:
+        Args
         ----
             pred (np.ndarray): Predicted frame-level events.
             gt (np.ndarray): Ground truth frame-level events.
 
-        Returns:
-        --------
+        Returns
+        -------
             dict: Dictionary containing the calculated metrics.
     """
     pred = pred.astype(int)
@@ -152,12 +155,12 @@ def get_multipitch_intervals_and_pitches(piano_roll: np.ndarray, \
     """
         Get the multipitch intervals and pitches from a piano roll.
 
-        Args:
-        ------
+        Args
+        ----
             piano_roll (np.ndarray): Piano roll.
             frame_rate (float): Frames per second
 
-        Returns:
+        Returns
         -------
             times (np.ndarray): Times of the active notes.
             pitches list(np.ndarray): Pitches of the active notes.
@@ -183,16 +186,17 @@ def get_multipitch_intervals_and_pitches(piano_roll: np.ndarray, \
 def multipitch_metrics(ref_roll: np.ndarray, est_roll: np.ndarray, \
                        frame_rate: float, pitch_offset: int = 21) -> dict:
     """
-        Calculate multipitch metrics using mir_eval.
+        Calculate multipitch metrics using mir_eval
+        on piano rolls.
 
-        Args:
-        ------
+        Args
+        ----
             ref_roll (np.ndarray): Reference multipitch roll.
             est_roll (np.ndarray): Estimated multipitch roll.
             frame_rate (float): Frames per second
             pitch_offset (int): Offset for the pitch values, default is 21.
 
-        Returns:
+        Returns
         -------
             scores (dict): Dictionary containing the calculated metrics.
     """
@@ -220,13 +224,13 @@ def multipitch_metrics_roll(pred: np.ndarray, gt: np.ndarray, \
     """
         Calculate multipitch metrics using mir_eval.
 
-        Args:
-        ------
+        Args
+        -----
             pred (np.ndarray): Predicted multipitch.
             gt (np.ndarray): Ground truth multipitch.
             frame_rate (float): Frames per second
 
-        Returns:
+        Returns
         -------
             scores: Dictionary containing the calculated metrics.
     """
@@ -241,76 +245,30 @@ def multipitch_metrics_roll(pred: np.ndarray, gt: np.ndarray, \
     )
     return scores
 
-# Function to extract notes from piano roll
-# def note_extract(onset_roll: torch.Tensor, frame_roll: torch.Tensor, \
-#                  velocity_roll: torch.Tensor, onset_thresh: float=0.5, \
-#                  frame_thresh: float=0.5) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-#     """
-#         Extract notes from the piano roll.
-
-#         Args:
-#         ------
-#             onset_roll (torch.Tensor): Onset roll.
-#             frame_roll (torch.Tensor): Frame roll.
-#             velocity_roll (torch.Tensor): Velocity roll.
-#             onset_thresh (float): Onset threshold.
-#             frame_thresh (float): Frame threshold.
-
-#         Returns:
-#         --------
-#             notes (numpy.ndarray): Notes.
-#             intervals (numpy.ndarray): Intervals of the notes.
-#             vels (numpy.ndarray): Velocities of the notes.
-
-#         Credits: https://github.com/jongwook/onsets-and-frames
-#     """
-#     # Get the onsets and frames    
-#     onsets = (onset_roll > onset_thresh).cpu().int()
-#     frames = (frame_roll > frame_thresh).cpu().int()
-#     # Due to frame resolution, we could have continuous onsets
-#     # if notes are sustained. That makes no sense, right?
-#     onset_events = (torch.cat([onsets[:1, :], onsets[1:, :] -  onsets[:-1, :]], \
-#                              dim = 0) == 1).nonzero()
-    
-#     notes = []
-#     intervals = []
-#     vels = []
-
-#     for loc in onset_events:
-#         time = loc[0].item()
-#         note = loc[1].item()
-
-#         onset = time 
-#         offset = time
-#         velocities = []
-
-#         # As long as the note is on, we keep adding the velocities
-#         while onsets[offset, note].item() or frames[offset, note].item():
-#             if onsets[offset, note].item():
-#                 # If the onset is on, we add the velocity
-#                 velocities.append(velocity_roll[offset, note].item())
-#             offset += 1
-#             if offset == onsets.shape[0]:
-#                 break
-        
-#         # If the note is off, we store results
-#         if offset > onset:
-#             notes.append(note)
-#             intervals.append([onset, offset])
-#             vels.append(np.mean(velocities) if len(velocities) > 0 else 0)
-    
-#     return np.array(notes), np.array(intervals), np.array(vels)
-
 def note_extract(onsets, frames, velocity,
-                onset_thresh=0.5, frame_thresh=0.5):
+                onset_thresh:float=0.5, frame_thresh:float=0.5):
     """
-        Extract notes while MERGING re-onsets into the same note.
-        Ensures at most one active note per pitch at any time.
+        Extract notes while dealing with overlapping 
+        note events.
+
+        Args
+        ----
+            onsets: Onsets roll
+            frames: frames roll
+            velocity: velcoity roll
+            onset_thresh (float): Onset threshold
+            frame_thresh (float): Frame threshold
+        
+        Returns
+        -------
+            pitches (np.ndarray): pitches for each [onset, offset] interval
+            intervals (np.ndarray): [onset, offset] intervals
+            velocities (np.ndarray): velocities for each interval
     """
 
     # Binarize
-    onsets = (onsets > onset_thresh).cpu().to(torch.uint8)
-    frames = (frames > frame_thresh).cpu().to(torch.uint8)
+    onsets = (onsets > onset_thresh).cpu().int()
+    frames = (frames > frame_thresh).cpu().int()
 
     # Rising edges = onset events
     onset_diff = torch.cat([onsets[:1, :], onsets[1:, :] - onsets[:-1, :]], dim=0) == 1
@@ -329,14 +287,14 @@ def note_extract(onsets, frames, velocity,
 
             # --- CASE 1: onset event ---
             if onset_diff[t, p].item():
-
                 if p in active:
                     # Re-onset while note is active → merge by adding velocity
                     if onsets[t, p].item():
-                        active[p][1].append(velocity[t, p].item())
+                        # active[p][1].append(velocity[t, p].item())
+                        active[p].append((t, velocity[t, p].item()))
                 else:
                     # Start a new note
-                    active[p] = [t, [velocity[t, p].item()]]
+                    active[p] = [(t, velocity[t, p].item())]
 
             # --- CASE 2: note continuation or ending ---
             if p in active:
@@ -344,17 +302,35 @@ def note_extract(onsets, frames, velocity,
 
                 if not still_on:
                     # Note ends here
-                    onset_time, vel_list = active[p]
+                    active_events = active[p] # active events for pitch p
+                    for i in range(len(active_events)-1):
+                        onset_time, v = active_events[i]
+                        next_onset_time, _ = active_events[i+1]
+                        pitches.append(p)
+                        intervals.append([onset_time, next_onset_time])
+                        velocities.append(v)
+                    
+                    # Then we add for the last element in the list
+                    onset_time, v = active_events[len(active_events)-1]
                     pitches.append(p)
                     intervals.append([onset_time, t])
-                    velocities.append(np.mean(vel_list) if vel_list else 0)
+                    velocities.append(v)
                     del active[p]
 
     # Close any notes that reach the final frame
-    for p, (onset_time, vel_list) in active.items():
-        pitches.append(p)
-        intervals.append([onset_time, T])
-        velocities.append(np.mean(vel_list) if vel_list else 0)
+    for p, active_events in active.items():
+        for i in range(len(active_events)-1):
+            onset_time, v = active_events[i]
+            next_onset_time, _ = active_events[i+1]
+            pitches.append(p)
+            intervals.append([onset_time, next_onset_time])
+            velocities.append(v)
+    
+    # Then we add for the last element in the list
+    onset_time, v = active_events[len(active_events)-1]
+    pitches.append(p)
+    intervals.append([onset_time, T])
+    velocities.append(v)
 
     return (np.array(pitches),
             np.array(intervals),
@@ -363,18 +339,20 @@ def note_extract(onsets, frames, velocity,
 
 def notes_to_frames(notes: np.ndarray, intervals: np.ndarray, shape: tuple) -> np.ndarray:
     """
-        Convert notes and intervals to a piano roll.
+        Convert notes (pitches) and [onset, offset] intervals 
+        list to a piano roll.
 
-        Args:
+        `Credits: https://github.com/jongwook/onsets-and-frames`
+
+        Args
         ------
             notes (np.ndarray): Notes.
             intervals (np.ndarray): Intervals of the notes.
             shape (tuple): Shape of the piano roll.
 
-        Returns:
+        Returns
         --------
             roll (np.ndarray): Piano roll.
-        Credits: https://github.com/jongwook/onsets-and-frames
     """
     # Create a piano roll of zeros
     roll = np.zeros(shape)
@@ -386,18 +364,18 @@ def notes_to_frames_vels(notes: np.ndarray, intervals: np.ndarray,
                          velocities: np.ndarray, shape: tuple) -> np.ndarray:
     """
         Convert notes and intervals to a piano roll.
-        
-        Args:
-        -------
-        notes (np.ndarray): Notes.
-        intervals (np.ndarray): Intervals of the notes.
-        shape (tuple): Shape of the piano roll.
-    
-        Returns:
-        --------
-        roll (np.ndarray): Piano roll.
 
-        Credits: https://github.com/jongwook/onsets-and-frames
+        `Credits: https://github.com/jongwook/onsets-and-frames`
+        
+        Args
+        ----
+            notes (np.ndarray): Notes.
+            intervals (np.ndarray): Intervals of the notes.
+            shape (tuple): Shape of the piano roll.
+    
+        Returns
+        -------
+            roll (np.ndarray): Piano roll.
     """
     # Create a piano roll of zeros
     roll = np.zeros(shape)
@@ -406,6 +384,20 @@ def notes_to_frames_vels(notes: np.ndarray, intervals: np.ndarray,
     return roll
 
 def events_to_roll(events: list[dict], shape: tuple, frame_rate: float) -> np.ndarray:
+    """ 
+        Convert a list of events into a piano
+        roll representation.
+
+        Args
+        ----
+            events (list): List of note events
+            shape (tuple): Shape of the piano roll
+            frame_rate (float): Frame rate
+        
+        Returns
+        -------
+            roll (np.ndarray): Piano roll
+    """
     roll = np.zeros(shape)
     
     if events is None:
@@ -421,3 +413,122 @@ def events_to_roll(events: list[dict], shape: tuple, frame_rate: float) -> np.nd
         # convert time to frame index
         roll[onset_time:offset_time, midi_note] = 1
     return roll
+
+
+# Credits: https://github.com/Yujia-Yan/Transkun/blob/main/transkun/Evaluation.py
+# The code below is useful for calculating activation-level metrics proposed in
+# the transkun paper. I still need to study the eqns...
+def intersectTwoInterval(intervalA, intervalB):
+    l = max(intervalA[0], intervalB[0])
+    r = min(intervalA[1], intervalB[1])
+    return (l,r)
+
+def findIntersectListOfIntervals(listA, listB):
+    i = 0
+    j = 0
+    result = []
+    while i<len(listA) and j<len(listB):
+        l,r = intersectTwoInterval(listA[i], listB[j])
+        if r>=l:
+            # check if (l,r) can be merged into the previous one
+            if len(result)>0 and result[-1][1] == l:
+                result[-1] = (result[-1][0],r)
+            else:
+                result.append((l,r))
+        
+        if listA[i][1] < listB[j][1]:
+            i = i+1
+        else:
+            j = j+1
+
+    return result
+    
+def computeIntervalLengthSum(intervals, countZero=True):
+    s = 0
+    if countZero:
+        prevEnd = -1
+        for e in intervals:
+            s+= e[1]-e[0]
+            if prevEnd < e[0]:
+                s+= 1
+
+            prevEnd = e[1]
+    else:
+        for e in intervals:
+            s+= e[1]-e[0]
+
+    return s
+
+def compareFramewise(intervalEst, intervalGT, countZero=True):
+    nEst = computeIntervalLengthSum(intervalEst, countZero)
+    nGT = computeIntervalLengthSum(intervalGT, countZero)
+    intersected = findIntersectListOfIntervals(intervalEst,intervalGT)
+    nIntersected = computeIntervalLengthSum(intersected, countZero)
+    nUnion = nGT+nEst- nIntersected
+
+    return nGT,nEst, nIntersected
+
+def compute_activation_metrics(pred: str|pretty_midi.PrettyMIDI, gt: str|pretty_midi.PrettyMIDI)-> tuple:
+    """ 
+        Computes the activation-level metrics. 
+        Note that this does not extend pedals as is
+        based on models trained without pedal extension.
+
+        Args
+        ----
+            pred (str | pretty_midi.PrettyMIDI): Path to MIDI transcription or pretty MIDI object
+            gt (str | pretty_midi.PrettyMIDI): Path to ground-truth MIDI file or pretty MIDI object
+        
+        Returns
+        -------
+            out (tuple): (precision, recall, f1-score)
+    """
+    if isinstance(gt, pretty_midi.PrettyMIDI):
+        gt = gt 
+    else:
+        gt = pretty_midi.PrettyMIDI(gt)
+
+    if isinstance(pred, pretty_midi.PrettyMIDI):
+        pred = pred 
+    else:
+        pred = pretty_midi.PrettyMIDI(pred)
+
+    # get notes for ground truth midi
+    gt_midi_notes = defaultdict(list)
+    for instrument in gt.instruments:
+        for note in instrument.notes:
+            gt_midi_notes[note.pitch].append(note)
+
+    # get notes for predicted midi
+    pred_midi_notes = defaultdict(list)
+    for instrument in pred.instruments:
+        for note in instrument.notes:
+            pred_midi_notes[note.pitch].append(note)
+
+    pred_ints = []
+    for i in range(0, 128):
+        ints = []
+        for n in pred_midi_notes[i]:
+            ints.append((n.start, n.end))
+        pred_ints.append(ints)
+
+    gt_ints = []
+    for i in range(0, 128):
+        ints = []
+        for n in gt_midi_notes[i]:
+            ints.append((n.start, n.end))
+        gt_ints.append(ints)
+    
+    num_gt = 0
+    num_pred = 0
+    num_correct = 0
+    for ints_a, ints_b in zip(pred_ints, gt_ints):
+        curr_num_gt, curr_num_pred, curr_num_corr = compareFramewise(ints_a, ints_b, countZero=False)
+        num_gt += curr_num_gt
+        num_pred += curr_num_pred
+        num_correct += curr_num_corr
+    
+    p = num_correct/(num_pred + 1e-8)
+    r = num_correct/(num_gt + 1e-8)
+    f = (2*num_correct)/(num_pred + num_gt + 1e-8)
+    return p, r, f

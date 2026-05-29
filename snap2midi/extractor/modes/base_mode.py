@@ -6,8 +6,37 @@ from tqdm import tqdm
 import yaml
 import csv
 
+SUPPORTED_DATASETS = [
+    "oaf_maps",
+    "maps",
+    "maestro",
+    "guitarset",
+    "musicnet",
+    "slakh"
+]
+
 class _BaseMode:
+    """ 
+        Different AMT models might have weird pre-processing 
+        pipelines (e.g hFT-Transformer takes context, Onsets and
+        Frames has its own methodology for chunking segments etc).
+        It is possible two models might have the same pre-processing
+        methods; in that case, we can make a wrapper for that. To
+        prevent issues with regards to this, we create different
+        modes for each model. However, the base mode has functionalities
+        that can be used by all the modes.
+    """
     def __init__(self, config: dict):
+        """ 
+            Take the config file and init
+            the BaseMode. 
+
+            Args
+            ------
+                config (dict):
+                    Config containing dataset_name,
+                    audio extension etc.
+        """
         # init the main core attributes
         self.config = config
         self.dataset_name = config["dataset_name"]
@@ -66,11 +95,13 @@ class _BaseMode:
             This function should be used only on datasets
             with audio and midi files having the same name.
 
-            Args:
+            Args
+            ----
                 audio_files (list): List of audio files
                 midi_files (list): List of midi files
 
-            Returns:
+            Returns
+            -------
                 None
         """
         assert len(audio_files) == len(midi_files), \
@@ -88,11 +119,13 @@ class _BaseMode:
             for the GuitarSet dataset (assuming the audio is
             from the audio_mono-mic folder) or for Slakh.
 
-            Args:
+            Args
+            -----
                 audio_files (list): List of audio files
                 midi_files (list): List of midi files
 
-            Returns:
+            Returns
+            --------
                 None
         """
         assert len(audio_files) == len(midi_files), \
@@ -121,10 +154,12 @@ class _BaseMode:
             Get the list of audio and midi files from the given path
             for the MAESTRO dataset.
 
-            Args:
+            Args
+            -----
                 path (str): Path to the MAESTRO dataset
 
-            Returns:
+            Returns
+            -------
                 audio_files (list): List of audio files
                 midi_files (list): List of midi files
         """
@@ -141,10 +176,12 @@ class _BaseMode:
             Get the list of audio and midi files from the given path
             for the GuitarSet dataset.
 
-            Args:
+            Args
+            -----
                 path (str): Path to the GuitarSet dataset
 
-            Returns:
+            Returns
+            --------
                 audio_files (list): List of audio files
                 midi_files (list): List of midi files
         """
@@ -180,10 +217,12 @@ class _BaseMode:
         folder called musicnet_em which should be in the same directory 
         with the test_data/, train_data/, etc. folders.
 
-        Args:
+        Args
+        -----
             path (str): Path to the MusicNet dataset
 
-        Returns:
+        Returns
+        --------
             audio_files (list): List of audio files
             midi_files (list): List of midi files
         """
@@ -207,10 +246,12 @@ class _BaseMode:
         Get the list of audio and midi files from the given path
         for the Slakh dataset.
 
-        Args:
+        Args
+        -----
             path (str): Path to the Slakh dataset
 
-        Returns:
+        Returns
+        --------
             audio_files (list): List of audio files
             midi_files (list): List of midi files
         """
@@ -264,10 +305,12 @@ class _BaseMode:
         This function extracts the audio and midi files
         for the MUS category only.
 
-        Args:
+        Args
+        -----
             path (str): Path to the MAPS dataset
 
-        Returns:
+        Returns
+        -------
             audio_files (list): List of audio files
             midi_files (list): List of midi files
         """
@@ -278,6 +321,19 @@ class _BaseMode:
         return audio_files, midi_files
     
     def _get_maps_train_val_test(self):
+        """ 
+            Get the training, validation and
+            test set for MAPS.
+
+            Returns
+            -------
+            train_files (list): 
+                Training files for MAPS
+            val_files (list): 
+                Validation files for MAPS
+            test_files (list): 
+                Test files for MAPS
+        """
         train_files = []
         val_files = []
         test_files = []
@@ -314,6 +370,19 @@ class _BaseMode:
         return train_files, val_files, test_files
     
     def _get_maestro_train_val_test(self):
+        """ 
+            Get the training, validation and
+            test set for MAESTRO.
+
+            Returns
+            -------
+            train_files (list): 
+                Training files for MAESTRO
+            val_files (list): 
+                Validation files for MAESTRO
+            test_files (list): 
+                Test files for MAESTRO
+        """
         train_files = []
         val_files = []
         test_files = []
@@ -356,18 +425,19 @@ class _BaseMode:
                     raise ValueError(f"Split {each[2]} not supported")
         return train_files, val_files, test_files
 
-
     def jams_to_midi(self, jam: jams.JAMS, q: int = 1) -> pretty_midi.PrettyMIDI:
         """
             Convert jams to midi using pretty_midi.
             Gotten from the `marl repo`_.
             .. _marl repo: https://github.com/marl/GuitarSet/blob/master/visualize/interpreter.py
 
-            Args:
+            Args
+            ----
                 jam (jams.JAMS): Jams object
                 q (int): 1: with pitch bend. q = 0: without pitch bend.
             
-            Returns:
+            Returns
+            -------
                 midi: PrettyMIDI object
         """
         # q = 1: with pitch bend. q = 0: without pitch bend.

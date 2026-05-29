@@ -12,15 +12,15 @@ def local_maxima(reg_roll: np.ndarray, frame: int, window: int) -> bool:
         local_maxima checks if there is a local maximum
         at [reg_roll[n] (a triangle shape with x[n] as the peak)
 
-        Args:
-        -----
+        Args
+        ----
             reg_roll (np.ndarray): Regression roll of shape (num_frames) at a given pitch
             frame (int): frame position
             window (int): size of window to consider to left
                              and right of x(n)
         
-        Returns:
-        --------
+        Returns
+        -------
             maxim (bool): True/False at x[n]
     """
     maxim = True
@@ -38,14 +38,14 @@ def binarize(reg_roll: np.ndarray, thresh: float, window: int):
         its dist. from the nearest onset/offset
         etc.
 
-        Args:
+        Args
         ----
             reg_roll (np.ndarray): Regressed roll
             thresh (float): threshold
             window (int): window size
         
-        Returns:
-        --------
+        Returns
+        -------
             bin_roll (np.ndarray): Binarized roll
             dist_roll (np.ndarray): Distance from nearest event
     """
@@ -82,8 +82,8 @@ def note_detect_events(frame_arr: np.ndarray, onset_arr: np.ndarray,
     """
         Detect event occurences of a give note based on its frame, onset, offset, and velocity arr.
 
-        Args:
-        -----
+        Args
+        ----
             frame_arr (np.ndarray): Frame arr for a given pitch class
             onset_arr (np.ndarray): Onset arr for a given pitch class
             onset_dist_arr (np.ndarray): Onset distance arr for a given pitch class
@@ -92,8 +92,8 @@ def note_detect_events(frame_arr: np.ndarray, onset_arr: np.ndarray,
             vel_arr (np.ndarray): Velocity arr for a given pitch class
             frame_thresh (float): Frame threshold
 
-        Returns:
-        --------
+        Returns
+        -------
             note_events (list): Detected events for a note: (onset, offset, onset_dist, offset_dist,
             velocity)
     """
@@ -159,15 +159,15 @@ def pedal_detect_events(frame_arr: np.ndarray, offset_arr: np.ndarray,
     """
         Detect event occurences for the pedal based on its frame and offset arr.
 
-        Args:
-        -----
+        Args
+        ----
             frame_arr (np.ndarray): Frame arr for a given pitch class
             offset_arr (np.ndarray): Offset arr for a given pitch class
             offset_dist_arr (np.ndarray): Offset distance arr for a given pitch class
             frame_thresh (float): Frame threshold
 
-        Returns:
-        --------
+        Returns
+        -------
             pedal_events (list): Detected pedal events: (onset, offset, onset_dist, offset_dist)
     """
     pedal_events: list = []
@@ -211,14 +211,16 @@ def get_note_events(model_output: dict, on_thresh: float, off_thresh: float,
     """
         get_note_events extracts the note events from the model output.
 
-        Args:
+        Args
+        ----
             model_output (dict): Model output
             on_thresh (float): Threshold for onset detection.
             off_thresh (float): Threshold for offset detection.
             frame_thresh (float): Frame threshold for detecting active frames.
             frames_per_second (float): Frames per second of the model output.
 
-        Returns:
+        Returns
+        -------
             est_events (np.ndarray): Estimated events: [onset, offset, note, norm_vel]
     """
 
@@ -274,14 +276,14 @@ def get_pedal_events(model_output: dict, pedal_thresh: float, frame_thresh: floa
     """
         get_pedal_events extracts the pedal events from the model output.
 
-    Args:
-    -----
+    Args
+    ----
         model_output (dict): Model output
         pedal_thresh (float): Threshold for pedal
         frames_per_second (float): Frames per second of the model output.
 
-    Returns:
-    --------
+    Returns
+    -------
         est_pedal_events (np.ndarray): Estimated pedal events: [onset, offset]
     """
 
@@ -318,6 +320,14 @@ def extend_pedal(midi: pretty_midi.PrettyMIDI):
             Extend the note offsets based on the sustain pedal information.
             This is Kong's implementation of the sustain pedal extension
             which is buggy.
+
+            Args
+            ----
+                midi (pretty_midi.PrettyMIDI): PrettyMIDI object
+            
+            Returns
+            -------
+                ex_midi (pretty_midi.PrettyMIDI): Extended prettyMIDI object.
         """
         # Extract the note events and pedal events
         note_events = []
@@ -418,6 +428,18 @@ def extend_pedal(midi: pretty_midi.PrettyMIDI):
         return ex_midi
 
 def stitch(arr: np.ndarray):
+    """ 
+        Stitches the results from the model
+        based on a 50% overlap sliding window.
+
+        Args
+        ----
+            arr (np.ndarray): Results from model
+        
+        Returns
+        -------
+            result (np.ndarray): Stitched results
+    """
     # Stitches the results from the model
     # so that everything aligns
     if arr.shape[0] == 1:
@@ -438,8 +460,19 @@ def stitch(arr: np.ndarray):
     result = np.concatenate(result)
     return result
 
-def load_extract_config():
-    with h5py.File("data/kong/extraction_config.h5", "r") as hf:
+def load_extract_config(ext_config_path: str):
+    """ 
+        Load extraction config.s
+
+        Args
+        ----
+            ext_config_path (str): Path to extraction config
+        
+        Returns
+        -------
+            extraction_config (dict): Extraction config
+    """
+    with h5py.File(ext_config_path, "r") as hf:
         extraction_config = dict(hf.attrs)
 
         # convert byte strings to normal strings and np.ints to int etc
@@ -451,41 +484,54 @@ def load_extract_config():
     return extraction_config
 
 def load_kong(config: dict):
+    """ 
+        Load Kong model.
+
+        Args
+        ----
+            config (dict): Configuration dictionary
+        
+        Returns
+        -------
+            model (Kong): Kong model
+    """
     # Load the necessary components from the config
     path = config["checkpoint_note_path"]
-    user_ext_config = config.get("user_ext_config", None)
+    ext_config_path = config["ext_config_path"]
 
-    # Initialize the Kong model with the loaded components
-    if user_ext_config is None:
-        # Using the extraction config used during training
-        # can be a bad idea for inference
-        extraction_config = load_extract_config()
-    else:
-        extraction_config = user_ext_config
+    # Initialize the Kong model with the loaded component
+    extraction_config = load_extract_config(ext_config_path)
+
     model = KongModel(extraction_config, config["momentum"], cmp=config["cmp"], \
                       factors=config["factors"])
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = model.to(device)
-    model.load_state_dict(torch.load(path, weights_only=False)["model_state_dict"])
+    model.load_state_dict(torch.load(path, weights_only=True)["state_dict"])
     model.eval()
     return model
 
 def load_pedal(config: dict):
+    """ 
+        Load Kong pedal model.
+
+        Args
+        ----
+            config (dict): Configuration dictionary
+        
+        Returns
+        -------
+            model (KongPedal): Kong pedal model
+    """
     # Load the necessary components from the config
     path = config["checkpoint_pedal_path"]
-    user_ext_config = config.get("user_ext_config", None)
+    ext_config_path = config["ext_config_path"]
 
-    # Initialize the Kong model with the loaded components
-    if user_ext_config is None:
-        # Using the extraction config used during training
-        # can be a bad idea for inference
-        extraction_config = load_extract_config()
-    else:
-        extraction_config = user_ext_config
+    # Initialize the Kong model with the loaded component
+    extraction_config = load_extract_config(ext_config_path)
     model = KongPedal(extraction_config, config["momentum"], cmp=config["cmp"], \
                       factors=config["factors"])
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = model.to(device)
-    model.load_state_dict(torch.load(path, weights_only=False)["model_state_dict"])
+    model.load_state_dict(torch.load(path, weights_only=True)["state_dict"])
     model.eval()
     return model

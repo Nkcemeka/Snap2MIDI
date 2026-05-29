@@ -12,8 +12,24 @@ from mir_eval.transcription_velocity import precision_recall_f1_overlap as prf_v
 from mir_eval.util import midi_to_hz
 from sklearn.metrics import precision_recall_fscore_support as prfs
 import pprint
+from pathlib import Path
 
-def get_midi_note_events(midi, start: float, end: float) -> list:
+def get_midi_note_events(midi, start: float, end: float) -> np.ndarray:
+        """ 
+            Gets MIDI note events as a 
+            numpy array based on a start
+            and end time.
+
+            Args
+            ----
+                midi (pretty_midi.PrettyMIDI): PrettyMIDI object
+                start (float): start time
+                end (float): end time
+            
+            Returns
+            -------
+                note_events (np.ndarray): Numpy array of note events
+        """
         note_events = []
         for instrument in midi.instruments:
             if not instrument.is_drum:
@@ -31,9 +47,27 @@ def get_midi_note_events(midi, start: float, end: float) -> list:
         return np.array(note_events)
 
 
-
 def get_pedal_frames(midi: pretty_midi.PrettyMIDI, \
-                  start: float, end: float, frame_rate: int) -> np.ndarray:
+                  start: float, end: float, frame_rate: float) -> tuple:
+
+        """ 
+            Gets the pedal events in an array
+            and also the pedal frames given a
+            start and end time.
+
+            Args
+            ----
+                midi (pretty_midi.PrettyMIDI): PrettyMIDI object
+                start (float): start time
+                end (float): end time
+                frame_rate (float): Frame rate
+            
+            Returns
+            -------
+                pedal_frames (np.ndarray): frame-based array of active pedal
+                                           activity
+                pedal_events (np.ndarray): List of pedal events
+        """
 
         duration = end - start
         num_frames = int(round(duration * frame_rate)) + 1
@@ -84,7 +118,24 @@ def get_pedal_frames(midi: pretty_midi.PrettyMIDI, \
         return pedal_frames, np.array(pedal_events)
 
 def get_frames(midi: pretty_midi.PrettyMIDI, \
-                  start: float, end: float, frame_rate: int, max_pitch: int, min_pitch: int) -> np.ndarray:
+    start: float, end: float, frame_rate: float, max_pitch: int, min_pitch: int) -> np.ndarray:
+        
+        """ 
+            Gets label frames given a start and end time.
+
+            Args
+            ----
+                midi (pretty_midi.PrettyMIDI): PrettyMIDI object
+                start (float): start time
+                end (float): end time
+                frame_rate (float): frame rate
+                max_pitch (int): Maximum MIDI pitch
+                min_pitch (int): Minimum MIDI pitch
+            
+            Returns
+            -------
+                label_frames (np.ndarray): Label frames
+        """
 
         duration = end - start
         num_frames = int(round(duration * frame_rate)) + 1
@@ -110,13 +161,28 @@ def get_frames(midi: pretty_midi.PrettyMIDI, \
 
 @torch.no_grad()
 def evaluate(config: dict):
+    """ 
+        Evaluate the kong model
+        based on the test set.
+
+        Args
+        ----
+            config (dict): Configuration dictionary
+        
+        Returns
+        -------
+            frame_metrics (dict): Frame metrics
+            note_metrics (dict): Note metrics
+    """
     # glob all the h5 files in the test directory
-    test_files = glob.glob("data/kong/test/*.h5")
+    test_files = glob.glob(f"{config["test_path"]}/*.h5")
     dataset_length = len(test_files)
 
     model = load_kong(config)
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    extraction_config = load_extract_config()
+    base_path = str(Path(config["test_path"]).parent)
+    extraction_config_path = f"{base_path}/extraction_config.h5"
+    extraction_config = load_extract_config(extraction_config_path)
     frame_rate = extraction_config["frame_rate"]
     min_pitch = extraction_config["min_pitch"]
     max_pitch = extraction_config["max_pitch"]
@@ -257,7 +323,20 @@ def evaluate(config: dict):
 
 @torch.no_grad()
 def evaluate_pedal(config: dict):
-    test_files = glob.glob("data/kong/test/*.h5")
+    """ 
+        Evaluate the kong pedal model
+        based on the test set.
+
+        Args
+        ----
+            config (dict): Configuration dictionary
+        
+        Returns
+        -------
+            frame_metrics (dict): Frame metrics
+            note_metrics (dict): Note metrics
+    """
+    test_files = glob.glob(f"{config["test_path"]}/*.h5")
     dataset_length = len(test_files)
 
     model = load_pedal(config)

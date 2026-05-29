@@ -10,7 +10,6 @@ import copy
 import torch
 pretty_midi.pretty_midi.MAX_TICK = 1e10
 
-
 class NoteSeg:
     """
         Returns note events and pedal
@@ -112,9 +111,12 @@ class NoteSeg:
 class KongDataset(Dataset):
     def __init__(self, emb_path: str, extend_pedal: bool = True) -> None:
         """
-        Args:
-            emb_path (str): path to npz files containing audio and feature data.
-            extend_pedal (bool): Whether to extend note offsets. Default is True.
+            Instantiate dataset class.
+            
+            Args
+            ----
+                emb_path (str): path to npz files containing audio and feature data.
+                extend_pedal (bool): Whether to extend note offsets. Default is True.
         """
         super().__init__()
         if emb_path is None:
@@ -126,19 +128,46 @@ class KongDataset(Dataset):
         self.data.extend(sorted(Path(emb_path).rglob("*.h5")))
 
         # Load the min and max pitches from the extraction config
-        with h5py.File("data/kong/extraction_config.h5", "r") as hf:
+        splits = emb_path.split("/")
+        if splits[-1] == "":
+            splits = splits[:-1]
+        base_path = "/".join(splits[:-1])
+        with h5py.File(f"{base_path}/extraction_config.h5", "r") as hf:
             self.min_pitch = hf.attrs["min_pitch"]
             self.max_pitch = hf.attrs["max_pitch"]
             self.frame_rate = hf.attrs["frame_rate"]
+    
+        
+        self.seg_list = []
+        for path in self.data:
+            with h5py.File(str(path), 'r') as hf:
+                if "train" in emb_path or "val" in emb_path:
+                    midi_path = hf.attrs['midi_path']
+                    audio_len = hf['audio'].shape[-1]
+                    window_samples = hf.attrs['window_samples']
+                    hop_samples = hf.attrs['hop_samples']
+                    start_list = np.arange(0, audio_len - window_samples + 1, hop_samples).tolist()
+                    zipped_data = list(zip([path]*len(start_list), [midi_path]*len(start_list), start_list))
+                    self.seg_list.extend(zipped_data)
+                else:
+                    # for test set, we use the whole file
+                    midi_path = hf.attrs['midi_path']
+                    self.seg_list.append((path, midi_path, 0))
 
-    def __getitem__(self, metadata) -> dict:
+    def __getitem__(self, idx: int) -> dict:
         """
-            Args:
-                metadata (tuple): (path to h5 file, path to midi file, start sample)
+            Get item at a particular index.
 
-            Returns:
+            Args
+            ----
+                idx (int): Index to segment list
+
+            Returns
+            -------
                 dict: A dictionary containing the audio and labels
         """
+        # metadata (tuple): (path to h5 file, path to midi file, start sample)
+        metadata = self.seg_list[idx]
         path, midi_path, start_sample = metadata
         item_dict = {}
 
@@ -167,7 +196,15 @@ class KongDataset(Dataset):
         return item_dict
 
     def __len__(self) -> int:
-        return len(self.data)
+        """ 
+            Return the number of dataset
+            items.
+
+            Returns
+            -------
+                length (int): length of segment items.
+        """
+        return len(self.seg_list)
     
     def _get_label_roll(self, midi: pretty_midi.PrettyMIDI, \
                   start: float, end: float, frame_rate: int) -> dict:
@@ -175,14 +212,15 @@ class KongDataset(Dataset):
             Get the label and pedal rolls for a given audio segment.
             The regressed rolls generated follow Kong's model!
 
-            Args:
+            Args
+            ----
                 midi (pretty_midi.PrettyMIDI): PrettyMIDI object
-                duration (float): Duration of the audio segment
-                hop_size (float): Hop size in seconds
-                idx (int): Index of the audio segment
+                start (float): Start time in seconds
+                end (float): End time in seconds
                 frame_rate (int): The frame rate of the piano roll
 
-            Returns:
+            Returns
+            -------
                 target_dict: {
                     label_frames (np.ndarray): Frames label
                     label_onsets (np.ndarray): Onsets label
@@ -374,6 +412,14 @@ class KongDataset(Dataset):
             according to original code from the Kong 
             Bytedance repo. This implementation is buggy, 
             but I am keeping it for reproducibility.
+
+            Args
+            ----
+                midi (pretty_midi.PrettyMIDI): pretty midi object
+            
+            Returns
+            -------
+                ext_midi (pretty_midi.PrettyMIDI): Extended MIDI
         """
         # Extract the note events and pedal events
         note_events = []
@@ -480,11 +526,13 @@ class KongDataset(Dataset):
             True if the pedal is pressed before the start of the audio segment, otherwise
             returns False.
 
-            Args:
+            Args
+            ----
                 midi (pretty_midi.PrettyMIDI): PrettyMIDI object
                 start (float): Start time of the audio segment
 
-            Returns:
+            Returns
+            --------
                 bool: True if the pedal is pressed before the start of the audio segment, 
                       False otherwise
         """
@@ -501,17 +549,18 @@ class KongDataset(Dataset):
             This implementation is from Google and is not buggy
             unlike the original Kong implementation.
             
-            Args:
+            Args
+            ----
                 midi_path (str): Path to the MIDI file.
                 CC_SUSTAIN (int): MIDI control change number for sustain pedal. Default is 64.
             
-            Returns:
+            Returns
+            -------
                 midi_copy (pretty_midi.PrettyMIDI): MIDI file with extended sustain events.
         """
         # make a copy of the MIDI file
         midi = pretty_midi.PrettyMIDI(midi_path)
         midi_copy = copy.deepcopy(midi)
-
         
         # we want to deal with events in the following order:
         # PEDAL_DOWN, PEDAL_UP, ONSET, OFFSET
@@ -605,11 +654,13 @@ class KongDataset(Dataset):
             Kong's approach! The code is slightly different
             from the original.
 
-            Args:
+            Args
+            -----
                 input (np.ndarray): Roll to regress
                 frame_rate (int): The frame rate of the piano roll
                 
-            Returns:
+            Returns
+            -------
                 output (np.ndarray): Regressed roll
         """
         step = 1. / frame_rate
@@ -640,126 +691,21 @@ class KongDataset(Dataset):
 
         return output
 
-
-class Sampler:
-    def __init__(self, base_path: str, split: str, batch_size: int, random_seed=1234):
-        """
-            Sampler is used to sample audio segments for training
-            or data evaluation. This is useful because extraction
-            of Kong can take a lot of disk space
-
-            Credits: `https://github.com/bytedance/piano_transcription/blob/master/utils/data_generator.py`
-        """
-        self.paths = sorted(Path(base_path).rglob("*.h5"))
-        self.batch_size = batch_size
-        self.rng = np.random.default_rng(random_seed)
-        self.seg_list = []
-
-        for path in self.paths:
-            with h5py.File(path, 'r') as hf:
-                if split == "train" or split == "val":
-                    midi_path = hf.attrs['midi_path']
-                    audio_len = hf['audio'].shape[-1]
-                    window_samples = hf.attrs['window_samples']
-                    hop_samples = hf.attrs['hop_samples']
-                    start_list = np.arange(0, audio_len - window_samples + 1, hop_samples).tolist()
-                    zipped_data = list(zip([path]*len(start_list), [midi_path]*len(start_list), start_list))
-                    self.seg_list.extend(zipped_data)
-                else:
-                    # for test set, we use the whole file
-                    midi_path = hf.attrs['midi_path']
-                    self.seg_list.append((path, midi_path, 0))
-        
-        self.idx = 0
-        self.seg_idxs = np.arange(len(self.seg_list))
-        self.rng.shuffle(self.seg_idxs)
-    
-    def __iter__(self):
-        while True:
-            batch = []
-            for _ in range(self.batch_size):
-                seg_idx = self.seg_idxs[self.idx]
-                self.idx += 1
-
-                if self.idx >= len(self.seg_idxs):
-                    self.idx = 0
-                    self.rng.shuffle(self.seg_idxs)
-
-                batch.append(self.seg_list[seg_idx])
-            
-            yield batch
-
-        
-    def __len__(self):
-        return -1
-    
-    def state_dict(self):
-        return {
-            "idx": self.idx,
-            "seg_idxs": self.seg_idxs
-        }
-    
-    def load_state_dict(self, state_dict):
-        self.idx = state_dict["idx"]
-        self.seg_idxs = state_dict["seg_idxs"]
-
-
-class EvalSampler:
-    def __init__(self, base_path: str, split: str, batch_size: int, random_seed=1234):
-        """
-            Sampler is used to sample audio segments for training
-            or data evaluation. This is useful because extraction
-            of Kong can take a lot of disk space
-
-            Credits: `https://github.com/bytedance/piano_transcription/blob/master/utils/data_generator.py`
-        """
-        self.paths = sorted(Path(base_path).rglob("*.h5"))
-        self.batch_size = batch_size
-        self.rng = np.random.default_rng(random_seed)
-        self.seg_list = []
-        self.max_eval_iter = 20 # max. no of mini batches to eval on
-
-        for path in self.paths:
-            with h5py.File(path, 'r') as hf:
-                if split == "train" or split == "val":
-                    midi_path = hf.attrs['midi_path']
-                    audio_len = hf['audio'].shape[-1]
-                    window_samples = hf.attrs['window_samples']
-                    hop_samples = hf.attrs['hop_samples']
-                    start_list = np.arange(0, audio_len - window_samples + 1, hop_samples).tolist()
-                    zipped_data = list(zip([path]*len(start_list), [midi_path]*len(start_list), start_list))
-                    self.seg_list.extend(zipped_data)
-                else:
-                    # for test set, we use the whole file
-                    midi_path = hf.attrs['midi_path']
-                    self.seg_list.append((path, midi_path, 0))
-        
-        self.seg_idxs = np.arange(len(self.seg_list))
-        self.rng.shuffle(self.seg_idxs)
-    
-    def __iter__(self):
-        idx = 0
-        iter = 0
-        while True:
-            if iter == self.max_eval_iter:
-                break
-
-            batch = []
-            for _ in range(self.batch_size):
-                seg_idx = self.seg_idxs[idx]
-                idx += 1
-
-                batch.append(self.seg_list[seg_idx])
-            
-            iter += 1
-            yield batch
-
-        
-    def __len__(self):
-        return -1
-    
-
 def collate_fn(list_data_dict):
+    """ 
+        Collate function for dataloader. 
+
+        Args
+        ----
+            list_data_dict (dict): contains a list of dicts
+                                   for the batch.
+        
+        Returns
+        -------
+            np_data_dict (dict): Contains the appropriate data
+                                 across the batch for each 
+                                 key.
+    """
     np_data_dict = {}
     for key in list_data_dict[0].keys():
         np_data_dict[key] = np.array([data_dict[key] for data_dict in list_data_dict])
@@ -776,6 +722,21 @@ def collate_fn(list_data_dict):
     return np_data_dict
 
 def get_note_events(midi, start: float, end: float, min_pitch: int = 21) -> list:
+        """ 
+            Gets the note events as a list
+            within a time range. 
+
+            Args
+            ----
+                midi (pretty_midi.PrettyMIDI): PrettyMIDI object
+                start (float): Start time
+                end (float): End time
+                min_pitch (int): Minimum MIDI pitch for our MIDI notes
+            
+            Returns
+            -------
+                note_events (np.ndarray): List of note events.
+        """
         note_events = []
         for instrument in midi.instruments:
             if not instrument.is_drum:

@@ -27,7 +27,8 @@ class _OafFramedEvents:
                  sample_rate: float, frame_rate: float, min_pitch: float = 21, max_pitch: float = 108,
                  onset_length: float = 32, offset_length: float = 32, ignore_duration: bool = False, extend_pedal: bool = True) -> None:
         """
-            Args:
+            Args
+            -----
                 audio_path (str): Path to audio file
                 midi_path (str): Path to MIDI file
                 min_frame_secs (float): Minimum frame duration in seconds
@@ -41,7 +42,8 @@ class _OafFramedEvents:
                 ignore_duration (bool): If True, ignore min and max frame duration and use the whole file as a single frame
                 extend_pedal (bool): If True, extend the note offsets based on pedal information. Default is True.
 
-            Returns:
+            Returns
+            --------
                 None
         """
         # load the audio file
@@ -157,10 +159,12 @@ class _OafFramedEvents:
         """
             Get the audio frame and label frame at the given index.
             
-            Args:
+            Args
+            -----
                 index (int): Index of the audio frame and label frame
             
-            Returns:
+            Returns
+            --------
                 tuple[np.ndarray, dict]: Audio frame and label frame at the given index
         """
         return self.audio_frames[index], self.label_frames[index]
@@ -169,14 +173,18 @@ class _OafFramedEvents:
     def _get_label(self, midi, duration: float, start: float, end: float, frame_rate: float, c=5) -> dict:
         """
             Get the label for the given MIDI file and duration.
-            Args:
+
+            Args
+            ------
                 midi (pretty_midi.PrettyMIDI): MIDI file
                 duration (float): Duration of the label in seconds
                 start (float): Start time of the label in seconds
                 end (float): End time of the label in seconds
                 frame_rate (float): Frame rate for the label
                 c (int): Weighting parameter for the label weights
-            Returns:
+
+            Returns
+            --------
                 dict: Label dictionary containing onset, offset, velocity and frame information
         """
 
@@ -235,7 +243,11 @@ class _OafFramedEvents:
                     label_frames[onset_start:frame_end, \
                                  note.pitch - self.min_pitch] = 1.0
                     
-                    label_velocities[start_frame:frame_end, \
+                    # I use onset_start below (previously I had start_frame)
+                    # Not sure what to use tbh; need to probably look at the Magenta code
+                    # more closely, but since the splits rarely occur at onset events based on 
+                    # the algorithm, I think we might be good to go
+                    label_velocities[onset_start:frame_end, \
                                      note.pitch - self.min_pitch] = note.velocity / max_velocity
                     
                     label_offsets[end_frame:offset_end, \
@@ -260,7 +272,8 @@ class _OafFramedEvents:
         """
             Gets the split windows based on the min and max frame durations.
             
-            Returns:
+            Returns
+            -------
                 list[tuple[float, float]]: List of tuples with start and end times of the split windows
         """
         return self._extract_split_windows()
@@ -384,10 +397,12 @@ class _OafFramedEvents:
         """
             Validate the splits to ensure they meet the criteria for min and max frame durations.
 
-            Args:
+            Args
+            -----
                 splits (list[float]): List of split points in seconds
 
-            Returns:
+            Returns
+            --------
                 bool: True if the splits are valid, False otherwise
         """
         for i, j in zip(splits[:-1], splits[1:]):
@@ -412,10 +427,12 @@ class _OafFramedEvents:
         """
             Extend the sustain events in the MIDI file.
             
-            Args:
+            Args
+            ----
                 CC_SUSTAIN (int): MIDI control change number for sustain pedal. Default is 64.
             
-            Returns:
+            Returns
+            -------
                 midi_copy (pretty_midi.PrettyMIDI): MIDI file with extended sustain events.
         """
         # make a copy of the MIDI file
@@ -507,10 +524,12 @@ class _OafFramedEvents:
             Get the gaps in the MIDI events where no notes are played
             or active.
             
-            Args:
+            Args
+            ----
                 midi (pretty_midi.PrettyMIDI): MIDI file with extended sustain events
             
-            Returns:
+            Returns
+            --------
                 gaps (list): List of tuples with start and end times of the gaps
         """
         # A gap is defined as a time interval between the last active note end and the 
@@ -582,6 +601,20 @@ class _OafFramedEvents:
         return gaps
 
     def _last_zero_crossing(self, audio: np.ndarray, start: int, end: int) -> int | None:
+        """ 
+            Gets the last zero crossing for a certain
+            audio segment. 
+
+            Args
+            -----
+                audio (np.ndarray): audio buffer
+                start (int): start index in samples
+                end (int): end index in samples
+            
+            Returns
+            --------
+                last_zero_cross (int | None): last zero crossing
+        """
         
         # a zero crossing is defined as a point where the audio signal changes sign
         # we find the places where the signal goes from +ve to non-positive
@@ -651,15 +684,26 @@ class _OAFMode(_BaseMode):
         """
         
         # Implement the extraction logic here
-        if self.dataset_name == "maps":
+        splits = ["train", "val", "test"]
+        if self.dataset_name == "oaf_maps":
+            # oaf_maps follows the actual paper
             train_files, val_files, test_files = self._get_maps_train_val_test()
             train_files = train_files + val_files
             splits = ["train", "test"]
-            splits_data = [train_files, test_files]
+        elif self.dataset_name == "maps":
+            train_files, val_files, test_files = self._get_maps_train_val_test()
+        elif self.dataset_name == "maestro":
+            train_files, val_files, test_files = self._get_maestro_train_val_test()
         else:
             raise ValueError(f"Dataset {self.dataset_name} not supported!")
+
+        if self.dataset_name == "oaf_maps":
+            splits_data = [train_files, test_files]
+        else:
+            splits_data = [train_files, val_files, test_files]
         
-        print(f"Total train files found: {len(train_files)}, total test files found: {len(test_files)}")
+        print(f"Total train files found: {len(train_files)\
+            }, total val files found:{len(val_files)}, total test files found: {len(test_files)}")
 
         # create the directory for the splits
         for split in splits:
@@ -735,12 +779,15 @@ class _OAFMode(_BaseMode):
     def _get_feature(self, audio : np.ndarray, feature: str, feature_params: dict):
         """
             Get the feature for a given audio segment
-            Args:
+
+            Args
+            -----
                 audio (np.ndarray): Audio segment
                 feature (str): Feature_type to extract
                 feature_params (dict): Parameters for the feature extraction
 
-            Returns:
+            Returns
+            --------
                 feature (np.ndarray): Feature for the audio segment
         """
 

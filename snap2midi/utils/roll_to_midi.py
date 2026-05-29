@@ -8,7 +8,8 @@ def conv_to_midi(piano_roll: np.ndarray, filename: str, frame_rate: int, \
     """ 
         Convert a piano roll to MIDI file.
 
-        Args:
+        Args
+        ----
             piano_roll (np.ndarray): Piano roll of shape (frames, 128)
             output_path (str): Path to store MIDI file
             filename (str): name of MIDI file
@@ -16,7 +17,8 @@ def conv_to_midi(piano_roll: np.ndarray, filename: str, frame_rate: int, \
                           the final output will be slowed down or sped up
                           compared to original!
         
-        Returns:
+        Returns
+        -------
             midi (MIDI object): MIDI file
     """
     piano_roll = piano_roll.astype(int) # convert to int

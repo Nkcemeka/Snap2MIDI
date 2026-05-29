@@ -2,25 +2,39 @@
 import torch
 import torch.nn as nn
 from torchinfo import summary
+import pytorch_lightning as pl
 
-
-class HFT(nn.Module):
-    """
-        HFT implements the hFT-Transformer model for music transcription.
-        It consists of an encoder and a decoder, where the encoder processes the input spectrogram
-        and the decoder generates the MIDI outputs in two hierarchies: frequency and time.
-
-        Args:
-            encoder (HFTEncoder): The encoder part of the hFT-Transformer model.
-            decoder (HFTDecoder): The decoder part of the hFT-Transformer model.
-    """
-    def __init__(self, encoder, decoder):
+class HFT(pl.LightningModule):
+    def __init__(self, encoder, decoder, params: dict):
         """
-            Initializes the HFT class.
+            HFT implements the hFT-Transformer model for music transcription.
+            It consists of an encoder and a decoder, where the encoder processes the input spectrogram
+            and the decoder generates the MIDI outputs in two hierarchies: frequency and time.
+
+            Args:
+                encoder (HFTEncoder): The encoder part of the hFT-Transformer model.
+                decoder (HFTDecoder): The decoder part of the hFT-Transformer model.
+                params (dict): configuration dictionary
         """
         super().__init__()
+        self.config = params
         self.hft_encoder = encoder
         self.hft_decoder = decoder
+        self.init_weights()
+        self.save_hyperparameters(ignore=["encoder", "decoder"])
+        self.bce = nn.BCELoss()
+        self.ce = nn.CrossEntropyLoss()
+    
+    def init_weights(self):
+        """
+            Initialize weights of the model using Xavier uniform initialization.
+
+            Args:
+                m (torch.nn.Module): The module to initialize weights for.
+        """
+        for m in self.modules():
+            if hasattr(m, 'weight') and (m.weight.dim() > 1):
+                nn.init.xavier_uniform_(m.weight.data)
     
     def forward(self, spectrogram):
         """
@@ -40,9 +54,182 @@ class HFT(nn.Module):
         return out_on_1st, out_off_1st, out_frame_1st, out_velocity_1st, \
                attn_freq, out_on_2nd, out_off_2nd, out_frame_2nd, out_velocity_2nd
 
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.config["lr"])
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "epoch",
+                "frequency": 1,
+                "monitor": "valid_total_loss"
+            }
+        }
+    
+    def bce_loss(self, preds, target):
+        return self.bce(preds, target)
+
+    def ce_loss(self, preds, target):
+        return self.ce(preds, target)
+
+    def training_step(self, train_batch, batch_idx):
+        input_spec, label_onset, label_offset, label_frames,\
+            label_velocity = train_batch
+        
+        output_onset_1st, output_offset_1st, output_frames_1st, output_velocity_1st, attention, \
+            output_onset_2nd, output_offset_2nd, output_frames_2nd, output_velocity_2nd = self.forward(input_spec)
+        
+        # flatten the outputs and labels
+        output_onset_1st = output_onset_1st.contiguous().view(-1)
+        output_offset_1st = output_offset_1st.contiguous().view(-1)
+        output_frames_1st = output_frames_1st.contiguous().view(-1)
+        output_velocity_1st = output_velocity_1st.contiguous().view(-1, output_velocity_1st.shape[-1])
+        output_onset_2nd = output_onset_2nd.contiguous().view(-1)
+        output_offset_2nd = output_offset_2nd.contiguous().view(-1)
+        output_frames_2nd = output_frames_2nd.contiguous().view(-1)
+        output_velocity_2nd = output_velocity_2nd.contiguous().view(-1, output_velocity_2nd.shape[-1])
+        label_onset = label_onset.contiguous().view(-1)
+        label_offset = label_offset.contiguous().view(-1)
+        label_frames = label_frames.contiguous().view(-1)
+        label_velocity = label_velocity.contiguous().view(-1)
+
+        # compute losses
+        # 1st loss
+        loss_onset_1st = self.bce(output_onset_1st, label_onset)
+        loss_offset_1st = self.bce(output_offset_1st, label_offset)
+        loss_frames_1st = self.bce(output_frames_1st, label_frames)
+        loss_velocity_1st = self.ce(output_velocity_1st, label_velocity)
+        loss_1st = loss_onset_1st + loss_offset_1st + loss_frames_1st + loss_velocity_1st
+
+        # 2nd loss
+        loss_onset_2nd = self.bce(output_onset_2nd, label_onset)
+        loss_offset_2nd = self.bce(output_offset_2nd, label_offset)
+        loss_frames_2nd = self.bce(output_frames_2nd, label_frames)
+        loss_velocity_2nd = self.ce(output_velocity_2nd, label_velocity)
+        loss_2nd = loss_onset_2nd + loss_offset_2nd + loss_frames_2nd + loss_velocity_2nd
+
+        # total loss
+        loss = self.config["weight_A"] * loss_1st + self.config["weight_B"] * loss_2nd
+        self.log_dict({
+            'train_onset_loss_1st': loss_onset_1st.item(),
+            'train_onset_loss_2nd': loss_onset_2nd.item(),
+            'train_offset_loss_1st': loss_offset_1st.item(),
+            'train_offset_loss_2nd': loss_offset_2nd.item(),
+            'train_frames_loss_1st': loss_frames_1st.item(),
+            'train_frames_loss_2nd': loss_frames_2nd.item(),
+            'train_velocity_loss_1st': loss_velocity_1st.item(),
+            'train_velocity_loss_2nd': loss_velocity_2nd.item(),
+            'train_total_loss': loss.item()
+        }, logger=True, on_step=False, on_epoch=True)
+        return loss
+
+    def validation_step(self, val_batch, batch_idx):
+        input_spec, label_onset, label_offset, label_frames,\
+            label_velocity = val_batch
+        
+        # Forward pass
+        output_onset_1st, output_offset_1st, output_frames_1st, output_velocity_1st, attention, \
+        output_onset_2nd, output_offset_2nd, output_frames_2nd, output_velocity_2nd = self.forward(input_spec)
+
+        # flatten the outputs and labels
+        output_onset_1st = output_onset_1st.contiguous().view(-1)
+        output_offset_1st = output_offset_1st.contiguous().view(-1)
+        output_frames_1st = output_frames_1st.contiguous().view(-1)
+        output_velocity_1st = output_velocity_1st.contiguous().view(-1, output_velocity_1st.shape[-1])
+        output_onset_2nd = output_onset_2nd.contiguous().view(-1)
+        output_offset_2nd = output_offset_2nd.contiguous().view(-1)
+        output_frames_2nd = output_frames_2nd.contiguous().view(-1)
+        output_velocity_2nd = output_velocity_2nd.contiguous().view(-1, output_velocity_2nd.shape[-1])
+        label_onset = label_onset.contiguous().view(-1)
+        label_offset = label_offset.contiguous().view(-1)
+        label_frames = label_frames.contiguous().view(-1)
+        label_velocity = label_velocity.contiguous().view(-1)
+
+        # compute losses
+        # 1st loss
+        loss_onset_1st = self.bce(output_onset_1st, label_onset)
+        loss_offset_1st = self.bce(output_offset_1st, label_offset)
+        loss_frames_1st = self.bce(output_frames_1st, label_frames)
+        loss_velocity_1st = self.ce(output_velocity_1st, label_velocity)
+        loss_1st = loss_onset_1st + loss_offset_1st + loss_frames_1st + loss_velocity_1st
+
+        # 2nd loss
+        loss_onset_2nd = self.bce(output_onset_2nd, label_onset)
+        loss_offset_2nd = self.bce(output_offset_2nd, label_offset)
+        loss_frames_2nd = self.bce(output_frames_2nd, label_frames)
+        loss_velocity_2nd = self.ce(output_velocity_2nd, label_velocity)
+        loss_2nd = loss_onset_2nd + loss_offset_2nd + loss_frames_2nd + loss_velocity_2nd
+
+        # total loss
+        loss = self.config["weight_A"] * loss_1st + self.config["weight_B"] * loss_2nd
+        self.log_dict({
+            'valid_onset_loss_1st': loss_onset_1st.item(),
+            'valid_onset_loss_2nd': loss_onset_2nd.item(),
+            'valid_offset_loss_1st': loss_offset_1st.item(),
+            'valid_offset_loss_2nd': loss_offset_2nd.item(),
+            'valid_frames_loss_1st': loss_frames_1st.item(),
+            'valid_frames_loss_2nd': loss_frames_2nd.item(),
+            'valid_velocity_loss_1st': loss_velocity_1st.item(),
+            'valid_velocity_loss_2nd': loss_velocity_2nd.item(),
+            'valid_total_loss': loss.item()
+        }, logger=True, on_step=False, on_epoch=True)
+        return loss
+    
+    def test_step(self, test_batch, batch_idx):
+        input_spec, label_onset, label_offset, label_frames,\
+            label_velocity = test_batch
+        
+        # Forward pass
+        output_onset_1st, output_offset_1st, output_frames_1st, output_velocity_1st, attention, \
+        output_onset_2nd, output_offset_2nd, output_frames_2nd, output_velocity_2nd = self.forward(input_spec)
+
+        # flatten the outputs and labels
+        output_onset_1st = output_onset_1st.contiguous().view(-1)
+        output_offset_1st = output_offset_1st.contiguous().view(-1)
+        output_frames_1st = output_frames_1st.contiguous().view(-1)
+        output_velocity_1st = output_velocity_1st.contiguous().view(-1, output_velocity_1st.shape[-1])
+        output_onset_2nd = output_onset_2nd.contiguous().view(-1)
+        output_offset_2nd = output_offset_2nd.contiguous().view(-1)
+        output_frames_2nd = output_frames_2nd.contiguous().view(-1)
+        output_velocity_2nd = output_velocity_2nd.contiguous().view(-1, output_velocity_2nd.shape[-1])
+        label_onset = label_onset.contiguous().view(-1)
+        label_offset = label_offset.contiguous().view(-1)
+        label_frames = label_frames.contiguous().view(-1)
+        label_velocity = label_velocity.contiguous().view(-1)
+
+        # compute losses
+        # 1st loss
+        loss_onset_1st = self.bce(output_onset_1st, label_onset)
+        loss_offset_1st = self.bce(output_offset_1st, label_offset)
+        loss_frames_1st = self.bce(output_frames_1st, label_frames)
+        loss_velocity_1st = self.ce(output_velocity_1st, label_velocity)
+        loss_1st = loss_onset_1st + loss_offset_1st + loss_frames_1st + loss_velocity_1st
+
+        # 2nd loss
+        loss_onset_2nd = self.bce(output_onset_2nd, label_onset)
+        loss_offset_2nd = self.bce(output_offset_2nd, label_offset)
+        loss_frames_2nd = self.bce(output_frames_2nd, label_frames)
+        loss_velocity_2nd = self.ce(output_velocity_2nd, label_velocity)
+        loss_2nd = loss_onset_2nd + loss_offset_2nd + loss_frames_2nd + loss_velocity_2nd
+
+        # total losss
+        loss = self.config["weight_A"] * loss_1st + self.config["weight_B"] * loss_2nd
+        self.log_dict({
+            'test_onset_loss_1st': loss_onset_1st.item(),
+            'test_onset_loss_2nd': loss_onset_2nd.item(),
+            'test_offset_loss_1st': loss_offset_1st.item(),
+            'test_offset_loss_2nd': loss_offset_2nd.item(),
+            'test_frames_loss_1st': loss_frames_1st.item(),
+            'test_frames_loss_2nd': loss_frames_2nd.item(),
+            'test_velocity_loss_1st': loss_velocity_1st.item(),
+            'test_velocity_loss_2nd': loss_velocity_2nd.item(),
+            'test_total_loss': loss.item()
+        }, logger=True, on_step=True)
+        return loss
 
 class HFTEncoder(nn.Module):
-    def __init__(self, n_margin, n_frame, n_bin, cnn_channel, cnn_kernel, d, n_layers, num_heads, pff_dim, dropout, device):
+    def __init__(self, n_margin, n_frame, n_bin, cnn_channel, cnn_kernel, d, n_layers, num_heads, pff_dim, dropout):
         """
             Initializes the HFTEncoder class.
 
@@ -57,10 +244,8 @@ class HFTEncoder(nn.Module):
                 num_heads (int): The number of attention heads.
                 pff_dim (int): The dimension of the position-wise feed-forward network.
                 dropout (float): Dropout rate.
-                device (torch.device): The device to run the model on.
         """
         super().__init__()
-        self.device = device
         self.n_frame = n_frame
         self.n_bin = n_bin
         self.cnn_channel = cnn_channel
@@ -72,10 +257,14 @@ class HFTEncoder(nn.Module):
         self.tok_embedding_freq = nn.Linear(self.cnn_dim, d)
         self.pos_embedding_freq = nn.Embedding(n_bin, d) 
         self.layers_freq = nn.ModuleList([
-            TransformerEncoderLayer(d, num_heads, pff_dim, dropout, device) for _ in range(n_layers)
+            TransformerEncoderLayer(d, num_heads, pff_dim, dropout) for _ in range(n_layers)
         ])
         self.dropout = nn.Dropout(dropout)
-        self.scale_freq = torch.FloatTensor([self.d ** 0.5]).to(device)
+        self.register_buffer(
+            "scale_freq",
+            torch.tensor(self.d ** 0.5)
+        )
+        # self.scale_freq = torch.FloatTensor([self.d ** 0.5])
     
     def forward(self, spectrogram):
         """
@@ -104,7 +293,7 @@ class HFTEncoder(nn.Module):
         spec_emb_freq = self.tok_embedding_freq(spec_cnn_freq)  # (batch_size*n_frame, n_bin, d)
 
         # position encoding
-        pos_freq = torch.arange(0, self.n_bin).unsqueeze(0).repeat(batch_size*self.n_frame, 1).to(self.device)
+        pos_freq = torch.arange(0, self.n_bin, device=spectrogram.device).unsqueeze(0).repeat(batch_size*self.n_frame, 1)
         spec_freq = self.dropout(spec_emb_freq * self.scale_freq + self.pos_embedding_freq(pos_freq))  # (batch_size*n_frame, n_bin, d)
 
         # Pass through the transformer encoder layers
@@ -124,7 +313,7 @@ class HFTDecoder(nn.Module):
         This involves the two decoder sections (the one in the first hierarchy 
         and the one in the second hierarchy).
     """
-    def __init__(self, n_frame, n_bin, n_note, n_velocity, d, n_layers, num_heads, pff_dim, dropout, device):
+    def __init__(self, n_frame, n_bin, n_note, n_velocity, d, n_layers, num_heads, pff_dim, dropout):
         """
             Initializes the HFTDecoder class.
 
@@ -138,10 +327,8 @@ class HFTDecoder(nn.Module):
                 num_heads (int): The number of attention heads.
                 pff_dim (int): The dimension of the position-wise feed-forward network.
                 dropout (float): Dropout rate.
-                device (torch.device): The device to run the model on.
         """
         super().__init__()
-        self.device = device
         self.n_frame = n_frame
         self.n_note = n_note
         self.n_velocity = n_velocity
@@ -151,9 +338,9 @@ class HFTDecoder(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
         self.pos_embedding_freq = nn.Embedding(n_note, d)
-        self.layer_zero_freq = TransformerDecoderLayerZero(d, num_heads, pff_dim, dropout, device)
+        self.layer_zero_freq = TransformerDecoderLayerZero(d, num_heads, pff_dim, dropout)
         self.layers_freq = nn.ModuleList([
-            TransformerDecoderLayer(d, num_heads, pff_dim, dropout, device) for _ in range(n_layers-1)
+            TransformerDecoderLayer(d, num_heads, pff_dim, dropout) for _ in range(n_layers-1)
         ])
 
         self.fc_onset_freq = nn.Linear(d, 1)
@@ -161,10 +348,14 @@ class HFTDecoder(nn.Module):
         self.fc_frame_freq = nn.Linear(d, 1)
         self.fc_velocity_freq = nn.Linear(d, n_velocity)
 
-        self.scale_time = torch.FloatTensor([n_frame ** 0.5]).to(device)
+        #self.scale_time = torch.FloatTensor([n_frame ** 0.5])
+        self.register_buffer(
+            "scale_time",
+            torch.tensor(n_frame ** 0.5)
+        )
         self.pos_embedding_time = nn.Embedding(n_frame, d)
         self.layers_time = nn.ModuleList([
-            TransformerEncoderLayer(d, num_heads, pff_dim, dropout, device) for _ in range(n_layers)
+            TransformerEncoderLayer(d, num_heads, pff_dim, dropout) for _ in range(n_layers)
         ])
 
         self.fc_onset_time = nn.Linear(d, 1)
@@ -187,7 +378,7 @@ class HFTDecoder(nn.Module):
         batch_size = enc_output.size(0)
         enc_output = enc_output.reshape([batch_size*self.n_frame, self.n_bin, self.d])
 
-        pos_freq = torch.arange(0, self.n_note).unsqueeze(0).repeat(batch_size*self.n_frame, 1).to(self.device)
+        pos_freq = torch.arange(0, self.n_note, device=enc_output.device).unsqueeze(0).repeat(batch_size*self.n_frame, 1)
         midi_freq = self.pos_embedding_freq(pos_freq)  # (batch_size*n_frame, n_note, d)
 
         midi_freq, attn_freq = self.layer_zero_freq(enc_output, midi_freq)
@@ -211,7 +402,7 @@ class HFTDecoder(nn.Module):
         midi_time = midi_freq.reshape([batch_size, self.n_frame, self.n_note, \
         self.d]).permute(0, 2, 1, 3).contiguous().reshape([batch_size*self.n_note, \
                                 self.n_frame, self.d])  # (batch_size*n_note, n_frame, d)
-        pos_time = torch.arange(0, self.n_frame).unsqueeze(0).repeat(batch_size*self.n_note, 1).to(self.device)
+        pos_time = torch.arange(0, self.n_frame, device=enc_output.device).unsqueeze(0).repeat(batch_size*self.n_note, 1)
         midi_time = self.dropout(midi_time*self.scale_time + self.pos_embedding_time(pos_time))  # (batch_size*n_note, n_frame, d)
 
         for layer in self.layers_time:
@@ -228,7 +419,7 @@ class HFTDecoder(nn.Module):
 
 
 class TransformerDecoderLayerZero(nn.Module):
-    def __init__(self, d, num_heads, pff_dim, dropout, device):
+    def __init__(self, d, num_heads, pff_dim, dropout):
         """
             Initializes the TransformerDecoderLayerZero class.
 
@@ -237,11 +428,10 @@ class TransformerDecoderLayerZero(nn.Module):
                 num_heads (int): The number of attention heads.
                 pff_dim (int): The dimension of the position-wise feed-forward network.
                 dropout (float): Dropout rate.
-                device (torch.device): The device to run the model on.
         """
         super().__init__()
         self.layer_norm = nn.LayerNorm(d)
-        self.cross_attn = MultiHeadAttention(d, num_heads, dropout, device)
+        self.cross_attn = MultiHeadAttention(d, num_heads, dropout)
         self.ff = FeedForward(d, pff_dim, dropout)
         self.dropout = nn.Dropout(dropout)
     
@@ -270,7 +460,7 @@ class TransformerDecoderLayerZero(nn.Module):
         return dec_input, cross_attn_weights  
 
 class TransformerDecoderLayer(nn.Module):
-    def __init__(self, d, num_heads, pff_dim, dropout, device):
+    def __init__(self, d, num_heads, pff_dim, dropout):
         """
             Initializes the TransformerDecoderLayer class.
 
@@ -279,12 +469,11 @@ class TransformerDecoderLayer(nn.Module):
                 num_heads (int): The number of attention heads.
                 pff_dim (int): The dimension of the position-wise feed-forward network.
                 dropout (float): Dropout rate.
-                device (torch.device): The device to run the model on.
         """
         super().__init__()
         self.layer_norm = nn.LayerNorm(d)
-        self.self_attn = MultiHeadAttention(d, num_heads, dropout, device)
-        self.cross_attn = MultiHeadAttention(d, num_heads, dropout, device)
+        self.self_attn = MultiHeadAttention(d, num_heads, dropout)
+        self.cross_attn = MultiHeadAttention(d, num_heads, dropout)
         self.ff = FeedForward(d, pff_dim, dropout)
         self.dropout = nn.Dropout(dropout)
     
@@ -317,7 +506,7 @@ class TransformerDecoderLayer(nn.Module):
 
 
 class TransformerEncoderLayer(nn.Module):
-    def __init__(self, d, num_heads, pff_dim, dropout, device):
+    def __init__(self, d, num_heads, pff_dim, dropout):
         """
         TransformerEncoderLayer implements a single layer of the Transformer encoder.
         It consists of multi-head self-attention and position-wise feed-forward networks.
@@ -327,11 +516,10 @@ class TransformerEncoderLayer(nn.Module):
             num_heads (int): The number of attention heads.
             pff_dim (int): The dimension of the position-wise feed-forward network.
             dropout (float): Dropout rate.
-            device (torch.device): The device to run the model on.
     """
         super().__init__()
         self.layer_norm = nn.LayerNorm(d)
-        self.self_attn = MultiHeadAttention(d, num_heads, dropout, device)
+        self.self_attn = MultiHeadAttention(d, num_heads, dropout)
         self.ff = FeedForward(d, pff_dim, dropout)
         self.dropout = nn.Dropout(dropout)
     
@@ -354,7 +542,7 @@ class TransformerEncoderLayer(nn.Module):
         return x  # (batch_size, seq_len, d)
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, d, num_heads, dropout, device):
+    def __init__(self, d, num_heads, dropout):
         """
             Initializes the MultiHeadAttention class.
 
@@ -362,7 +550,6 @@ class MultiHeadAttention(nn.Module):
                 d (int): The dimension of the input.
                 num_heads (int): The number of attention heads.
                 dropout (float): Dropout rate.
-                device (torch.device): The device to run the model on.
         """
 
         super().__init__()
@@ -375,7 +562,11 @@ class MultiHeadAttention(nn.Module):
         self.fc_value = nn.Linear(d, d)
         self.fc_out = nn.Linear(d, d)
         self.dropout = nn.Dropout(dropout)
-        self.scale = torch.FloatTensor([self.dh ** 0.5]).to(device)
+        self.register_buffer(
+            "scale",
+            torch.tensor(self.dh**0.5)
+        )
+        #self.scale = torch.FloatTensor([self.dh ** 0.5])
 
     def forward(self, query, key, value):
         """
@@ -458,9 +649,7 @@ decoder = HFTDecoder(
     n_layers=3,  # Number of layers in the decoder
     num_heads=4,  # Number of attention heads
     pff_dim=512,  # Dimension of the position-wise feed-forward network
-    dropout=0.1,  # Dropout rate
-    device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')  #
-    # Device to run the model on
+    dropout=0.1,  # Dropout rate 
 )
 
 encoder = HFTEncoder(
@@ -474,8 +663,6 @@ encoder = HFTEncoder(
     num_heads=4,  # Number of attention heads
     pff_dim=512,  # Dimension of the position-wise feed-forward network
     dropout=0.1,  # Dropout rate
-    device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')  #
-    # Device to run the model on
 )
 
 if __name__ == "__main__":

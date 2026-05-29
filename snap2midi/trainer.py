@@ -31,19 +31,23 @@ class Trainer:
             config[key] = value
         return config
 
-    def train_oaf(self, batch_size=8, iterations=50000, lr=0.0006, frame_rate=31.25, in_features=229, out_features=88, \
-                  learning_rate_decay_rate=0.98, learning_rate_decay_steps=10000, \
-                    clip_gradient_norm=3, threshold=0.5, temporal_sizes=[3, 3, 3], freq_sizes=[3, 3, 3], \
-                    out_channels=[32, 32, 64], pool_sizes=[1, 2, 2], dropout_probs=[0, 0.25, 0.25], dropout_fc=0.5, \
-                    fc_size=512, onset_lstm_units=128, combined_lstm_units=128, resume=0, \
-                    checkpoint_name: str = "checkpoint_23.pt", pitch_offset: int = 21):
+    def train_oaf(self, base_path: str="./data/oaf/", batch_size=8, iterations=50000, lr=0.0006, \
+                frame_rate=31.25, in_features=229, out_features=88, learning_rate_decay_rate=0.98,\
+                learning_rate_decay_steps=10000, clip_gradient_norm=3, threshold=0.5, \
+                temporal_sizes=[3, 3, 3], freq_sizes=[3, 3, 3], out_channels=[32, 32, 64], \
+                pool_sizes=[1, 2, 2], dropout_probs=[0, 0.25, 0.25], dropout_fc=0.5, \
+                fc_size=512, onset_lstm_units=128, combined_lstm_units=128, pitch_offset: int = 21, \
+                num_workers: int=4, num_nodes: int=1, logger_name: str='csv', resume_path:str|None=None, \
+                save_dir: str="./save_dir"):
         """
             Train Onsets and Frames model with specified configuration.
 
             Parameters
             ----------
+                base_path (str):
+                    Path to extracted training data
                 batch_size (int): 
-                    Batch size for training.
+                    Batch size for training/validation.
                 iterations (int): 
                     Number of iterations for training. Default is 50000.
                 lr (float): 
@@ -52,7 +56,7 @@ class Trainer:
                     Frame rate for the model. Default is 31.25.
                 in_features (int): 
                     Number of input features. Default is 229.
-                out_features (int): 
+                out_features (int):
                     Number of output features. Default is 88.
                 learning_rate_decay_rate (float): 
                     Learning rate decay rate. Default is 0.98.
@@ -80,13 +84,19 @@ class Trainer:
                     Number of LSTM units for onset detection. Default is 128.
                 combined_lstm_units (int): 
                     Number of LSTM units for combined model. Default is 128.
-                resume (int): 
-                    Whether to resume training from a checkpoint. Default is 0 (False).
-                checkpoint_name (str): 
-                    Name of the checkpoint file to resume from. Default is "checkpoint_23.pt".
                 pitch_offset (int): 
                     Pitch offset for MIDI notes. Default is 21. Used to evalutate test set.
-
+                num_workers (int):
+                    Number of workers. Defualt is 4.
+                num_nodes (int):
+                    Number of accelerator nodes to use for distributed training. Default is 1.
+                logger_name (str):
+                    Logger to use in pytorch_lightning. Default is `csv`
+                resume_path (str | None): 
+                    Whether to resume training from a checkpoint. Default is None. If 
+                    None, it trains from scratch.
+                save_dir (str):
+                    Path to save results, logs and checkpoints.
                 
             Returns
             --------
@@ -95,6 +105,7 @@ class Trainer:
         config = self._build_config_from_kwargs(
             project_name="snap2midi",
             experiment_name="OnsetsAndFrames",
+            base_path=base_path,
             batch_size=batch_size,
             iterations=iterations,
             lr=lr,
@@ -114,27 +125,28 @@ class Trainer:
             fc_size=fc_size,
             onset_lstm_units=onset_lstm_units,
             combined_lstm_units=combined_lstm_units,
-            resume=resume,
-            pitch_offset=pitch_offset
+            pitch_offset=pitch_offset,
+            num_workers=num_workers,
+            num_nodes=num_nodes,
+            logger_name=logger_name,
+            resume_path=resume_path,
+            save_dir=save_dir
         )
-        if resume:
-            resume_path = f"runs/{checkpoint_name}"
-            config["resume_path"] = resume_path
-
-        save_dir = "runs/oaf/"
-        config["save_dir"] = save_dir
         oaf_train.main(config)
 
-    def train_kong(self, batch_size: int = 4, factors: list = [16, 32, 32], iterations: int = 200000, frame_rate: float = 100, \
+    def train_kong(self, base_path: str="./data/kong/", batch_size: int = 4, factors: list = [16, 32, 32], iterations: int = 200000, frame_rate: float = 100, \
                 lr: float = 5e-4,  onset_threshold: float = 0.3, offset_threshold: float = 0.3, \
                 frame_threshold: float = 0.3, pedal_offset_threshold: float = 0.3, cmp: int = 48, \
                 momentum: float = 0.01, learning_rate_decay_rate: float = 0.9, learning_rate_decay_steps: int = 10000, \
-                clip_gradient_norm: float = 3.0, resume: int = 0, checkpoint_name: str = "checkpoint_19.pt"):
+                clip_gradient_norm: float = 3.0, num_workers: int=4, logger_name: str='csv', num_nodes: int=1, \
+                resume_path:str|None=None, save_dir: str="./save_dir"):
         """
             Train Kong model with specified configuration.
 
             Parameters
             ----------
+                base_path (str):
+                    Path to extracted data
                 batch_size (int): 
                     Batch size for training. Default is 4.
                 factors (list): 
@@ -163,10 +175,17 @@ class Trainer:
                     Number of steps for learning rate decay. Default is 1000.
                 clip_gradient_norm (float): 
                     Gradient clipping norm. Default is 3.0.
-                resume (int): 
-                    Whether to resume training from a checkpoint. Default is 0 (False).
-                checkpoint_name (str): 
-                    Name of the checkpoint file to resume from. Default is "checkpoint_19.pt".
+                num_workers (int):
+                    Number of workers. Defualt is 4.
+                logger_name (str):
+                    Logger to use in pytorch_lightning. Default is `csv`
+                num_nodes (int):
+                    Number of accelerator nodes to use for distributed training. Default is 1.
+                resume_path (str | None): 
+                    Whether to resume training from a checkpoint. Default is None. If 
+                    None, it trains from scratch.
+                save_dir (str):
+                    Path to save results, logs and checkpoints.
             
             Returns
             ---------
@@ -175,6 +194,7 @@ class Trainer:
         config = self._build_config_from_kwargs(
             project_name="snap2midi",
             experiment_name="Kong",
+            base_path=base_path,
             batch_size=batch_size,
             factors=factors,
             iterations=iterations,
@@ -189,21 +209,20 @@ class Trainer:
             learning_rate_decay_rate=learning_rate_decay_rate,
             learning_rate_decay_steps=learning_rate_decay_steps,
             clip_gradient_norm=clip_gradient_norm,
-            resume=resume
+            resume_path=resume_path,
+            num_workers=num_workers,
+            num_nodes=num_nodes,
+            logger_name=logger_name,
+            save_dir=save_dir,
         )
-        if resume:
-            resume_path = f"runs/kong/{checkpoint_name}"
-            config["resume_path"] = resume_path
-
-        save_dir = "runs/kong/"
-        config["save_dir"] = save_dir
         kong_train.main(config)
     
-    def train_kong_pedals(self, batch_size: int = 4, factors: list = [16, 32, 32], iterations: int = 200000, frame_rate: float = 100, \
+    def train_kong_pedals(self, base_path: str="./data/kong_pedal/", batch_size: int = 4, factors: list = [16, 32, 32], iterations: int = 200000, frame_rate: float = 100, \
                 lr: float = 5e-4,  onset_threshold: float = 0.3, offset_threshold: float = 0.3, \
                 frame_threshold: float = 0.3, pedal_offset_threshold: float = 0.3, cmp: int = 48, \
                 momentum: float = 0.01, learning_rate_decay_rate: float = 0.9, learning_rate_decay_steps: int = 10000, \
-                clip_gradient_norm: float = 3.0, resume: int = 0, checkpoint_name: str = "checkpoint_19.pt"):
+                clip_gradient_norm: float = 3.0, num_workers: int=4, logger_name: str='csv', num_nodes: int=1, \
+                resume_path:str|None=None, save_dir: str="./save_dir"):
         """
             Train Kong Pedal model with specified configuration.
 
@@ -237,10 +256,17 @@ class Trainer:
                     Number of steps for learning rate decay. Default is 1000.
                 clip_gradient_norm (float): 
                     Gradient clipping norm. Default is 3.0.
-                resume (int): 
-                    Whether to resume training from a checkpoint. Default is 0 (False).
-                checkpoint_name (str): 
-                    Name of the checkpoint file to resume from. Default is "checkpoint_19.pt".
+                num_workers (int):
+                    Number of workers. Defualt is 4.
+                logger_name (str):
+                    Logger to use in pytorch_lightning. Default is `csv`
+                num_nodes (int):
+                    Number of accelerator nodes to use for distributed training. Default is 1.
+                resume_path (str | None): 
+                    Whether to resume training from a checkpoint. Default is None. If 
+                    None, it trains from scratch.
+                save_dir (str):
+                    Path to save results, logs and checkpoints.
 
             Returns
             ---------
@@ -249,6 +275,7 @@ class Trainer:
         config = self._build_config_from_kwargs(
             project_name="snap2midi",
             experiment_name="KongPedal",
+            base_path=base_path,
             batch_size=batch_size,
             factors=factors,
             iterations=iterations,
@@ -263,27 +290,28 @@ class Trainer:
             learning_rate_decay_rate=learning_rate_decay_rate,
             learning_rate_decay_steps=learning_rate_decay_steps,
             clip_gradient_norm=clip_gradient_norm,
-            resume=resume
+            resume_path=resume_path,
+            num_nodes=num_nodes,
+            save_dir=save_dir,
+            num_workers=num_workers,
+            logger_name=logger_name
         )
-        if resume:
-            resume_path = f"runs/kong_pedal/{checkpoint_name}"
-            config["resume_path"] = resume_path
-
-        save_dir = "runs/kong_pedal/"
-        config["save_dir"] = save_dir
         kong_train_pedals.main(config)
 
-    def train_hft(self, batch_size: int = 4, margin_b: int = 32, margin_f: int = 32, n_bins: int = 256, n_slice: int=16, \
-                  num_frame: int = 128, epochs: int = 50, frame_rate: int = 100, num_velocity: int = 128, num_note: int = 88, \
-                  lr: float = 1e-4, dropout: float = 0.1, clip_gradient_norm: float = 1.0,seed: int = 1234, \
-                  cnn_channel: int = 4, cnn_kernel: int = 5, d: int = 256, pff_dim: int = 512, enc_layer: int = 3, \
-                  dec_layer: int = 3, enc_head: int = 4, dec_head: int = 4, weight_A: float = 1.0, weight_B: float = 1.0,\
-                  verbose: int = 1, resume: int = 0, checkpoint_name: str = "checkpoint_90.pt"):
+    def train_hft(self, base_path: str="./data/hft/", batch_size: int = 4, margin_b: int = 32, margin_f: int = 32, n_bins: int = 256, n_slice: int=16, \
+        num_frame: int = 128, epochs: int = 50, frame_rate: int = 100, num_velocity: int = 128, num_note: int = 88, \
+        lr: float = 1e-4, dropout: float = 0.1, clip_gradient_norm: float = 1.0,seed: int = 1234, \
+        cnn_channel: int = 4, cnn_kernel: int = 5, d: int = 256, pff_dim: int = 512, enc_layer: int = 3, \
+        dec_layer: int = 3, enc_head: int = 4, dec_head: int = 4, weight_A: float = 1.0, weight_B: float = 1.0,\
+        verbose: int = 1, num_workers: int=4, logger_name: str='csv', num_nodes: int=1, \
+        resume_path:str|None=None, save_dir: str="./save_dir"):
         """
             Train hFT-Transformer model with specified configuration.
 
             Parameters
             ----------
+                base_path (str):
+                    Path to extracted data
                 batch_size (int): 
                     Batch size for training. Default is 4.
                 margin_b (int): 
@@ -334,10 +362,17 @@ class Trainer:
                     Weight for loss B. Default is 1.0.
                 verbose (int): 
                     Verbosity level. Default is 1.
-                resume (int): 
-                    Whether to resume training from a checkpoint. Default is 0 (False).
-                checkpoint_name (str): 
-                    Name of the checkpoint file to resume from. Default is "checkpoint_90.pt".
+                num_workers (int):
+                    Number of workers. Defualt is 4.
+                logger_name (str):
+                    Logger to use in pytorch_lightning. Default is `csv`
+                num_nodes (int):
+                    Number of accelerator nodes to use for distributed training. Default is 1.
+                resume_path (str | None): 
+                    Whether to resume training from a checkpoint. Default is None. If 
+                    None, it trains from scratch.
+                save_dir (str):
+                    Path to save results, logs and checkpoints.
 
             Returns
             ---------
@@ -347,6 +382,7 @@ class Trainer:
         config = self._build_config_from_kwargs(
             project_name="snap2midi",
             experiment_name="HFT",
+            base_path=base_path,
             batch_size=batch_size,
             margin_b=margin_b,
             margin_f=margin_f,
@@ -372,12 +408,10 @@ class Trainer:
             weight_A=weight_A,
             weight_B=weight_B,
             verbose=verbose,
-            resume=resume
+            num_workers=num_workers,
+            logger_name=logger_name,
+            num_nodes=num_nodes,
+            resume_path=resume_path,
+            save_dir=save_dir
         )
-        if config["resume"]:
-            resume_path = f"runs/{checkpoint_name}"
-            config["resume_path"] = resume_path
-        
-        save_dir = "runs/hft"
-        config["save_dir"] = save_dir
         hft_train.main(config)

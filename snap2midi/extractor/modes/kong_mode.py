@@ -11,10 +11,25 @@ class _KongMode(_BaseMode):
         for training the Kong model.
     """
     def __init__(self, config) -> None:
+        """ 
+            Initialize the KongMode class based on
+            config. 
+
+            Args
+            ----
+                config (dict): Configuration parameters
+        """
         super().__init__(config)
         self._kong(config)
 
     def _kong(self, config):
+        """ 
+            Performs the extraction based on the config.
+
+            Args
+            ----
+                config (dict): Configuration parameters
+        """
         # Check if the path is None
         if self.path is None or not Path(self.path).exists():
             raise ValueError(f"Path {self.path} does not exist!")

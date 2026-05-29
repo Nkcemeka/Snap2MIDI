@@ -3,13 +3,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchlibrosa.stft import Spectrogram, LogmelFilterBank
+import pytorch_lightning as pl
 
 def layer_initialize(layer: nn.Module) -> None:
     """ 
         Initialize Convolutional or Linear layers
         with Glorot initialization
 
-        Args:
+        Args
+        ----
             layer (nn.Module): Pytorch layer
     """
     nn.init.xavier_uniform_(layer.weight)
@@ -22,10 +24,12 @@ def bnorm_initialize(bnorm_layer: nn.Module) -> None:
     """ 
         Initalize a batch norm layer
 
-        Args:
+        Args
+        ----
             bnorm_layer: Batch Normalization layer
         
-        Returns:
+        Returns
+        --------
             None
     """
     bnorm_layer.bias.data.fill_(0.)
@@ -35,7 +39,8 @@ def uniform_init(tensor: torch.Tensor):
     """ 
         Performs uniform initialization
 
-        Args:
+        Args
+        -----
             tensor (torch.Tensor): Input tensor to initialize
     """
     fan_in = nn.init._calculate_correct_fan(tensor, 'fan_in')
@@ -51,7 +56,8 @@ def init_gru_weights(tensor: torch.Tensor, funcs: list):
         big tensors. So, we need to slice it
         and then initialize each differently.
 
-        Args:
+        Args
+        -----
             tensor (torch.Tensor): Input tensor
             funcs: functions for weight init.
     """
@@ -90,15 +96,17 @@ def calc_conv_shape(length: int, padding: int, dilation: int, k_size: int, strid
         Calculate shape of tensor from a
         conv. block
 
-        Args:
+        Args
+        ----
             length (int): Length of the input tensor
             padding (int): Padding applied to the input tensor
             dilation (int): Dilation applied to the input tensor
             k_size (int): Kernel size of the conv. block
             stride (int): Stride of the conv. block
         
-        Returns:
-            int: Shape of the tensor after the conv. block
+        Returns
+        --------
+            shape (int): Shape of the tensor after the conv. block
     """
     return (length + 2 * padding - dilation * (k_size - 1) - 1) // stride + 1
 
@@ -111,7 +119,8 @@ class ConvBlock(nn.Module):
         """
             Default constructor.
 
-            Args:
+            Args
+            ----
                 input_chans (int): Input channels for the conv. block
                 output_chans (int): Output channels for the conv. block
                 momentum (float): Momentum for batch norm (used as a sort of
@@ -156,11 +165,13 @@ class ConvBlock(nn.Module):
             with some pooling. Only average pooling is 
             allowed!
 
-            Args:
+            Args
+            ----
                 x (torch.Tensor): shape of (batch, in_chans, time_steps, embed_dim)
                 kernel_shape (tuple): Kernel shape for pooling
             
-            Returns:
+            Returns
+            -------
                 out (torch.Tensor)
         """
         x = self.conv1(x)
@@ -176,7 +187,8 @@ class AcousticModel(nn.Module):
         """
             Default constructor for Acoustic model
 
-            Args:
+            Args
+            ----
                 classes (int): Number of classes for the model
                 num_features (int): size of embedding dimension
                 momentum (float): Momentum for batch norm
@@ -233,10 +245,12 @@ class AcousticModel(nn.Module):
         """
             Forward pass for the Acoustic Model.
 
-            Args:
+            Args
+            ----
                 x (torch.Tensor): (batch, chans, time, embed_dim)
             
-            Returns:
+            Returns
+            -------
                 out (torch.Tensor): (batch, time, classes)
         """
         x = self.conv1(x, kernel_shape=(1,2))
@@ -256,13 +270,14 @@ class AcousticModel(nn.Module):
         out = torch.sigmoid(self.fc(x))
         return out
 
-class KongModel(nn.Module):
-    def __init__(self, extraction_config, momentum: float, cmp: int=48, 
+class KongModel(pl.LightningModule):
+    def __init__(self, config: dict, extraction_config: dict, momentum: float, cmp: int=48, 
                  factors: list=[16, 32, 32]):
         """
             Base model for Kong.
 
-            Args:
+            Args
+            ----
                 momentum (float): Momentum for batch norm layers
                 cmp (int): Complexity for Acoustic model
                 factors (list): List of factors for the complexity of the conv block
@@ -313,6 +328,8 @@ class KongModel(nn.Module):
 
         # initialize the weights for architecture
         self.weights_init()
+        self.save_hyperparameters()
+        self.config = config
     
     def weights_init(self):
         """
@@ -329,10 +346,12 @@ class KongModel(nn.Module):
         """
             Forward pass for Kong's model
 
-            Args:
+            Args
+            ----
                 x (torch.Tensor): (batch, samples)
 
-            Returns:
+            Returns
+            -------
                 dict: Dictionary containing the outputs for 
                       reg_onset, reg_offset, frame and velocity
                       rolls.
@@ -388,14 +407,124 @@ class KongModel(nn.Module):
             'frame_roll': frame_roll, 
             'velocity_roll': velocity_roll
         }
+    
+    def bce_mask(self, output, target, mask):
+        """
+            Binary crossentropy with masking.
 
-class KongPedal(nn.Module):
-    def __init__(self, extraction_config: dict, momentum: float, cmp: int=48, 
+            Args
+            ----
+                output (torch.Tensor): Model's output
+                target (torch.Tensor): Target tensor
+                mask (torch.Tensor): Mask
+            
+            Returns
+            -------
+                BCE Loss   
+        """
+        eps = 1e-7
+        output = torch.clamp(output, eps, 1. - eps)
+        matrix = - target * torch.log(output) - (1. - target) * torch.log(1. - output)
+        return torch.sum(matrix * mask) / torch.sum(mask)
+
+    def regress_bce(self, output_dict, target_dict):
+        """
+            Calculate the regression loss using binary cross-entropy.
+
+            Args
+            -----
+                output_dict (dict): Model output dictionary containing the predicted values.
+                target_dict (dict): Target dictionary containing the ground truth values.
+
+            Returns
+            -------
+                loss_dict (dict): Dictionary containing the individual losses and total loss.
+        """
+        onset_loss = self.bce_mask(output_dict['reg_onset_roll'], \
+                            target_dict['label_reg_onsets'], target_dict['mask_roll'])
+        offset_loss = self.bce_mask(output_dict['reg_offset_roll'], \
+                            target_dict['label_reg_offsets'], target_dict['mask_roll'])
+        frame_loss = self.bce_mask(output_dict['frame_roll'], \
+                            target_dict['label_frames'], target_dict['mask_roll'])
+        velocity_loss = self.bce_mask(output_dict['velocity_roll'], \
+                            target_dict['label_velocities'] / 128, target_dict['label_onsets'])
+        total_loss = onset_loss + offset_loss + frame_loss + velocity_loss
+
+        loss_dict = {
+            'onset_loss': onset_loss,
+            'offset_loss': offset_loss,
+            'frame_loss': frame_loss,
+            'total_loss': total_loss,
+            'velocity_loss': velocity_loss
+        }
+        return loss_dict
+    
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.config["lr"], amsgrad=True)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=self.config['learning_rate_decay_steps'], \
+                       gamma=self.config['learning_rate_decay_rate'])
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "step",
+                "frequency": 1
+            }
+        }
+    
+    def training_step(self, train_batch, batch_idx):
+        output_dict = self.forward(train_batch["audio"])
+    
+        # calculate the loss
+        loss = self.regress_bce(output_dict, train_batch)
+
+        self.log_dict({
+            'train_total_loss': loss['total_loss'].item(),
+            'train_onset_loss': loss['onset_loss'].item(),
+            'train_offset_loss': loss['offset_loss'].item(),
+            'train_frame_loss': loss['frame_loss'].item(),
+            'train_velocity_loss': loss['velocity_loss'].item()
+        }, logger=True, on_step=False, on_epoch=True)
+        return loss['total_loss']
+    
+    def validation_step(self, val_batch, batch_idx):
+        output_dict = self.forward(val_batch["audio"])
+    
+        # calculate the loss
+        loss = self.regress_bce(output_dict, val_batch)
+
+        self.log_dict({
+            'valid_total_loss': loss['total_loss'].item(),
+            'valid_onset_loss': loss['onset_loss'].item(),
+            'valid_offset_loss': loss['offset_loss'].item(),
+            'valid_frame_loss': loss['frame_loss'].item(),
+            'valid_velocity_loss': loss['velocity_loss'].item()
+        }, logger=True, on_epoch=True)
+        return loss['total_loss']
+
+    def test_step(self, test_batch, batch_idx):
+        output_dict = self.forward(test_batch["audio"])
+    
+        # calculate the loss
+        loss = self.regress_bce(output_dict, test_batch)
+
+        self.log_dict({
+            'test_total_loss': loss['total_loss'].item(),
+            'test_onset_loss': loss['onset_loss'].item(),
+            'test_offset_loss': loss['offset_loss'].item(),
+            'test_frame_loss': loss['frame_loss'].item(),
+            'test_velocity_loss': loss['velocity_loss'].item()
+        }, logger=True, on_step=True)
+        return loss['total_loss']
+    
+class KongPedal(pl.LightningModule):
+    def __init__(self, config: dict, extraction_config: dict, momentum: float, cmp: int=48, 
                  factors: list=[16, 32, 32]):
         """
             Base model for Kong.
 
-            Args:
+            Args
+            ----
                 num_features (int): Size of embedding dimension
                 momentum (float): Momentum for batch norm layers
                 cmp (int): Complexity for Acoustic model
@@ -438,6 +567,8 @@ class KongPedal(nn.Module):
 
         # initialize the weights for architecture
         self.weights_init()
+        self.save_hyperparameters()
+        self.config = config
     
     def weights_init(self):
         """
@@ -451,10 +582,12 @@ class KongPedal(nn.Module):
         """
             Forward pass for Kong's Pedal model
 
-            Args:
+            Args
+            ----
                 x (torch.Tensor): (batch, samples)
 
-            Returns:
+            Returns
+            -------
                 dict: Dictionary containing the rolls for 
                       reg_pedal_onset_roll, reg_pedal_offset_roll, 
                       and pedal_frame_roll.
@@ -477,6 +610,75 @@ class KongPedal(nn.Module):
             'reg_pedal_offset_roll': reg_pedal_offset_roll,
             'pedal_frame_roll': pedal_frame_roll
         }
+    
+    def regress_pedal_bce(self, output_dict, target_dict):
+        onset_pedal_loss = F.binary_cross_entropy(output_dict['reg_pedal_onset_roll'], target_dict['pedal_reg_onset'][:, :, None].float())
+        offset_pedal_loss = F.binary_cross_entropy(output_dict['reg_pedal_offset_roll'], target_dict['pedal_reg_offset'][:, :, None].float())
+        frame_pedal_loss = F.binary_cross_entropy(output_dict['pedal_frame_roll'], target_dict['pedal_frames'][:, :, None].float())
+        total_loss = onset_pedal_loss + offset_pedal_loss + frame_pedal_loss
+        loss_dict = {
+            'onset_pedal_loss': onset_pedal_loss,
+            'offset_pedal_loss': offset_pedal_loss,
+            'frame_pedal_loss': frame_pedal_loss,
+            'total_pedal_loss': total_loss
+        }
+
+        return loss_dict
+    
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.config["lr"], amsgrad=True)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=self.config['learning_rate_decay_steps'], \
+                       gamma=self.config['learning_rate_decay_rate'])
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "step",
+                "frequency": 1
+            }
+        }
+    
+    def training_step(self, train_batch, batch_idx):
+        output_dict = self.forward(train_batch["audio"])
+    
+        # calculate the loss
+        loss = self.regress_pedal_bce(output_dict, train_batch)
+
+        self.log_dict({
+            'train_total_pedal_loss': loss['total_pedal_loss'].item(),
+            'train_onset_pedal_loss': loss['onset_pedal_loss'].item(),
+            'train_offset_pedal_loss': loss['offset_pedal_loss'].item(),
+            'train_frame_pedal_loss': loss['frame_pedal_loss'].item()
+        }, logger=True, on_step=False, on_epoch=True)
+        return loss['total_pedal_loss']
+    
+    def validation_step(self, val_batch, batch_idx):
+        output_dict = self.forward(val_batch["audio"])
+    
+        # calculate the loss
+        loss = self.regress_pedal_bce(output_dict, val_batch)
+
+        self.log_dict({
+            'valid_total_pedal_loss': loss['total_pedal_loss'].item(),
+            'valid_onset_pedal_loss': loss['onset_pedal_loss'].item(),
+            'valid_offset_pedal_loss': loss['offset_pedal_loss'].item(),
+            'valid_frame_pedal_loss': loss['frame_pedal_loss'].item()
+        }, logger=True, on_epoch=True)
+        return loss['total_pedal_loss']
+    
+    def test_step(self, test_batch, batch_idx):
+        output_dict = self.forward(test_batch["audio"])
+    
+        # calculate the loss
+        loss = self.regress_pedal_bce(output_dict, test_batch)
+
+        self.log_dict({
+            'test_total_pedal_loss': loss['total_pedal_loss'].item(),
+            'test_onset_pedal_loss': loss['onset_pedal_loss'].item(),
+            'test_offset_pedal_loss': loss['offseat_pedal_loss'].item(),
+            'test_frame_pedal_loss': loss['frame_pedal_loss'].item()
+        }, logger=True, on_step=True)
+        return loss['total_pedal_loss']
 
 # Test Kong's pedal model
 if __name__ == "__main__":

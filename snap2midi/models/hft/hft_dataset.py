@@ -10,7 +10,7 @@ class HFTDataset(Dataset):
         A PyTorch Dataset class for the hFT-Transformer dataset.
         This class handles the loading and processing of features and labels for training.
     """
-    def __init__(self, base_path: str, config: dict, split: str = Optional[None]):
+    def __init__(self, config: dict, split: str = Optional[None]):
         """
             Initializes the HFTDataset class.
 
@@ -25,7 +25,7 @@ class HFTDataset(Dataset):
             raise ValueError("Split must be specified. Use 'train', 'val', or 'test'.")
 
         # Stores the path so we don't load data into memory
-        self.base_path = Path(base_path)
+        self.base_path = Path(config["base_path"])
         self.feature_path = self.base_path / "feature" / split / "dataset_feature.npz"
         self.frames_path = self.base_path / "label_frames" / split / "dataset_label_frames.npz"
         self.onset_path = self.base_path / "label_onset" / split / "dataset_label_onset.npz"
@@ -58,6 +58,22 @@ class HFTDataset(Dataset):
         return len(self.idx)
 
     def __getitem__(self, idx):
+        """ 
+            Returns the spectrogram and labels
+            at a given index (idx).
+
+            Args
+            ----
+                idx (int): Index value
+            
+            Returns
+            -------
+                spec : spectorgram segment
+                label_onset: Onset labels 
+                label_offset: Offset labels
+                label_frames: Frame labels
+                label_velocity: Velocity labels
+        """
         # for idx_feature_s or idx_feature_start, we need to subtract the margin_b after getting our starting index
         idx_feature_s = self.idx[idx] - self.config['margin_b']
         idx_feature_e = self.idx[idx] + self.config['num_frame'] + self.config['margin_f']
@@ -83,4 +99,3 @@ class HFTDataset(Dataset):
         # int8 -> long
         label_velocity = self.label_velocity[idx_label_s:idx_label_e].long()
         return spec, label_onset, label_offset, label_frames, label_velocity
-    

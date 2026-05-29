@@ -62,7 +62,6 @@ class FramedAudio:
         if (audio.shape[-1] - self.frame_size) % self.hop_size != 0:
             padding = self.frame_size - (audio.shape[-1] - self.frame_size) % self.hop_size
             audio = np.pad(audio, (0, padding))
-        
 
         # calc. no of frames
         num_frames = (audio.shape[-1] - self.frame_size)//self.hop_size + 1
@@ -76,16 +75,54 @@ class FramedAudio:
         return framed_audio
 
     def __getitem__(self, index: int) -> np.ndarray:
+        """ 
+            Return the framed audio at a particular
+            index based on the number of frames.
+
+            Args
+            ----
+                index (int): Index of frame audio
+            
+            Returns
+            -------
+                framed_audio (np.ndarray): Framed audio at index i
+        """
         return self.framed_audio[index]
 
     def __len__(self) -> int:
+        """ 
+            Returns the number of frames.
+
+            Args
+            ----
+                None
+            
+            Returns
+            --------
+                num_frames (int): Number of frames or audio segments.
+        """
         return len(self.framed_audio)
 
     def __iter__(self):
+        """ 
+            Returns an iterator.
+
+            Returns
+            --------
+                self 
+        """
         self.index = 0
         return self
     
     def __next__(self) -> np.ndarray:
+        """ 
+            To get the next item in
+            the FramedAudio iterator.
+
+            Returns
+            -------
+                framed_audio (np.ndarray): Framed audio segment.
+        """
         if self.index < len(self.framed_audio):
             framed_audio =  self.framed_audio[self.index]
             self.index += 1
