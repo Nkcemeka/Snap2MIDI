@@ -111,11 +111,11 @@ class Inference:
         )
         return oaf_infer(config)
 
-    def inference_kong(self, audio_path: str, checkpoint_note_path: str, checkpoint_pedal_path: str, ext_config_path: str,\
-         filename: str|None = "output", factors: list = [16, 32, 32], \
-        frame_rate: float=100, onset_threshold: float = 0.3, offset_threshold: float = 0.3, frame_threshold: float = 0.3, \
+    def inference_kong(self, audio_path: str, checkpoint_note_path: str, checkpoint_pedal_path: str,\
+        filename: str|None = "output", factors: list = [16, 32, 32], frame_rate: float=100,\
+        onset_threshold: float = 0.3, offset_threshold: float = 0.3, frame_threshold: float = 0.3, \
         pedal_offset_threshold: float = 0.3, cmp: int=48, momentum: float = 0.01, sample_rate: int = 16000, \
-        window_size: float = 10.0, min_pitch: int = 21):
+        window_size: float = 10.0, min_pitch: int = 21, user_ext_config: dict|None=None):
         """
             Perform inference using Kong's model with specified configuration.
 
@@ -127,8 +127,6 @@ class Inference:
                     Path to the note model checkpoint file.
                 checkpoint_pedal_path (str): 
                     Path to the pedal model checkpoint file.
-                ext_config_path (str): 
-                    Path to extracted config.
                 filename (str): 
                     Name of the output MIDI file without extension. Default is "output". Can be None.
                 factors (list): 
@@ -153,7 +151,10 @@ class Inference:
                     Window size for feature extraction in seconds. Default is 10.0.
                 min_pitch (int): 
                     Minimum MIDI pitch number. Default is 21.
-                
+                user_ext_config (dict|None): 
+                    User provided extraction configuration. If None, default config is used.
+                                             Default params are {'n_mels': 229, 'max_pitch': 108, 'min_pitch': 21, 
+                                             'sample_rate': 16000, 'frame_rate': 100, 'mel_n_fft': 2048}
             
             Returns
             -------
@@ -176,7 +177,7 @@ class Inference:
             sample_rate=sample_rate,
             window_size=window_size,
             min_pitch=min_pitch,
-            ext_config_path=ext_config_path
+            user_ext_config=user_ext_config
         )
         return kong_infer(config)
 

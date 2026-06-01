@@ -699,10 +699,11 @@ class _OAFMode(_BaseMode):
 
         if self.dataset_name == "oaf_maps":
             splits_data = [train_files, test_files]
+            print(f"Total train files found: {len(train_files)\
+            }, total test files found: {len(test_files)}")
         else:
             splits_data = [train_files, val_files, test_files]
-        
-        print(f"Total train files found: {len(train_files)\
+            print(f"Total train files found: {len(train_files)\
             }, total val files found:{len(val_files)}, total test files found: {len(test_files)}")
 
         # create the directory for the splits

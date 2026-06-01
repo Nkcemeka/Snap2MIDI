@@ -57,7 +57,7 @@ class _BaseMode:
             self.data = self._get_files_musicnet(self.path)
         elif self.dataset_name == "slakh":
             self.data = self._get_files_slakh(self.path)
-        elif self.dataset_name == "maps":
+        elif self.dataset_name == "maps" or self.dataset_name == "oaf_maps":
             self.data = self._get_files_maps(self.path)
         else:
             raise ValueError(f"Dataset {self.dataset_name} not supported")

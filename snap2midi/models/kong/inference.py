@@ -80,10 +80,10 @@ def inference(config: dict):
         Returns
         --------
             midi_obj (pretty_midi.PrettyMIDI | None): 
-                Pretty MIDI object or None
+            Pretty MIDI object or None
     """
-    note_model = load_kong(config)
-    pedal_model = load_pedal(config)
+    note_model = load_kong(config, mode=1)
+    pedal_model = load_pedal(config, mode=1)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     on_thresh = config["onset_threshold"]

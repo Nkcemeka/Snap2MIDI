@@ -175,58 +175,6 @@ class HFT(pl.LightningModule):
             'valid_total_loss': loss.item()
         }, logger=True, on_step=False, on_epoch=True)
         return loss
-    
-    def test_step(self, test_batch, batch_idx):
-        input_spec, label_onset, label_offset, label_frames,\
-            label_velocity = test_batch
-        
-        # Forward pass
-        output_onset_1st, output_offset_1st, output_frames_1st, output_velocity_1st, attention, \
-        output_onset_2nd, output_offset_2nd, output_frames_2nd, output_velocity_2nd = self.forward(input_spec)
-
-        # flatten the outputs and labels
-        output_onset_1st = output_onset_1st.contiguous().view(-1)
-        output_offset_1st = output_offset_1st.contiguous().view(-1)
-        output_frames_1st = output_frames_1st.contiguous().view(-1)
-        output_velocity_1st = output_velocity_1st.contiguous().view(-1, output_velocity_1st.shape[-1])
-        output_onset_2nd = output_onset_2nd.contiguous().view(-1)
-        output_offset_2nd = output_offset_2nd.contiguous().view(-1)
-        output_frames_2nd = output_frames_2nd.contiguous().view(-1)
-        output_velocity_2nd = output_velocity_2nd.contiguous().view(-1, output_velocity_2nd.shape[-1])
-        label_onset = label_onset.contiguous().view(-1)
-        label_offset = label_offset.contiguous().view(-1)
-        label_frames = label_frames.contiguous().view(-1)
-        label_velocity = label_velocity.contiguous().view(-1)
-
-        # compute losses
-        # 1st loss
-        loss_onset_1st = self.bce(output_onset_1st, label_onset)
-        loss_offset_1st = self.bce(output_offset_1st, label_offset)
-        loss_frames_1st = self.bce(output_frames_1st, label_frames)
-        loss_velocity_1st = self.ce(output_velocity_1st, label_velocity)
-        loss_1st = loss_onset_1st + loss_offset_1st + loss_frames_1st + loss_velocity_1st
-
-        # 2nd loss
-        loss_onset_2nd = self.bce(output_onset_2nd, label_onset)
-        loss_offset_2nd = self.bce(output_offset_2nd, label_offset)
-        loss_frames_2nd = self.bce(output_frames_2nd, label_frames)
-        loss_velocity_2nd = self.ce(output_velocity_2nd, label_velocity)
-        loss_2nd = loss_onset_2nd + loss_offset_2nd + loss_frames_2nd + loss_velocity_2nd
-
-        # total losss
-        loss = self.config["weight_A"] * loss_1st + self.config["weight_B"] * loss_2nd
-        self.log_dict({
-            'test_onset_loss_1st': loss_onset_1st.item(),
-            'test_onset_loss_2nd': loss_onset_2nd.item(),
-            'test_offset_loss_1st': loss_offset_1st.item(),
-            'test_offset_loss_2nd': loss_offset_2nd.item(),
-            'test_frames_loss_1st': loss_frames_1st.item(),
-            'test_frames_loss_2nd': loss_frames_2nd.item(),
-            'test_velocity_loss_1st': loss_velocity_1st.item(),
-            'test_velocity_loss_2nd': loss_velocity_2nd.item(),
-            'test_total_loss': loss.item()
-        }, logger=True, on_step=True)
-        return loss
 
 class HFTEncoder(nn.Module):
     def __init__(self, n_margin, n_frame, n_bin, cnn_channel, cnn_kernel, d, n_layers, num_heads, pff_dim, dropout):

@@ -30,13 +30,9 @@ class KongDataModule(pl.LightningDataModule):
             extend_pedal=self.extraction_config["extend_pedal"])
         self.val_dataset = KongDataset(f"{self.config["base_path"].rstrip('/')}/val/",\
             extend_pedal=self.extraction_config["extend_pedal"])
-        self.test_dataset = KongDataset(f"{self.config["base_path"].rstrip('/')}/test/",\
-            extend_pedal=self.extraction_config["extend_pedal"])
 
     # Below are methods for setting up the dataloaders
     def train_dataloader(self):
-        # train_sampler = Sampler(f"{self.config["base_path"].rstrip('/')}/train/",\
-        #     split="train", batch_size=self.config["batch_size"])
         return DataLoader(self.train_dataset, batch_size=self.config["batch_size"], \
                 pin_memory=True, collate_fn=collate_fn, num_workers=self.config["num_workers"], shuffle=True)
     
@@ -44,18 +40,7 @@ class KongDataModule(pl.LightningDataModule):
         if self.val_dataset is None:
             return []
         
-        # valid_sampler = EvalSampler(f"{self.config["base_path"].rstrip('/')}/val/",\
-        #     split="val", batch_size=self.config["batch_size"])
         return DataLoader(self.val_dataset, batch_size=self.config["batch_size"], \
-            pin_memory=True, collate_fn=collate_fn, num_workers=self.config["num_workers"], shuffle=False)
-
-    def test_dataloader(self):
-        if self.test_dataset is None:
-            return []
-        
-        # test_sampler = EvalSampler(f"{self.config["base_path"].rstrip('/')}/test/",\
-        #     split="test", batch_size=1)
-        return DataLoader(self.test_dataset, batch_size=1,\
             pin_memory=True, collate_fn=collate_fn, num_workers=self.config["num_workers"], shuffle=False)
     
 def main(config):
@@ -74,18 +59,18 @@ def main(config):
     dm = KongDataModule(config, extraction_config)
     
     # Load/initialize the model
-    model = KongModel(config, extraction_config, config["momentum"], cmp=config["cmp"], \
-                      factors=config["factors"])
+    model = KongModel(config, extraction_config)
 
     # create checkpoint callback
-    base_path = str(Path(config["base_path"]).parent)
+    base_path = config["base_path"].rstrip('/')
     val_flag = Path(f"{base_path}/val/").exists()
     if val_flag:
         checkpoint_callback = ModelCheckpoint(
             monitor='valid_total_loss',
-            filename='kong-{epoch:02d}-{valid_total_loss:.2f}',
+            filename='kong-step={step}-loss={valid_total_loss:.4f}',
             dirpath=config["save_dir"],
             save_top_k=5,
+            every_n_train_steps=config["val_steps"],
             mode="min"
         )
     else:
@@ -98,7 +83,8 @@ def main(config):
         callbacks=[checkpoint_callback],
         num_sanity_val_steps=0,
         num_nodes=config["num_nodes"],
-        check_val_every_n_epoch=1,
+        val_check_interval=config["val_steps"],
+        log_every_n_steps=config["val_steps"],
         logger=pl_logger(config["logger_name"], project_name=config["experiment_name"]))
     
     if config["resume_path"] is None:
@@ -108,10 +94,3 @@ def main(config):
             f"[resume_path]: {config["resume_path"]} does not exist."
         trainer.fit(model, dm, ckpt_path=config["resume_path"])
     
-    test_flag = Path(f"{base_path}/test").exists()
-    if test_flag:
-        trainer.test(
-            model=model,
-            datamodule=dm,
-            ckpt_path="best"
-        )

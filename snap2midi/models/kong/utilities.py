@@ -483,13 +483,14 @@ def load_extract_config(ext_config_path: str):
                 extraction_config[key] = extraction_config[key].item()
     return extraction_config
 
-def load_kong(config: dict):
+def load_kong(config: dict, mode:int=0):
     """ 
         Load Kong model.
 
         Args
         ----
             config (dict): Configuration dictionary
+            mode (int): 0 is evaluation mode. 1 is inference mode
         
         Returns
         -------
@@ -497,37 +498,64 @@ def load_kong(config: dict):
     """
     # Load the necessary components from the config
     path = config["checkpoint_note_path"]
-    ext_config_path = config["ext_config_path"]
 
-    # Initialize the Kong model with the loaded component
-    extraction_config = load_extract_config(ext_config_path)
+    # Initialize the Kong model with the loaded components
+    if not mode:
+        # For eval mode, use the extraction configuration 
+        # file
+        ext_config_path = config["ext_config_path"]
+        extraction_config = load_extract_config(ext_config_path)
+    else:
+        # For inference, check if a configuration is passed or
+        # use the default
+        if config["user_ext_config"] is None:
+            # Using the extraction config used during training
+            # can be a bad idea for inference
+            extraction_config = {'n_mels': 229, 'max_pitch': 108, 'min_pitch': 21, 
+                'sample_rate': 16000, 'frame_rate': 100, 'mel_n_fft': 2048}
+        else:
+            extraction_config = config["user_ext_config"]
 
-    model = KongModel(extraction_config, config["momentum"], cmp=config["cmp"], \
-                      factors=config["factors"])
+    model = KongModel(config, extraction_config)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = model.to(device)
     model.load_state_dict(torch.load(path, weights_only=True)["state_dict"])
     model.eval()
     return model
 
-def load_pedal(config: dict):
+def load_pedal(config: dict, mode:int=0):
     """ 
         Load Kong pedal model.
 
         Args
         ----
             config (dict): Configuration dictionary
-        
+            mode (int): 0 is evaluation mode. 1 is inference mode
+    
         Returns
         -------
             model (KongPedal): Kong pedal model
     """
     # Load the necessary components from the config
     path = config["checkpoint_pedal_path"]
-    ext_config_path = config["ext_config_path"]
 
-    # Initialize the Kong model with the loaded component
-    extraction_config = load_extract_config(ext_config_path)
+    # Initialize the Kong model with the loaded components
+    if not mode:
+        # For eval mode, use the extraction configuration 
+        # file
+        ext_config_path = config["ext_config_path"]
+        extraction_config = load_extract_config(ext_config_path)
+    else:
+        # For inference, check if a configuration is passed or
+        # use the default
+        if config["user_ext_config"] is None:
+            # Using the extraction config used during training
+            # can be a bad idea for inference
+            extraction_config = {'n_mels': 229, 'max_pitch': 88, 'min_pitch': 21, 
+                'sample_rate': 16000, 'frame_rate': 100, 'mel_n_fft': 2048}
+        else:
+            extraction_config = config["user_ext_config"]
+
     model = KongPedal(extraction_config, config["momentum"], cmp=config["cmp"], \
                       factors=config["factors"])
     device = "cuda" if torch.cuda.is_available() else "cpu"

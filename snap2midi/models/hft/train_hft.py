@@ -38,12 +38,6 @@ class HFTDataModule(pl.LightningDataModule):
         
         return DataLoader(self.val_dataset, batch_size=self.config["batch_size"], \
                           num_workers=self.config["num_workers"], shuffle=False)
-
-    def test_dataloader(self):
-        if self.test_dataset is None:
-            return []
-        return DataLoader(self.test_dataset, batch_size=self.config["batch_size"], \
-                          num_workers=self.config["num_workers"], shuffle=False)
     
 
 def main(config):
@@ -77,7 +71,8 @@ def main(config):
     model = HFT(encoder, decoder, config)
 
     # create checkpoint callback
-    val_flag = Path(f"{config["base_path"].rstrip('/')}/val/").exists()
+    base_path = config["base_path"].rstrip('/')
+    val_flag = Path(f"{base_path}/val/").exists()
     if val_flag:
         checkpoint_callback = ModelCheckpoint(
             monitor='valid_total_loss',
@@ -105,13 +100,3 @@ def main(config):
         assert Path(config["resume_path"]).exists(), \
             f"[resume_path]: {config["resume_path"]} does not exist."
         trainer.fit(model, dm, ckpt_path=config["resume_path"])
-    
-    test_path = config.get("test_path", None)
-    if test_path is not None and Path(test_path).exists():
-        trainer.test(
-            model=model,
-            datamodule=dm,
-            ckpt_path="best"
-        )
-
-

@@ -272,25 +272,3 @@ class OnsetsAndFrames(pl.LightningModule):
             'val_total_loss': loss
         }, logger=True, on_step=False, on_epoch=True)
         return loss
-    
-    def test_step(self, test_batch, batch_idx):
-        x, y_frame, y_onset, y_velocity, label_weights, audio = test_batch
-        y_velocity = y_velocity.float()
-        label_weights = label_weights.float()
-
-        # Forward pass
-        on_preds, _, frame_preds, vel_preds = self.forward(x)
-
-        # Loss
-        onset_loss = self.bce_loss(on_preds, y_onset)
-        frame_loss = self.weighted_bce_loss(frame_preds, y_frame, label_weights)
-        velocity_loss = self.loss_velocity(vel_preds, y_velocity, y_onset)
-        loss = onset_loss + frame_loss + velocity_loss
-
-        self.log_dict({
-            'test_onset_loss': onset_loss,
-            'test_frame_loss': frame_loss,
-            'test_velocity_loss': velocity_loss,
-            'test_total_loss': loss
-        }, logger=True, on_step=True)
-        return loss

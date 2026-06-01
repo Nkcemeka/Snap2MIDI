@@ -138,7 +138,8 @@ class Trainer:
                 lr: float = 5e-4,  onset_threshold: float = 0.3, offset_threshold: float = 0.3, \
                 frame_threshold: float = 0.3, pedal_offset_threshold: float = 0.3, cmp: int = 48, \
                 momentum: float = 0.01, learning_rate_decay_rate: float = 0.9, learning_rate_decay_steps: int = 10000, \
-                clip_gradient_norm: float = 3.0, num_workers: int=4, logger_name: str='csv', num_nodes: int=1, \
+                clip_gradient_norm: float = 3.0, num_workers: int=4, logger_name: str='csv',\
+                val_steps: int=5000, num_nodes: int=1, \
                 resume_path:str|None=None, save_dir: str="./save_dir"):
         """
             Train Kong model with specified configuration.
@@ -179,6 +180,8 @@ class Trainer:
                     Number of workers. Defualt is 4.
                 logger_name (str):
                     Logger to use in pytorch_lightning. Default is `csv`
+                val_steps (int):
+                    How many N steps before performing validation.
                 num_nodes (int):
                     Number of accelerator nodes to use for distributed training. Default is 1.
                 resume_path (str | None): 
@@ -211,6 +214,7 @@ class Trainer:
             clip_gradient_norm=clip_gradient_norm,
             resume_path=resume_path,
             num_workers=num_workers,
+            val_steps=val_steps,
             num_nodes=num_nodes,
             logger_name=logger_name,
             save_dir=save_dir,
@@ -221,7 +225,8 @@ class Trainer:
                 lr: float = 5e-4,  onset_threshold: float = 0.3, offset_threshold: float = 0.3, \
                 frame_threshold: float = 0.3, pedal_offset_threshold: float = 0.3, cmp: int = 48, \
                 momentum: float = 0.01, learning_rate_decay_rate: float = 0.9, learning_rate_decay_steps: int = 10000, \
-                clip_gradient_norm: float = 3.0, num_workers: int=4, logger_name: str='csv', num_nodes: int=1, \
+                clip_gradient_norm: float = 3.0, num_workers: int=4, logger_name: str='csv', \
+                val_steps: int=5000, num_nodes: int=1, \
                 resume_path:str|None=None, save_dir: str="./save_dir"):
         """
             Train Kong Pedal model with specified configuration.
@@ -260,6 +265,8 @@ class Trainer:
                     Number of workers. Defualt is 4.
                 logger_name (str):
                     Logger to use in pytorch_lightning. Default is `csv`
+                val_steps (int):
+                    How many N steps before performing validation.
                 num_nodes (int):
                     Number of accelerator nodes to use for distributed training. Default is 1.
                 resume_path (str | None): 
@@ -292,6 +299,7 @@ class Trainer:
             clip_gradient_norm=clip_gradient_norm,
             resume_path=resume_path,
             num_nodes=num_nodes,
+            val_steps=val_steps,
             save_dir=save_dir,
             num_workers=num_workers,
             logger_name=logger_name

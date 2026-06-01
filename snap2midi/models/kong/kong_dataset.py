@@ -139,9 +139,10 @@ class KongDataset(Dataset):
     
         
         self.seg_list = []
+        self.split = str(Path(emb_path).stem)
         for path in self.data:
             with h5py.File(str(path), 'r') as hf:
-                if "train" in emb_path or "val" in emb_path:
+                if "train"==self.split or "val"==self.split:
                     midi_path = hf.attrs['midi_path']
                     audio_len = hf['audio'].shape[-1]
                     window_samples = hf.attrs['window_samples']
@@ -153,6 +154,8 @@ class KongDataset(Dataset):
                     # for test set, we use the whole file
                     midi_path = hf.attrs['midi_path']
                     self.seg_list.append((path, midi_path, 0))
+        
+        
 
     def __getitem__(self, idx: int) -> dict:
         """
@@ -204,7 +207,12 @@ class KongDataset(Dataset):
             -------
                 length (int): length of segment items.
         """
-        return len(self.seg_list)
+        if self.split == "train":
+            return len(self.seg_list)
+        else:
+            # We return 100 to reduce training time
+            return 100
+        
     
     def _get_label_roll(self, midi: pretty_midi.PrettyMIDI, \
                   start: float, end: float, frame_rate: int) -> dict:

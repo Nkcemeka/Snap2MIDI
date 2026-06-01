@@ -271,21 +271,21 @@ class AcousticModel(nn.Module):
         return out
 
 class KongModel(pl.LightningModule):
-    def __init__(self, config: dict, extraction_config: dict, momentum: float, cmp: int=48, 
-                 factors: list=[16, 32, 32]):
+    def __init__(self, config: dict, extraction_config: dict):
         """
             Base model for Kong.
 
             Args
             ----
-                momentum (float): Momentum for batch norm layers
-                cmp (int): Complexity for Acoustic model
-                factors (list): List of factors for the complexity of the conv block
+                config (dict): Config containing params for training model etc.
+                extraction_config (dict): Config for the data extraction process
         """
         super().__init__()
+        cmp = config["cmp"] 
+        factors = config["factors"]
         self.num_features = extraction_config["n_mels"]
         self.classes = extraction_config["max_pitch"] - extraction_config["min_pitch"] + 1
-        self.momentum = momentum
+        self.momentum = config["momentum"]
         sample_rate = extraction_config["sample_rate"]
         window_size = extraction_config["mel_n_fft"]
         hop_size = sample_rate // extraction_config["frame_rate"]
@@ -318,7 +318,7 @@ class KongModel(pl.LightningModule):
         self.velocity_model = AcousticModel(self.classes, self.num_features, self.momentum,
                                          cmp=cmp, factors=factors)
         
-        self.bn0 = nn.BatchNorm2d(self.num_features, momentum)
+        self.bn0 = nn.BatchNorm2d(self.num_features, self.momentum)
         self.reg_onset_gru = nn.GRU(input_size=self.classes*2, hidden_size=256, num_layers=1,
                                     bias=True, batch_first=True, dropout=0., bidirectional=True)
         self.reg_onset_fc = nn.Linear(512, self.classes)
@@ -484,7 +484,7 @@ class KongModel(pl.LightningModule):
             'train_offset_loss': loss['offset_loss'].item(),
             'train_frame_loss': loss['frame_loss'].item(),
             'train_velocity_loss': loss['velocity_loss'].item()
-        }, logger=True, on_step=False, on_epoch=True)
+        }, logger=True, on_step=True, on_epoch=False)
         return loss['total_loss']
     
     def validation_step(self, val_batch, batch_idx):
@@ -499,27 +499,11 @@ class KongModel(pl.LightningModule):
             'valid_offset_loss': loss['offset_loss'].item(),
             'valid_frame_loss': loss['frame_loss'].item(),
             'valid_velocity_loss': loss['velocity_loss'].item()
-        }, logger=True, on_epoch=True)
-        return loss['total_loss']
-
-    def test_step(self, test_batch, batch_idx):
-        output_dict = self.forward(test_batch["audio"])
-    
-        # calculate the loss
-        loss = self.regress_bce(output_dict, test_batch)
-
-        self.log_dict({
-            'test_total_loss': loss['total_loss'].item(),
-            'test_onset_loss': loss['onset_loss'].item(),
-            'test_offset_loss': loss['offset_loss'].item(),
-            'test_frame_loss': loss['frame_loss'].item(),
-            'test_velocity_loss': loss['velocity_loss'].item()
-        }, logger=True, on_step=True)
+        }, logger=True, on_step=False, on_epoch=True)
         return loss['total_loss']
     
 class KongPedal(pl.LightningModule):
-    def __init__(self, config: dict, extraction_config: dict, momentum: float, cmp: int=48, 
-                 factors: list=[16, 32, 32]):
+    def __init__(self, config: dict, extraction_config: dict):
         """
             Base model for Kong.
 
@@ -531,8 +515,10 @@ class KongPedal(pl.LightningModule):
                 factors (list): List of factors for the complexity of the conv block
         """
         super().__init__()
+        cmp = config["cmp"] 
+        factors = config["factors"]
         self.num_features = extraction_config["n_mels"]
-        self.momentum = momentum
+        self.momentum = config["momentum"]
         sample_rate = extraction_config["sample_rate"]
         window_size = extraction_config["mel_n_fft"]
         hop_size = sample_rate // extraction_config["frame_rate"]
@@ -563,7 +549,7 @@ class KongPedal(pl.LightningModule):
         self.reg_pedal_frame_model = AcousticModel(1, self.num_features, self.momentum,
                                          cmp=cmp, factors=factors)
         
-        self.bn0 = nn.BatchNorm2d(self.num_features, momentum)
+        self.bn0 = nn.BatchNorm2d(self.num_features, self.momentum)
 
         # initialize the weights for architecture
         self.weights_init()
@@ -649,7 +635,7 @@ class KongPedal(pl.LightningModule):
             'train_onset_pedal_loss': loss['onset_pedal_loss'].item(),
             'train_offset_pedal_loss': loss['offset_pedal_loss'].item(),
             'train_frame_pedal_loss': loss['frame_pedal_loss'].item()
-        }, logger=True, on_step=False, on_epoch=True)
+        }, logger=True, on_step=True, on_epoch=False)
         return loss['total_pedal_loss']
     
     def validation_step(self, val_batch, batch_idx):
@@ -663,23 +649,9 @@ class KongPedal(pl.LightningModule):
             'valid_onset_pedal_loss': loss['onset_pedal_loss'].item(),
             'valid_offset_pedal_loss': loss['offset_pedal_loss'].item(),
             'valid_frame_pedal_loss': loss['frame_pedal_loss'].item()
-        }, logger=True, on_epoch=True)
+        }, logger=True, on_step=False, on_epoch=True)
         return loss['total_pedal_loss']
     
-    def test_step(self, test_batch, batch_idx):
-        output_dict = self.forward(test_batch["audio"])
-    
-        # calculate the loss
-        loss = self.regress_pedal_bce(output_dict, test_batch)
-
-        self.log_dict({
-            'test_total_pedal_loss': loss['total_pedal_loss'].item(),
-            'test_onset_pedal_loss': loss['onset_pedal_loss'].item(),
-            'test_offset_pedal_loss': loss['offseat_pedal_loss'].item(),
-            'test_frame_pedal_loss': loss['frame_pedal_loss'].item()
-        }, logger=True, on_step=True)
-        return loss['total_pedal_loss']
-
 # Test Kong's pedal model
 if __name__ == "__main__":
     model = KongPedal(num_features=229, momentum=0.1)

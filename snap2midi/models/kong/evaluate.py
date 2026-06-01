@@ -177,12 +177,15 @@ def evaluate(config: dict):
     # glob all the h5 files in the test directory
     test_files = glob.glob(f"{config["test_path"]}/*.h5")
     dataset_length = len(test_files)
-
-    model = load_kong(config)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
     base_path = str(Path(config["test_path"]).parent)
     extraction_config_path = f"{base_path}/extraction_config.h5"
     extraction_config = load_extract_config(extraction_config_path)
+
+    # update config
+    config["ext_config_path"] = extraction_config_path
+    model = load_kong(config)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    
     frame_rate = extraction_config["frame_rate"]
     min_pitch = extraction_config["min_pitch"]
     max_pitch = extraction_config["max_pitch"]
@@ -207,8 +210,7 @@ def evaluate(config: dict):
         window_size = extraction_config["window_size"]
 
         # load midi
-        # sustain MIDI
-        #midi = pedal_extend(midi_path)
+        # sustain MIDI if needed
         if extraction_config["extend_pedal"]:
             midi = extend_pedal(pretty_midi.PrettyMIDI(midi_path))
         else:

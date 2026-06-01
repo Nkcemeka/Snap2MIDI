@@ -68,16 +68,17 @@ def main(config):
     dm = KongPedalDataModule(config, extraction_config)
     
     # Load/initialize the model
-    model = KongPedal(config, extraction_config, config["momentum"], cmp=config["cmp"], \
-                      factors=config["factors"])
+    model = KongPedal(config, extraction_config)
 
     # create checkpoint callback
-    val_flag = Path(f"{config["base_path"].rstrip('/')}/val/").exists()
+    base_path = config["base_path"].rstrip('/')
+    val_flag = Path(f"{base_path}/val/").exists()
     if val_flag:
         checkpoint_callback = ModelCheckpoint(
             monitor='valid_total_pedal_loss',
-            filename='kongpedal-{epoch:02d}-{valid_total_pedal_loss:.2f}',
+            filename='kongpedal-step={step}-loss={valid_total_loss:.4f}',
             dirpath=config["save_dir"],
+            every_n_train_steps=config["val_steps"],
             save_top_k=5,
             mode="min"
         )
@@ -92,7 +93,8 @@ def main(config):
         callbacks=[checkpoint_callback],
         num_sanity_val_steps=0,
         num_nodes=config["num_nodes"],
-        check_val_every_n_epoch=1,
+        val_check_interval=config["val_steps"],
+        log_every_n_steps=config["val_steps"],
         logger=pl_logger(config["logger_name"], 
         project_name=config["experiment_name"])
     )
@@ -104,7 +106,7 @@ def main(config):
             f"[resume_path]: {config["resume_path"]} does not exist."
         trainer.fit(model, dm, ckpt_path=config["resume_path"])
     
-    test_flag = Path(f"{config["base_path"].rstrip('/')}/test").exists()
+    test_flag = Path(f"{base_path}/test").exists()
     if test_flag:
         trainer.test(
             model=model,

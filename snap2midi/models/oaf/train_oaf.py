@@ -25,7 +25,6 @@ class OAFDataModule(pl.LightningDataModule):
     def setup(self, stage):
         train_path = f"{self.config["base_path"].rstrip('/')}/train/"
         val_path = f"{self.config["base_path"].rstrip('/')}/val/"
-        test_path = f"{self.config["base_path"].rstrip('/')}/test/"
 
         assert Path(train_path).exists(), f"[TRAIN PATH]: {train_path} does not exist!"
         self.train_dataset = OAFDataset([f"{train_path}"])
@@ -35,12 +34,6 @@ class OAFDataModule(pl.LightningDataModule):
             self.val_dataset = OAFDataset([f"{val_path}"])
         else:
             self.val_dataset = None
-
-        # We also don't necesaarily need a test set
-        if Path(test_path).exists():
-            self.test_dataset = OAFDataset([f"{test_path}"]) 
-        else:
-            self.test_dataset = None
 
     # Below are methods for setting up the dataloaders
     def train_dataloader(self):
@@ -54,19 +47,13 @@ class OAFDataModule(pl.LightningDataModule):
         return DataLoader(self.val_dataset, batch_size=self.config["batch_size"], \
                           num_workers=self.config["num_workers"], shuffle=False)
 
-    def test_dataloader(self):
-        if self.test_dataset is None:
-            return []
-        return DataLoader(self.test_dataset, batch_size=1, \
-                          num_workers=self.config["num_workers"], shuffle=False)
-
 def main(config):
     # Create datasets 
     dm = OAFDataModule(config)
     model = OnsetsAndFrames(config)
 
     # create checkpoint callback
-    base_path = str(Path(config["base_path"].parent))
+    base_path = config["base_path"].rstrip('/')
     val_flag = Path(f"{base_path}/val/").exists()
     if val_flag:
         checkpoint_callback = ModelCheckpoint(
@@ -95,12 +82,3 @@ def main(config):
         assert Path(config["resume_path"]).exists(), \
             f"[resume_path]: {config["resume_path"]} does not exist."
         trainer.fit(model, dm, ckpt_path=config["resume_path"])
-    
-    test_flag = Path(f"{base_path}/test").exists()
-    if test_flag:
-        trainer.test(
-            model=model,
-            datamodule=dm,
-            ckpt_path="best"
-        )
-
