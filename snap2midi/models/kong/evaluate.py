@@ -341,9 +341,14 @@ def evaluate_pedal(config: dict):
     test_files = glob.glob(f"{config["test_path"]}/*.h5")
     dataset_length = len(test_files)
 
+    base_path = str(Path(config["test_path"]).parent)
+    extraction_config_path = f"{base_path}/extraction_config.h5"
+    extraction_config = load_extract_config(extraction_config_path)
+
+    # update config
+    config["ext_config_path"] = extraction_config_path
     model = load_pedal(config)
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    extraction_config = load_extract_config()
     frame_rate = extraction_config["frame_rate"]
     frame_thresh = config["frame_threshold"]
     pedal_thresh = config["pedal_offset_threshold"]
@@ -418,12 +423,15 @@ def evaluate_pedal(config: dict):
         ref_ints = ref_events
 
         # Get the event-level metrics
-        score_notes_off = prf(ref_ints, np.ones(ref_ints.shape[0]), est_ints, np.ones(est_ints.shape[0]))
+        score_notes_off = prf(ref_ints, np.ones(ref_ints.shape[0]), est_ints, \
+                np.ones(est_ints.shape[0]))
         events_precision, events_recall = score_notes_off[0], score_notes_off[1]
         events_f1 = score_notes_off[2]
 
-        score_events_no_off = prf(ref_ints, np.ones(ref_ints.shape[0]), est_ints, np.ones(est_ints.shape[0]), offset_ratio=None)
-        events_prec_no_off, events_recall_no_off, events_f1_no_off = score_events_no_off[0], score_events_no_off[1], score_events_no_off[2]
+        score_events_no_off = prf(ref_ints, np.ones(ref_ints.shape[0]), est_ints, \
+            np.ones(est_ints.shape[0]), offset_ratio=None)
+        events_prec_no_off, events_recall_no_off, events_f1_no_off = score_events_no_off[0], \
+            score_events_no_off[1], score_events_no_off[2]
 
         event_metrics["events_Precision"].append(events_precision)
         event_metrics["events_Recall"].append(events_recall)
@@ -434,7 +442,8 @@ def evaluate_pedal(config: dict):
 
         # Get the frame-level metrics
         ref_frame_roll = ref_frames
-        est_frame_roll = (result_dict["pedal_frame_roll"] >= pedal_thresh).astype(int)
+        #est_frame_roll = (result_dict["pedal_frame_roll"] >= pedal_thresh).astype(int)
+        est_frame_roll = (result_dict["pedal_frame_roll"] > 0.5).astype(int)
 
         # chop the rolls
         est_frame_roll = est_frame_roll[:ref_frame_roll.shape[0]]
@@ -447,10 +456,10 @@ def evaluate_pedal(config: dict):
     
     # Find average of frame and note metrics
     for key in frame_metrics:
-        frame_metrics[key] = round(np.mean(frame_metrics[key]).item(), 2)
+        frame_metrics[key] = round(np.mean(frame_metrics[key]).item(), 4)
 
     for key in event_metrics:
-        event_metrics[key] = round(np.mean(event_metrics[key]).item(), 2)
+        event_metrics[key] = round(np.mean(event_metrics[key]).item(), 4)
 
     # format the print output
     print("Frame metrics are: ")

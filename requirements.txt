@@ -17,3 +17,4 @@ torchinfo==1.8.0
 sphinx==8.2.3
 sphinx-rtd-theme==3.0.2
 pytorch-lightning
+nnaudio2

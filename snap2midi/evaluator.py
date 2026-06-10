@@ -4,6 +4,7 @@
 """
 from .models.hft.evaluate import evaluate_test as hft_eval
 from .models.oaf.evaluate import evaluate_test as oaf_eval
+from .models.oafv2.evaluate import evaluate_test as oafv2_eval
 from .models.kong.evaluate import evaluate as kong_eval
 from .models.kong.evaluate import evaluate_pedal as kong_pedal_eval
 
@@ -101,6 +102,77 @@ class Evaluator:
         results = oaf_eval(config)
         return results
 
+
+    def evaluate_oafv2(self, test_path: str, checkpoint_path: str,  \
+        sample_rate: int = 16000, n_fft: int=2048, n_mels: int=229, htk: bool=True, fmin: int=32, \
+        hop_length: int=512, fmax: int|None=None, pad_mode: str="reflect", center: bool=True, \
+        window: str="hann", in_features=229, out_features=88, model_complexity: int=48, threshold=0.5,\
+        pitch_offset: int = 21):
+        """
+            Evaluate Onsets and Frames model (Version 2) with specified configuration.
+
+            Parameters
+            -----------
+                test_path (str): 
+                    Path to the test set.
+                checkpoint_path (str): 
+                    Path to the model checkpoint file.
+                sample_rate (int): 
+                    Sample rate of the input audio. Default is 16000.
+                in_features (int): 
+                    Number of input features. Default is 229.
+                out_features (int): 
+                    Number of output features. Default is 88.
+                threshold (float): 
+                    Threshold for onset detection. Default is 0.5.
+                n_fft (int):
+                    Size of fft window.
+                n_mels (int):
+                    Number of mel bands.
+                htk (bool):
+                    Use htk for mel spectrogram.
+                fmin (int):
+                    Min. frequeny for FFT
+                fmax (int | None):
+                    Max frequency for FFT.
+                pad_mode (str):
+                    Pad mode for FFT. Default is reflect.
+                center (str):
+                    Center window for FFT computation
+                window (str):
+                    Window for FFT. Default is 'hann'.
+                model_complexity (int):
+                    Model complexity. Default is 48.
+                pitch_offset (int): 
+                    Pitch offset for MIDI notes. Default is 21.
+        
+            Returns
+            -------
+                Midi_output (pretty_midi.PrettyMIDI | None): 
+                    Generated MIDI object. If filename is None, returns None.
+        """
+        frame_rate = sample_rate / hop_length
+        config = self._build_config_from_kwargs(
+            test_path=test_path,
+            checkpoint_path=checkpoint_path,
+            sample_rate=sample_rate,
+            frame_rate=frame_rate,
+            in_features=in_features,
+            out_features=out_features,
+            threshold=threshold,
+            n_fft=n_fft,
+            n_mels=n_mels,
+            htk=htk,
+            fmin=fmin,
+            fmax=fmax,
+            pad_mode=pad_mode,
+            center=center,
+            pitch_offset=pitch_offset,
+            window=window,
+            model_complexity=model_complexity
+        )
+        return oafv2_eval(config)
+
     def evaluate_kong(self, test_path: str, checkpoint_note_path: str, factors: list = [16, 32, 32], \
         frame_rate: float=100, onset_threshold: float = 0.3, offset_threshold: float = 0.3, frame_threshold: float = 0.3, \
         pedal_offset_threshold: float = 0.3, cmp: int=48, momentum: float = 0.01):
@@ -151,8 +223,8 @@ class Evaluator:
         return results
     
     def evaluate_kong_pedal(self, test_path: str, checkpoint_pedal_path: str, factors: list = [16, 32, 32], \
-        frame_rate: float=100, onset_threshold: float = 0.3, offset_threshold: float = 0.3, frame_threshold: float = 0.3, \
-        pedal_offset_threshold: float = 0.3, cmp: int=48, momentum: float = 0.01):
+        frame_rate: float=100, onset_threshold: float = 0.3, frame_threshold: float = 0.1, \
+        pedal_offset_threshold: float = 0.2, cmp: int=48, momentum: float = 0.01):
         """
             Evaluate Kong Pedal model with specified configuration.
 
@@ -168,12 +240,10 @@ class Evaluator:
                     Frame rate for the model. Default is 100.
                 onset_threshold (float): 
                     Threshold for onset detection. Default is 0.3.
-                offset_threshold (float): 
-                    Threshold for offset detection. Default is 0.3.
                 frame_threshold (float): 
                     Threshold for frame detection. Default is 0.3.
                 pedal_offset_threshold (float): 
-                    Threshold for pedal offset detection. Default is 0.3.
+                    Threshold for pedal offset detection. Default is 0.2.
                 cmp (int): 
                     CMP value for the model. Default is 48.
                 momentum (float): 
@@ -189,7 +259,6 @@ class Evaluator:
             factors=factors,
             frame_rate=frame_rate,
             onset_threshold=onset_threshold,
-            offset_threshold=offset_threshold,
             frame_threshold=frame_threshold,
             pedal_offset_threshold=pedal_offset_threshold,
             cmp=cmp,

@@ -30,8 +30,6 @@ class KongPedalDataModule(pl.LightningDataModule):
             extend_pedal=self.extraction_config["extend_pedal"])
         self.val_dataset = KongDataset(f"{self.config["base_path"].rstrip('/')}/val/",\
             extend_pedal=self.extraction_config["extend_pedal"])
-        self.test_dataset = KongDataset(f"{self.config["base_path"].rstrip('/')}/test/",\
-            extend_pedal=self.extraction_config["extend_pedal"])
 
     # Below are methods for setting up the dataloaders
     def train_dataloader(self):
@@ -43,13 +41,6 @@ class KongPedalDataModule(pl.LightningDataModule):
             return []
         
         return DataLoader(self.val_dataset, batch_size=self.config["batch_size"], \
-            pin_memory=True, collate_fn=collate_fn, num_workers=self.config["num_workers"], shuffle=False)
-
-    def test_dataloader(self):
-        if self.test_dataset is None:
-            return []
-        
-        return DataLoader(self.test_dataset, batch_size=1,\
             pin_memory=True, collate_fn=collate_fn, num_workers=self.config["num_workers"], shuffle=False)
     
 def main(config):
@@ -76,11 +67,10 @@ def main(config):
     if val_flag:
         checkpoint_callback = ModelCheckpoint(
             monitor='valid_total_pedal_loss',
-            filename='kongpedal-step={step}-loss={valid_total_loss:.4f}',
+            filename='kongpedal-step={step}',
             dirpath=config["save_dir"],
-            every_n_train_steps=config["val_steps"],
-            save_top_k=5,
-            mode="min"
+            save_top_k=-1,
+            every_n_train_steps=20000,
         )
     else:
         checkpoint_callback = ModelCheckpoint(
@@ -105,11 +95,3 @@ def main(config):
         assert Path(config["resume_path"]).exists(), \
             f"[resume_path]: {config["resume_path"]} does not exist."
         trainer.fit(model, dm, ckpt_path=config["resume_path"])
-    
-    test_flag = Path(f"{base_path}/test").exists()
-    if test_flag:
-        trainer.test(
-            model=model,
-            datamodule=dm,
-            ckpt_path="best"
-        )

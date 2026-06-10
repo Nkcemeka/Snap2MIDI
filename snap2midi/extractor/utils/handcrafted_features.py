@@ -1,6 +1,9 @@
 # Imports
 import numpy as np
 import librosa
+from nnAudio2.features.mel import MelSpectrogram
+from nnAudio2.features.cqt import CQT
+import torch
 
 # Define a list of supported features
 SUPPORTED_FEATURES = ["mel", "cqt"]
@@ -73,8 +76,9 @@ class HandcraftedFeatures:
         return cqt
 
     def compute_mel(self, audio: np.ndarray, \
-                    n_mels: int=229, n_fft: int=2048, hop_length: int | None = None,
-                    power_db: bool=False) -> np.ndarray:
+                    n_mels: int=229, n_fft: int=2048, fmin: int=0, fmax: float | None=None,\
+                    hop_length: int | None = None,
+                    power_db: bool=False, htk:bool=False) -> np.ndarray:
         """
             Compute the Mel spectrogram for a given audio segment.
             This returns the log of the squared magnitude of the Mel spectrogram.
@@ -85,6 +89,8 @@ class HandcraftedFeatures:
                 n_mels (int): Number of mel bands
                 n_fft (int): FFT size
                 hop_length (int | None): Hop length for Mel spectrogram computation
+                power_db (bool): Convert to db scale
+                htk (bool): Default is False. Uses htk instead of slaney
 
             Returns
             --------
@@ -98,7 +104,8 @@ class HandcraftedFeatures:
             hop_length = int(numerator / denominator)
         mel = librosa.feature.melspectrogram(y=audio, hop_length=hop_length, 
                                              sr=self.sample_rate, 
-                                             n_mels=n_mels, n_fft=n_fft)
+                                             n_mels=n_mels, n_fft=n_fft, 
+                                             fmin=fmin, fmax=fmax, htk=htk)
         
         if power_db:
             # convert to dB scale
@@ -113,3 +120,63 @@ class HandcraftedFeatures:
         mel = np.clip(mel, a_min=1e-10, a_max=None)
         mel = np.log(mel)
         return mel
+    
+    def compute_mel_nnaudio(self, audio: torch.Tensor, n_mels: int=229, n_fft: int=2048, \
+        fmin: int=0, fmax: float | None=None, hop_length: int = 512, htk:bool=False,\
+        window: str="hann", pad_mode: str="reflect", center: bool=True) -> torch.Tensor:
+        """
+            Compute the Mel spectrogram for a given audio segment.
+
+            Args
+            -----
+                audio (torch.Tensor): Audio segment
+                n_mels (int): Number of mel bands
+                n_fft (int): FFT size or window size.
+                fmin (int): Minimum frequency
+                fmax (float | None): Maximum frequency
+                hop_length (int): Hop length for Mel spectrogram computation.
+                htk (bool): Default is False.
+                window (str): Default window is hann
+                pad_mode (str): Default pad mode is 'reflect'.
+                center (bool): Center the window for STFT computation.
+
+            Returns
+            --------
+                spec (torch.Tensor): Mel spectrogram of the audio segment
+        """
+        mel = MelSpectrogram(
+            sr=self.sample_rate, n_fft=n_fft, n_mels=n_mels, hop_length=hop_length, \
+            htk=htk, fmin=fmin, fmax=fmax, pad_mode=pad_mode, center=center, \
+            window=window
+        )
+
+        spec = mel(audio)
+        return spec
+    
+    def compute_cqt_nnaudio(self, audio: torch.Tensor, n_bins: int=84, bins_per_octave: int=12, \
+        fmin: int=32.7, fmax: float | None=None, hop_length: int = 512, \
+        window: str="hann", pad_mode: str="reflect", center: bool=True) -> torch.Tensor:
+        """
+            Compute the CQT spectrogram for a given audio segment.
+
+            Args
+            -----
+                audio (torch.Tensor): Audio segment
+                n_bins (int): Number of frequency bins
+                bins_per_octave (int): Number of bins per octave
+                fmin (int): Minimum frequency
+                fmax (float | None): Maximum frequency
+                hop_length (int): Hop length for Mel spectrogram computation.
+                window (str): Default window is hann
+                pad_mode (str): Default pad mode is 'reflect'.
+                center (bool): Center the window for STFT computation.
+
+            Returns
+            --------
+                spec (torch.Tensor): CQT spectrogram of the audio segment
+        """
+        cqt = CQT(sr=self.sample_rate, bins_per_octave=bins_per_octave, n_bins=n_bins, hop_length=hop_length, \
+            fmin=fmin, fmax=fmax, pad_mode=pad_mode, center=center, window=window
+            )
+        spec = cqt(audio)
+        return spec

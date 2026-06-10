@@ -299,7 +299,7 @@ def get_pedal_events(model_output: dict, pedal_thresh: float, frame_thresh: floa
             model_output['pedal_frame_roll'][:, 0],
             model_output['pedal_offset_roll'][:, 0],
             model_output['pedal_offset_dist_roll'][:, 0],
-            frame_thresh # original code used 0.5 here, weird....
+            0.5 #frame_thresh # original code used 0.5 here, weird....
     )
     
     if not all_pedal_events:
@@ -556,8 +556,7 @@ def load_pedal(config: dict, mode:int=0):
         else:
             extraction_config = config["user_ext_config"]
 
-    model = KongPedal(extraction_config, config["momentum"], cmp=config["cmp"], \
-                      factors=config["factors"])
+    model = KongPedal(config, extraction_config)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = model.to(device)
     model.load_state_dict(torch.load(path, weights_only=True)["state_dict"])

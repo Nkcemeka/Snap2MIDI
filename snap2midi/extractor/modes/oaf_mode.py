@@ -670,7 +670,7 @@ class _OAFMode(_BaseMode):
         # Set feature params.
         if not self.feature_params:
             self.feature = "mel"
-            self.feature_params = {"n_mels": 229, "mel_n_fft": 2048}
+            self.feature_params = {"n_mels": 229, "mel_n_fft": 2048, "hop_length": 512}
         
         # Perform the extraction
         self._extract()

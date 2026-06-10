@@ -7,7 +7,7 @@ import h5py
 
 class _KongMode(_BaseMode):
     """
-        KongMode is a class that extracts audio and MIDI files from the dataset
+        _KongMode is a class that extracts audio and MIDI files from the dataset
         for training the Kong model.
     """
     def __init__(self, config) -> None:

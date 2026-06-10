@@ -2,8 +2,10 @@
     For performing inference on models supported by the snap2midi package.
 """
 from .models.oaf.inference import inference as oaf_infer
+from .models.oafv2.inference import inference as oafv2_infer
 from .models.hft.inference import inference as hft_infer
 from .models.kong.inference import inference as kong_infer
+from .models.transkun.inference import inference as transkun_infer
 
 class Inference:
     def __init__(self):
@@ -40,7 +42,7 @@ class Inference:
                 filename (str): 
                     Name of the output MIDI file. Default is "output.mid". Can be None.
                 checkpoint_path (str): 
-                    Path to the model checkpoint file. Default is "runs/checkpoint_90.pt".
+                    Path to the model checkpoint file.
                 sample_rate (int): 
                     Sample rate of the input audio. Default is 16000.
                 frame_rate (float): 
@@ -110,6 +112,79 @@ class Inference:
             feature_str=feature_str
         )
         return oaf_infer(config)
+    
+    def inference_oafv2(self, audio_path: str, checkpoint_path: str, filename: str | None = "output",  \
+        sample_rate: int = 16000, n_fft: int=2048, n_mels: int=229, htk: bool=True, fmin: int=32, \
+        hop_length: int=512, fmax: int|None=None, pad_mode: str="reflect", center: bool=True, \
+        window: str="hann", in_features=229, out_features=88, model_complexity: int=48, threshold=0.5,\
+        pitch_offset: int = 21):
+        """
+            Perform inference using Onsets and Frames model with specified configuration.
+
+            Parameters
+            -----------
+                audio_path (str): 
+                    Path to the input audio file.
+                filename (str): 
+                    Name of the output MIDI file. Default is "output.mid". Can be None.
+                checkpoint_path (str): 
+                    Path to the model checkpoint file.
+                sample_rate (int): 
+                    Sample rate of the input audio. Default is 16000.
+                in_features (int): 
+                    Number of input features. Default is 229.
+                out_features (int): 
+                    Number of output features. Default is 88.
+                threshold (float): 
+                    Threshold for onset detection. Default is 0.5.
+                n_fft (int):
+                    Size of fft window.
+                n_mels (int):
+                    Number of mel bands.
+                htk (bool):
+                    Use htk for mel spectrogram.
+                fmin (int):
+                    Min. frequeny for FFT
+                fmax (int | None):
+                    Max frequency for FFT.
+                pad_mode (str):
+                    Pad mode for FFT. Default is reflect.
+                center (str):
+                    Center window for FFT computation
+                window (str):
+                    Window for FFT. Default is 'hann'.
+                model_complexity (int):
+                    Model complexity. Default is 48.
+                pitch_offset (int): 
+                    Pitch offset for MIDI notes. Default is 21.
+        
+            Returns
+            -------
+                Midi_output (pretty_midi.PrettyMIDI | None): 
+                    Generated MIDI object. If filename is None, returns None.
+        """
+        frame_rate = sample_rate / hop_length
+        config = self._build_config_from_kwargs(
+            audio_path=audio_path,
+            filename=filename,
+            checkpoint_path=checkpoint_path,
+            sample_rate=sample_rate,
+            frame_rate=frame_rate,
+            in_features=in_features,
+            out_features=out_features,
+            threshold=threshold,
+            n_fft=n_fft,
+            n_mels=n_mels,
+            htk=htk,
+            fmin=fmin,
+            fmax=fmax,
+            pad_mode=pad_mode,
+            center=center,
+            pitch_offset=pitch_offset,
+            window=window,
+            model_complexity=model_complexity
+        )
+        return oafv2_infer(config)
 
     def inference_kong(self, audio_path: str, checkpoint_note_path: str, checkpoint_pedal_path: str,\
         filename: str|None = "output", factors: list = [16, 32, 32], frame_rate: float=100,\
@@ -309,3 +384,29 @@ class Inference:
             pad_mode=pad_mode
         )
         return hft_infer(config)
+
+    def inference_transkun(self, audio_path: str, checkpoint_path: str, filename: str | None = "output"):
+
+        """
+            Perform inference using Onsets and Frames model with specified configuration.
+
+            Parameters
+            -----------
+                audio_path (str): 
+                    Path to the input audio file.
+                filename (str): 
+                    Name of the output MIDI file. Default is "output.mid". Can be None.
+                checkpoint_path (str): 
+                    Path to the model checkpoint file.
+        
+            Returns
+            -------
+                Midi_output (pretty_midi.PrettyMIDI | None): 
+                    Generated MIDI object. If filename is None, returns None.
+        """
+        config = self._build_config_from_kwargs(
+            audio_path=audio_path,
+            filename=filename,
+            checkpoint_path=checkpoint_path
+        )
+        return transkun_infer(config)

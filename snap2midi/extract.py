@@ -5,7 +5,9 @@
 """
 from .extractor.modes.hft_mode import _HFTMode
 from .extractor.modes.oaf_mode import _OAFMode
+from .extractor.modes.oafv2_mode import _OAFV2Mode
 from .extractor.modes.kong_mode import _KongMode
+from .extractor.modes.tkun_mode import _TranskunMode
 
 class SnapExtractor:
     """
@@ -41,7 +43,7 @@ class SnapExtractor:
             fft_bins: int = 2048, window_length: int = 2048, log_offset: float = 1e-8,
             window: str = "hann", pad_mode: str = "constant", save_name:str="data/hft"):
         """
-            Extract audio and MIDI files from the HFT dataset.
+            Extract audio and MIDI files for the HFT mode.
             
             Parameters:
             -----------
@@ -112,7 +114,7 @@ class SnapExtractor:
                 onset_length: int = 32, offset_length: int = 32, frame_rate: float = 31.25,
                 n_mels: int = 229, mel_n_fft: int = 2048, hop_length: int = 512, save_name:str="data/oaf"):
         """
-            Extract audio and MIDI files from the OAF dataset.
+            Extract audio and MIDI files for the OAF mode.
 
             Parameters
             -----------
@@ -164,12 +166,74 @@ class SnapExtractor:
         config["feature_params"] = feature_params
         _OAFMode(config)
 
+    def extract_oafv2(self, path: str, dataset_name: str="maestro", extend_pedal: bool=True, sample_rate: int = 16000, feature: str = "mel",
+                min_pitch: int = 21, max_pitch: int = 108, onset_frame_length: int =1, offset_frame_length: int = 1,\
+                frame_rate: float = 31.25, n_mels: int = 229, mel_n_fft: int = 2048,
+                fmin: int = 30, fmax: int = 8000, use_htk: bool=True, \
+                window_size: float=20.48, hop_length: int = 512, save_name:str="data/oafv2"):
+        """
+            Extract audio and MIDI files for the OAF mode.
+
+            Parameters
+            ----------
+                path (str): 
+                    Path to the dataset.
+                dataset_name (str): 
+                    Name of the dataset. Default is "maestro".
+                extend_pedal (bool):
+                    Extend the note offsets based on pedal information. Default is True.
+                sample_rate (int): 
+                    Sample rate of the audio. Default is 16000.
+                feature (str): 
+                    Type of feature to extract. Default is "mel".
+                min_pitch (int): 
+                    Minimum MIDI note number. Default is 21.
+                max_pitch (int): 
+                    Maximum MIDI note number. Default is 108.
+                onset_frame_length (int): 
+                    Length of onset in frames. Default is 1.
+                offset_frame_length (int): 
+                    Length of offset in frames. Default is 1.
+                frame_rate (float): 
+                    Frame rate of the feature. Default is 31.25.
+                n_mels (int): 
+                    Number of mel bins. Default is 229.
+                mel_n_fft (int): 
+                    Number of FFT bins for mel spectrogram. Default is 2048.
+                fmin (int): 
+                    Minimum frequency for mel spectrogram. Default is 30.
+                fmax (int):
+                    Maximum frequency for STFT. Default is 8000.
+                use_htk (bool):
+                    Uses htk for mel spectrogram instead of slaney.
+                window_size (float):
+                    Size of the window in seconds. Default is 20.48 seconds.
+                hop_length (int): 
+                    Hop length in samples. Default is 512.
+                save_name (str):
+                    Name of the path directory where you want to save the
+                    data.
+
+            Returns
+            -------
+                None
+        """
+        feature_params = self._build_config_from_kwargs(n_mels=n_mels, mel_n_fft=mel_n_fft, hop_length=hop_length)
+        extra_config = self._build_config_from_kwargs(dataset_name=dataset_name, extend_pedal=extend_pedal, \
+            ext_audio="wav", ext_midi="mid", path=path, sample_rate=sample_rate, feature=feature,\
+            min_pitch=min_pitch, max_pitch=max_pitch, onset_frame_length=onset_frame_length, \
+            offset_frame_length=offset_frame_length, fmin=fmin, fmax=fmax, use_htk=use_htk,
+            frame_rate=frame_rate, window_size=window_size, save_name=save_name)
+        config = {**extra_config}
+        config["feature_params"] = feature_params
+        _OAFV2Mode(config)
+
     def extract_kong(self, path: str, dataset_name: str="maps", sample_rate: int = 16000, window_size: float = 10.0,
             feature: str = "mel", hop_size: float = 1.0, min_pitch: int = 21, max_pitch: int = 108,
             frame_rate: int = 100, n_mels: int = 229, mel_n_fft: int = 2048, hop_length: int = 160,
             extend_pedal: bool = True, save_name:str="data/kong"):
         """
-            Extract audio and MIDI files from the Kong dataset.
+            Extract audio and MIDI files for the Kong mode.
 
             Parameters
             -----------
@@ -216,3 +280,41 @@ class SnapExtractor:
         config = {**extra_config}
         config["feature_params"] = feature_params
         _KongMode(config)
+    
+    def extract_transkun(self, path: str, dataset_name: str="maestro", \
+        extend_pedal: bool=True, sample_rate: int = 44100, resample: bool=True,\
+        save_name:str="data/transkun"):
+        """
+            Extract audio and MIDI files from the Transkun mode.
+
+            Parameters
+            -----------
+                path (str): 
+                    Path to the dataset.
+                dataset_name (str): 
+                    Name of the dataset. Default is "maestro".
+                extend_pedal (bool):
+                    Extend the note offsets based on pedal information. Default is True.
+                sample_rate (int): 
+                    Sample rate of the audio. Default is 44100Hz
+                resample (bool):
+                    Flag to resample the entire dataset to sample_rate
+                    before extraction.
+                save_name (str):
+                    Name of the path directory where you want to save the
+                    data.
+
+            Returns
+            -------
+                None
+        """
+        config = self._build_config_from_kwargs(
+            dataset_name=dataset_name, 
+            extend_pedal=extend_pedal,
+            ext_audio="wav", 
+            ext_midi="mid",
+            path=path, 
+            resample=resample,
+            sample_rate=sample_rate, 
+            save_name=save_name)
+        _TranskunMode(config)

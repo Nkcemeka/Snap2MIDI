@@ -1,0 +1,41 @@
+{
+	"Model": {
+		"module": "snap2midi.models.transkun.transkun",
+		"configClassName": "Config",
+		"config": {
+			"f_min": 30,
+			"f_max": 8000,
+			"n_mels": 229,
+			"segmentHopSizeInSecond": 8,
+			"segmentSizeInSecond": 16,
+			"hopSize": 1024,
+			"windowSize": 4096,
+			"fs": 44100,
+			"nExtraWins": 5,
+			"baseSize": 40,
+			"downsampleF": true,
+			"posEmbedInitGamma": 1,
+			"nHead": 4,
+			"fourierSize": 64,
+			"nLayers": 6,
+			"enabledAttn": [
+				"F",
+				"T"
+			],
+			"hiddenFactorAttn": 1,
+			"hiddenFactor": 4,
+			"velocityPredictorHiddenSize": 512,
+			"refinedOFPredictorHiddenSize": 512,
+			"scoringExpansionFactor": 4,
+			"useInnerProductScorer": true,
+			"scoreDropoutProb": 0.1,
+			"contextDropoutProb": 0.1,
+			"velocityDropoutProb": 0.1,
+			"refinedOFDropoutProb": 0.1,
+			"weight_decay": 0.0001,
+			"max_lr": 0.0002,
+			"nIter": 180000,
+			"quantile": 0.8
+		}
+	}
+}

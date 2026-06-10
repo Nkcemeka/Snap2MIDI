@@ -142,10 +142,6 @@ class OnsetsAndFrames(pl.LightningModule):
         )
 
         self.config = params
-        # self.test_mp_metrics = MultipitchMetrics(params["threshold"], params["frame_rate"], \
-        #                     pitch_offset=params["pitch_offset"])
-        # self.test_tr_metrics = TranscriptionMetrics(params["threshold"], params["frame_rate"], \
-        #                     pitch_offset=params["pitch_offset"])
         self.bce = nn.BCEWithLogitsLoss()
         self.initialize_weights()
         self.automatic_optimization = False
