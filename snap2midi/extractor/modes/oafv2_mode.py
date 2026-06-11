@@ -45,9 +45,6 @@ class _OAFV2Mode(_BaseMode):
         
         self.sample_rate = config["sample_rate"]
         self.extend_pedal=self.config["extend_pedal"] # If to extend note offsets
-        self.frame_rate = config["frame_rate"]
-        self.feature = config["feature"]
-        self.feature_params = config["feature_params"]
         self.min_pitch = config["min_pitch"]
         self.max_pitch = config["max_pitch"]
         self.num_pitches = self.max_pitch - self.min_pitch + 1
