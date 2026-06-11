@@ -694,6 +694,8 @@ class _OAFMode(_BaseMode):
             train_files, val_files, test_files = self._get_maps_train_val_test()
         elif self.dataset_name == "maestro":
             train_files, val_files, test_files = self._get_maestro_train_val_test()
+        elif self.dataset_name == "goat":
+            train_files, val_files, test_files = self._get_goat_train_val_test()
         else:
             raise ValueError(f"Dataset {self.dataset_name} not supported!")
 
@@ -774,7 +776,7 @@ class _OAFMode(_BaseMode):
                     
                     np.savez(store_path, **store_dict)
 
-        print(f"Extraction complete! Total files extracted: {len(train_files) + len(test_files)}")
+        print(f"Extraction complete! Total source pairs extracted: {len(train_files) + len(val_files) + len(test_files)}")
             
 
     def _get_feature(self, audio : np.ndarray, feature: str, feature_params: dict):

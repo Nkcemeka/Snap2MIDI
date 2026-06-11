@@ -12,8 +12,20 @@ SUPPORTED_DATASETS = [
     "maestro",
     "guitarset",
     "musicnet",
-    "slakh"
+    "slakh",
+    "goat"
 ]
+
+GOAT_DI_AUDIO_COLUMNS = ["di_audio_path"]
+GOAT_REAMPED_AUDIO_COLUMNS = [
+    "amp_audio_path_1",
+    "amp_audio_path_2",
+    "amp_audio_path_3",
+    "amp_audio_path_4",
+    "amp_audio_path_5",
+]
+GOAT_AUDIO_COLUMNS = GOAT_DI_AUDIO_COLUMNS + GOAT_REAMPED_AUDIO_COLUMNS
+GOAT_MIDI_COLUMNS = ["finealigned_midi_path", "unaligned_midi_path"]
 
 class _BaseMode:
     """ 
@@ -57,6 +69,8 @@ class _BaseMode:
             self.data = self._get_files_musicnet(self.path)
         elif self.dataset_name == "slakh":
             self.data = self._get_files_slakh(self.path)
+        elif self.dataset_name == "goat":
+            self.data = self._get_files_goat(self.path)
         elif self.dataset_name == "maps" or self.dataset_name == "oaf_maps":
             self.data = self._get_files_maps(self.path)
         else:
@@ -424,6 +438,198 @@ class _BaseMode:
                 else:
                     raise ValueError(f"Split {each[2]} not supported")
         return train_files, val_files, test_files
+
+    def _get_goat_root(self) -> Path:
+        """Return the GOAT folder that contains metadata.csv and data/."""
+        base_path = Path(self.path)
+        if (base_path / "metadata.csv").exists():
+            return base_path
+
+        nested_path = base_path / "GOAT"
+        if (nested_path / "metadata.csv").exists():
+            return nested_path
+
+        raise FileNotFoundError(
+            f"Could not find GOAT metadata.csv in {base_path} or {nested_path}"
+        )
+
+    def _resolve_goat_path(self, raw_path: str) -> Path:
+        """Resolve GOAT metadata-relative paths to files on disk."""
+        if raw_path is None or raw_path == "":
+            return Path()
+
+        path = Path(raw_path)
+        if path.is_absolute():
+            return path
+
+        root = self._get_goat_root()
+        parts = path.parts
+        if parts and parts[0] == "GOAT":
+            parts = parts[1:]
+
+        if parts and parts[0] == "data":
+            return root / Path(*parts)
+
+        return root / "data" / Path(*parts)
+
+    def _get_goat_audio_columns(self) -> list[str]:
+        """Select GOAT audio columns while intentionally excluding GP audio/files."""
+        columns = self.config.get("goat_audio_columns")
+
+        if columns is None or columns == "all" or columns == "di+reamped":
+            selected = GOAT_AUDIO_COLUMNS
+        elif columns == "reamped":
+            selected = GOAT_REAMPED_AUDIO_COLUMNS
+        elif columns == "di":
+            selected = GOAT_DI_AUDIO_COLUMNS
+        elif isinstance(columns, str):
+            selected = [columns]
+        else:
+            selected = list(columns)
+
+        invalid = [column for column in selected if column not in GOAT_AUDIO_COLUMNS]
+        if invalid:
+            raise ValueError(
+                "GOAT only supports DI/reamped audio columns. "
+                f"Invalid columns: {invalid}. Allowed columns: {GOAT_AUDIO_COLUMNS}"
+            )
+
+        return selected
+
+    def _get_files_goat(self, path: str) -> tuple[list[Path], list[Path]]:
+        """Get all GOAT audio/MIDI pairs described by metadata.csv."""
+        train_files, val_files, test_files = self._get_goat_train_val_test()
+        file_pairs = train_files + val_files + test_files
+        audio_files = [audio_file for audio_file, _ in file_pairs]
+        midi_files = [midi_file for _, midi_file in file_pairs]
+        return audio_files, midi_files
+
+    def _get_goat_rows(self) -> tuple[list[tuple[dict, Path]], int]:
+        """Load valid GOAT metadata rows and their best available MIDI path."""
+        metadata_csv = self._get_goat_root() / "metadata.csv"
+        rows = []
+        skipped = 0
+
+        with open(metadata_csv, "r") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                midi_path = Path()
+                for midi_column in GOAT_MIDI_COLUMNS:
+                    midi_value = row.get(midi_column, "")
+                    if midi_value:
+                        midi_path = self._resolve_goat_path(midi_value)
+                        if midi_path.exists():
+                            break
+
+                if not midi_path.exists():
+                    skipped += 1
+                    continue
+
+                rows.append((row, midi_path))
+
+        return rows, skipped
+
+    def _split_goat_rows_from_metadata(self, rows: list[tuple[dict, Path]]) -> dict[str, list[tuple[dict, Path]]]:
+        split_rows = {"train": [], "val": [], "test": []}
+
+        for row, midi_path in rows:
+            split = row["split"].strip().lower()
+            if split in ["valid", "validation"]:
+                split = "val"
+            if split not in split_rows:
+                raise ValueError(f"Unknown GOAT split: {row['split']}")
+            split_rows[split].append((row, midi_path))
+
+        val_fraction = float(self.config.get("goat_val_fraction", 0.0) or 0.0)
+        if not split_rows["val"] and val_fraction > 0:
+            if val_fraction <= 0 or val_fraction >= 1:
+                raise ValueError("goat_val_fraction must be greater than 0 and less than 1")
+
+            rng = np.random.default_rng(int(self.config.get("goat_split_seed", 1234)))
+            train_rows = split_rows["train"]
+            val_count = max(1, int(round(len(train_rows) * val_fraction)))
+            val_indices = set(rng.choice(len(train_rows), size=val_count, replace=False).tolist())
+            split_rows["train"] = [item for idx, item in enumerate(train_rows) if idx not in val_indices]
+            split_rows["val"] = [item for idx, item in enumerate(train_rows) if idx in val_indices]
+
+        return split_rows
+
+    def _split_goat_rows_by_fraction(self, rows: list[tuple[dict, Path]]) -> dict[str, list[tuple[dict, Path]]]:
+        test_fraction = self.config.get("goat_test_fraction")
+        val_fraction = float(self.config.get("goat_val_fraction", 0.0) or 0.0)
+
+        if test_fraction is None:
+            return self._split_goat_rows_from_metadata(rows)
+
+        test_fraction = float(test_fraction)
+        if test_fraction <= 0 or test_fraction >= 1:
+            raise ValueError("goat_test_fraction must be greater than 0 and less than 1")
+        if val_fraction < 0 or val_fraction >= 1:
+            raise ValueError("goat_val_fraction must be greater than or equal to 0 and less than 1")
+        if test_fraction + val_fraction >= 1:
+            raise ValueError("goat_test_fraction + goat_val_fraction must be less than 1")
+
+        rng = np.random.default_rng(int(self.config.get("goat_split_seed", 1234)))
+        indices = rng.permutation(len(rows)).tolist()
+        test_count = max(1, int(round(len(rows) * test_fraction)))
+        val_count = int(round(len(rows) * val_fraction)) if val_fraction > 0 else 0
+        if val_fraction > 0:
+            val_count = max(1, val_count)
+
+        test_indices = set(indices[:test_count])
+        val_indices = set(indices[test_count:test_count + val_count])
+
+        split_rows = {"train": [], "val": [], "test": []}
+        for idx, item in enumerate(rows):
+            if idx in test_indices:
+                split_rows["test"].append(item)
+            elif idx in val_indices:
+                split_rows["val"].append(item)
+            else:
+                split_rows["train"].append(item)
+
+        return split_rows
+
+    def _get_goat_train_val_test(self) -> tuple[list[tuple[Path, Path]], list[tuple[Path, Path]], list[tuple[Path, Path]]]:
+        """Build GOAT splits from metadata rows, expanding audio variants inside each split."""
+        audio_columns = self._get_goat_audio_columns()
+        rows, skipped = self._get_goat_rows()
+        split_rows = self._split_goat_rows_by_fraction(rows)
+
+        split_files = {"train": [], "val": [], "test": []}
+        for split, row_items in split_rows.items():
+            for row, midi_path in row_items:
+                for audio_column in audio_columns:
+                    audio_value = row.get(audio_column, "")
+                    if not audio_value:
+                        skipped += 1
+                        continue
+
+                    audio_path = self._resolve_goat_path(audio_value)
+                    if not audio_path.exists():
+                        skipped += 1
+                        continue
+
+                    split_files[split].append((audio_path, midi_path))
+
+        split_source = "metadata"
+        if self.config.get("goat_test_fraction") is not None:
+            split_source = (
+                f"custom item-level split "
+                f"(test={self.config.get('goat_test_fraction')}, "
+                f"val={self.config.get('goat_val_fraction', 0.0)})"
+            )
+
+        print(
+            "GOAT metadata extraction using audio columns "
+            f"{audio_columns} and {split_source}. "
+            f"Rows train/val/test: {len(split_rows['train'])}/"
+            f"{len(split_rows['val'])}/{len(split_rows['test'])}. "
+            f"Pairs train/val/test: {len(split_files['train'])}/"
+            f"{len(split_files['val'])}/{len(split_files['test'])}. "
+            f"Skipped missing audio/MIDI entries: {skipped}"
+        )
+        return split_files["train"], split_files["val"], split_files["test"]
 
     def jams_to_midi(self, jam: jams.JAMS, q: int = 1) -> pretty_midi.PrettyMIDI:
         """

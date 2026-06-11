@@ -34,7 +34,7 @@ class _KongMode(_BaseMode):
         if self.path is None or not Path(self.path).exists():
             raise ValueError(f"Path {self.path} does not exist!")
         
-        if config["dataset_name"] not in ["maps", "maestro"]:
+        if config["dataset_name"] not in ["maps", "maestro", "goat"]:
             raise ValueError(f"Dataset {config['dataset_name']} not supported for Kong mode!")
         
         if config["frame_rate"] is None:
@@ -63,6 +63,10 @@ class _KongMode(_BaseMode):
             train_files, val_files, test_files = self._get_maps_train_val_test()
         elif self.dataset_name == "maestro":
             train_files, val_files, test_files = self._get_maestro_train_val_test()
+        elif self.dataset_name == "goat":
+            train_files, val_files, test_files = self._get_goat_train_val_test()
+        else:
+            raise ValueError(f"Dataset {self.dataset_name} not supported for Kong mode!")
         
         splits = ["train", "val", "test"]
         splits_data = [train_files, val_files, test_files]

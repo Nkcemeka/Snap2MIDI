@@ -722,5 +722,9 @@ class _HFTMode(_BaseMode):
                         val_files.append((each, self.data[1][i]))
         elif self.dataset_name == "maestro":
             train_files, val_files, test_files = self._get_maestro_train_val_test()
+        elif self.dataset_name == "goat":
+            train_files, val_files, test_files = self._get_goat_train_val_test()
+        else:
+            raise ValueError(f"Dataset {self.dataset_name} not supported for HFT mode!")
                     
         return train_files, val_files, test_files
