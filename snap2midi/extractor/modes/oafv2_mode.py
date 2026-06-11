@@ -3,8 +3,6 @@ from pathlib import Path
 import numpy as np
 from tqdm import tqdm
 import pretty_midi
-from snap2midi.extractor.utils import HandcraftedFeatures, SUPPORTED_FEATURES
-from snap2midi.extractor.utils.framed_signal import FramedAudio
 import collections
 import copy
 import librosa
@@ -56,11 +54,6 @@ class _OAFV2Mode(_BaseMode):
         self.onset_frame_length = config["onset_frame_length"] # unit is in frames
         self.offset_frame_length = config["offset_frame_length"] # unit is in frames
 
-        # Set feature params.
-        if not self.feature_params:
-            self.feature = "mel"
-            self.feature_params = {"n_mels": 229, "mel_n_fft": 2048, "hop_length": 512}
-
         # Perform the extraction
         # extract the data for the train, val and test splits
         # Implement the extraction logic here
@@ -96,7 +89,7 @@ class _OAFV2Mode(_BaseMode):
             
             audio, _ = librosa.load(audio_file, sr=self.sample_rate)
             assert self.sample_rate == _, f"[Loaded sample rate]{_} != {self.sample_rate}[Config sample rate]"
-            hop_length = self.feature_params["hop_length"]
+            hop_length = self.config["hop_length"]
             n_frames = len(audio - 1) // hop_length
             label = np.zeros((n_frames, self.num_pitches), dtype=np.float32)
             velocity = np.zeros((n_frames, self.num_pitches), dtype=np.float32)
@@ -134,171 +127,7 @@ class _OAFV2Mode(_BaseMode):
                 "velocity": velocity
             }
 
-            np.savez(store_path, **store_dict)     
-
-    
-    # def _extract(self, split_files: list, split: str):
-    #     """
-    #         Extract audio and MIDI files from the dataset.
-    #         We specifically follow the extraction params
-    #         used in Jongwook's OAF implementation.
-    #     """
-    #     # parse the (audio_file, midi_file) in split_files
-    #     for audio_file, midi_file in tqdm(split_files, \
-    #                     desc=f"Processing audio and MIDI files for {split} split..."):
-    #         assert audio_file.exists(), f"{audio_file} does not exist"
-    #         assert midi_file.exists(), f"{midi_file} does not exist"
-    #         frame_size = self.config["window_size"]
-    #         audio_frames = FramedAudio(audio_file, hop_size=frame_size, frame_size=frame_size, \
-    #             sample_rate=self.sample_rate)
-            
-    #         # load MIDI
-    #         midi_obj = pretty_midi.PrettyMIDI(midi_file)
-    #         if self.extend_pedal: 
-    #             midi_obj = self._pedal_extend(midi_obj)
-    
-    #         for i, frame in enumerate(audio_frames):
-    #             store_dict = {'audio': None, 'feature': None} 
-    #             feature = self._get_feature(frame, self.feature, self.feature_params)
-    #             start = i/self.frame_rate
-    #             end = start + frame_size
-    #             label = self._get_label(midi_obj, start, end, self.frame_rate)
-                
-    #             feature = feature.T # (time, embedding)
-    #             feature = feature[:label["label_frames"].shape[0], :]
-
-    #             assert feature.shape[0] == label["label_frames"].shape[0], \
-    #             f"Feature {feature.shape} and label {label['label_frames'].shape} shapes do not match!"
-
-    #             if self.dataset_name != "slakh":
-    #                 store_path = f"./{self.save_name}/{split}/{str(audio_file.stem)}_{i}.npz"
-    #             else:
-    #                 # For slakh, we need to get the track name
-    #                 # from the audio file path
-    #                 track_name = audio_file.parent.parent.stem
-    #                 store_path = f"./{self.save_name}/{split}/{track_name}_{str(audio_file.stem)}_{i}.npz"
-
-    #             store_dict['audio'] = frame
-    #             store_dict['feature'] = feature
-
-    #             for key in label.keys():
-    #                 store_dict[key] = label[key]
-    #             np.savez(store_path, **store_dict)
-
-    # def _get_label(self, midi: pretty_midi.PrettyMIDI, start: float, end: float, frame_rate: float) -> dict:
-    #     """
-    #         Get the label for the given MIDI file and duration.
-
-    #         Args
-    #         ------
-    #             midi (pretty_midi.PrettyMIDI): PrettyMIDI object
-    #             start (float): Start time in seconds of the window
-    #             end (float): End time in seconds of the window
-    #             frame_rate (float): Frame rate for the frames/windows
-
-    #         Returns
-    #         --------
-    #             dict: Label dictionary containing onset, offset, velocity and frame information
-    #     """
-
-    #     # Create the label dictionary
-    #     label = {
-    #         "label_onsets": None,
-    #         "label_velocities": None,
-    #         "label_frames": None,
-    #         "label_weights": None
-    #     }
-
-    #     # This is what the magenta implementation does
-    #     # It appears different approaches are used to get the num of frames
-    #     # Kong uses python's round, hFT uses (+0.5) and then adds 1 to the result
-    #     duration = end - start
-    #     num_frames = int(frame_rate * duration)
-
-    #     # Create all the labels
-    #     label_onsets = np.zeros((num_frames, self.num_pitches), dtype=np.float32)
-    #     label_offsets = np.zeros((num_frames, self.num_pitches), dtype=np.float32)
-    #     label_velocities = np.zeros((num_frames, self.num_pitches), dtype=np.float32)
-    #     label_frames = np.zeros((num_frames, self.num_pitches), dtype=np.float32)
-
-    #     # Get the maximum velocity for this MIDI file
-    #     for instrument in midi.instruments:
-    #         if not instrument.is_drum:
-    #             max_velocity = max(note.velocity for note in instrument.notes)
-
-    #     for instrument in midi.instruments:
-    #         if not instrument.is_drum:
-    #             for note in instrument.notes:
-    #                 if note.start >= end and note.end <= start:
-    #                     continue
-
-    #                 start_frame = int((note.start - start) * frame_rate)
-    #                 end_frame = int(np.ceil((note.end - start) * frame_rate).item())
-
-    #                 onset_start = max(0, start_frame)
-    #                 onset_end = min(num_frames, onset_start + self.onset_frame_length)
-    #                 frame_end = min(num_frames, end_frame)
-    #                 offset_end = min(num_frames, end_frame + self.offset_frame_length)
-                    
-    #                 # Store information in the labels
-    #                 label_onsets[onset_start:onset_end, \
-    #                              note.pitch - self.min_pitch] = 1.0
-                    
-    #                 label_frames[onset_start:frame_end, \
-    #                              note.pitch - self.min_pitch] = 1.0
-
-    #                 label_velocities[onset_start:frame_end, \
-    #                                  note.pitch - self.min_pitch] = note.velocity / max_velocity
-                    
-    #                 label_offsets[end_frame:offset_end, \
-    #                               note.pitch - self.min_pitch] = 1.0
-                    
-    #     # Update the label dictionary
-    #     label["label_onsets"] = label_onsets
-    #     label["label_offsets"] = label_offsets
-    #     label["label_velocities"] = label_velocities
-    #     label["label_frames"] = label_frames
-    #     return label
-    
-    # def _get_feature(self, audio : np.ndarray, feature: str, feature_params: dict):
-    #     """
-    #         Get the feature for a given audio segment
-
-    #         Args
-    #         -----
-    #             audio (np.ndarray): Audio segment
-    #             feature (str): Feature_type to extract
-    #             feature_params (dict): Parameters for the feature extraction
-
-    #         Returns
-    #         --------
-    #             feature (np.ndarray): Feature for the audio segment
-    #     """
-
-    #     # Check if the feature is supported
-    #     if feature not in SUPPORTED_FEATURES:
-    #         raise ValueError(f"Feature {feature} not supported! \
-    #                 Supported features are: {SUPPORTED_FEATURES}")
-
-    #     # Create the HandcraftedFeatures object
-    #     if feature in SUPPORTED_FEATURES:
-    #         hf = HandcraftedFeatures(sample_rate=self.sample_rate, \
-    #                 window_size=self.config["window_size"], frame_rate=self.frame_rate)
-            
-    #         if feature == "mel":
-    #             n_mels = feature_params["n_mels"]
-    #             n_fft = feature_params["mel_n_fft"]
-    #             fmin = self.config["fmin"]
-    #             fmax = self.config["fmax"]
-    #             htk = self.config["use_htk"]
-    #             return hf.compute_mel(audio, n_mels=n_mels, n_fft=n_fft, \
-    #                 hop_length=feature_params.get("hop_length", None), \
-    #                 fmin=fmin, fmax=fmax, htk=htk)
-    #         elif feature == "cqt":
-    #             bins_per_octave = feature_params["cqt_bins_oct"]
-    #             num_octaves = feature_params["cqt_num_octaves"]
-    #             return hf.compute_cqt(audio, bins_per_octave=bins_per_octave, \
-    #                     num_octaves=num_octaves, hop_length=feature_params.get("hop_length", None))
+            np.savez(store_path, **store_dict)
     
     def _pedal_extend(self, midi, CC_SUSTAIN=64):
         """

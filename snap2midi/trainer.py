@@ -146,7 +146,7 @@ class Trainer:
         logger_name: str='csv', resume_path:str|None=None, \
         save_dir: str="./save_dir"):
         """
-            Train Onsets and Frames model with specified configuration.
+            Train Onsets and Frames model version 2 with specified configuration.
 
             Parameters
             ----------

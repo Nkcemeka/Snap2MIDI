@@ -202,29 +202,6 @@ class OnsetsAndFramesV2(pl.LightningModule):
             'train_total_loss': loss.item()
         }, logger=True, on_step=False, on_epoch=True)
         return loss
-    
-    # def training_step(self, train_batch, batch_idx):
-    #     x, y_frame, y_onset, y_offset, y_velocity, audio = train_batch
-    #     y_velocity = y_velocity.float()
-
-    #     # Forward pass
-    #     on_preds, off_preds,  _, frame_preds, vel_preds = self.forward(x)
-
-    #     # Loss
-    #     onset_loss = self.bce_loss(on_preds, y_onset)
-    #     offset_loss = self.bce_loss(off_preds, y_offset)
-    #     frame_loss = self.bce_loss(frame_preds, y_frame)
-    #     velocity_loss = self.loss_velocity(vel_preds, y_velocity, y_onset)
-    #     loss = onset_loss + frame_loss + offset_loss + velocity_loss
-
-    #     self.log_dict({
-    #         'train_onset_loss': onset_loss.item(),
-    #         'train_offset_loss': offset_loss.item(),
-    #         'train_frame_loss': frame_loss.item(),
-    #         'train_velocity_loss': velocity_loss.item(),
-    #         'train_total_loss': loss.item()
-    #     }, logger=True, on_step=False, on_epoch=True)
-    #     return loss
 
     def validation_step(self, val_batch, batch_idx):
         audio = val_batch["audio"]
