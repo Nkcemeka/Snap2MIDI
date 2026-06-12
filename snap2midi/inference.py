@@ -147,6 +147,8 @@ class Inference:
                     Min. frequeny for FFT
                 fmax (int | None):
                     Max frequency for FFT.
+                hop_length (int):
+                    hop length for FFT.
                 pad_mode (str):
                     Pad mode for FFT. Default is reflect.
                 center (str):
@@ -175,6 +177,7 @@ class Inference:
             threshold=threshold,
             n_fft=n_fft,
             n_mels=n_mels,
+            hop_length=hop_length,
             htk=htk,
             fmin=fmin,
             fmax=fmax,

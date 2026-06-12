@@ -20,7 +20,7 @@ class OAFV2Dataset(Dataset):
             raise ValueError(f"{self.__class__.__name__} needs path to embeddings!")
 
         self.sequence_length = config["sequence_length"]
-        self.random = np.random.RandomState(config["seed"])
+        self.random = np.random.RandomState(config.get("seed", 42))
         self.hop_length = config["hop_length"]
         self.data = [] # path to files
         for emb_path in emb_paths:

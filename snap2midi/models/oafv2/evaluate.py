@@ -27,7 +27,7 @@ def evaluate_test(config):
             avg_metrics_frames (dict): Frame metrics
     """
     # set model to eval mode
-    dataset = OAFV2Dataset([f"{config["test_path"]}"])
+    dataset = OAFV2Dataset(config, [f"{config["test_path"]}"])
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=4)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     checkpoint_path = config.get("checkpoint_path", None)
@@ -43,6 +43,13 @@ def evaluate_test(config):
     threshold = config.get("threshold", 0.5)
     pitch_offset = config.get("pitch_offset", 21)
     frame_rate = config.get("frame_rate", 31.25)
+
+    mel = MelSpectrogram(
+            sr=config["sample_rate"], n_fft=config["n_fft"], n_mels=config["n_mels"],\
+            hop_length=config["hop_length"], htk=config["htk"], fmin=config["fmin"], \
+            fmax=config["fmax"], pad_mode=config["pad_mode"], center=config["center"], \
+            window=config["window"]
+    ).to(device)
 
     for i, data in tqdm(enumerate(dataloader), total=len(dataloader), desc="Evaluating results...."):
         audio = data["audio"]
@@ -65,7 +72,9 @@ def evaluate_test(config):
 
 
         # Forward pass
-        on_preds, off_preds, _, frame_preds, vel_preds = model(audio)
+        spec = mel(audio)
+        spec = torch.log(torch.clamp(spec, min=1e-5)).transpose(-1, -2)
+        on_preds, off_preds, _, frame_preds, vel_preds = model(spec)
         on_preds = on_preds[0]
         frame_preds = frame_preds[0]
         vel_preds = vel_preds[0]
@@ -88,6 +97,8 @@ def evaluate_test(config):
                                   on_preds.shape)
         frame_gt = notes_to_frames(note_gt-pitch_offset, (int_gt * frame_rate).astype(int), \
                                y_frame.shape)
+
+        frame_pred = frame_pred[:frame_gt.shape[0], :]
 
         # convert the pitches to hz
         note_gt = 440 * (2 ** ((note_gt - 69) / 12))

@@ -172,6 +172,24 @@ class HPPNet(pl.LightningModule):
             return denominator
         else:
             return (onset_label * (velocity_label - velocity_pred) ** 2).sum() / denominator
+    
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.config["lr"])
+
+        # optimizer = torch.optim.Adam([
+        #     {"params": self.subnets[], "lr": self.config["lr"]}
+        # ])
+
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=self.config['learning_rate_decay_steps'], \
+                       gamma=self.config['learning_rate_decay_rate'])
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "step",
+                "frequency": 1
+            }
+        }
         
     def training_step(self, train_batch, batch_idx):
         audio = train_batch["audio"]
