@@ -4,6 +4,7 @@ from snap2midi.models.oafv2.oafv2 import OnsetsAndFramesV2
 from snap2midi.utils.eval_mir import note_extract
 import pretty_midi
 import librosa
+from nnAudio2.features.mel import MelSpectrogram
 
 def load_oafv2(config: dict):
     """ 
@@ -44,15 +45,24 @@ def inference(config: dict):
     threshold = config["threshold"]
     pitch_offset = config["pitch_offset"]
     sr = config["sample_rate"]
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
     audio, sr = librosa.load(audio_path, sr=sr)
     onset_model = load_oafv2(config)
+    mel = MelSpectrogram(
+            sr=config["sample_rate"], n_fft=config["n_fft"], n_mels=config["n_mels"],\
+            hop_length=config["hop_length"], htk=config["htk"], fmin=config["fmin"], \
+            fmax=config["fmax"], pad_mode=config["pad_mode"], center=config["center"], \
+            window=config["window"]
+    ).to(device)
 
     with torch.inference_mode():
-        audio = torch.from_numpy(audio)
-        on_preds, off_preds, _, frame_preds, vel_preds = onset_model(audio)
-        on_preds = torch.sigmoid(on_preds)[0]
-        frame_preds = torch.sigmoid(frame_preds)[0]
+        audio = torch.from_numpy(audio).to(device)
+        spec = mel(audio)
+        spec = torch.log(torch.clamp(spec, min=1e-5)).transpose(-1, -2)
+        on_preds, off_preds, _, frame_preds, vel_preds = onset_model(spec)
+        on_preds = on_preds[0]
+        frame_preds = frame_preds[0]
         vel_preds = vel_preds[0]
 
     note_preds, int_preds, vels = note_extract(on_preds, frame_preds, \

@@ -105,7 +105,7 @@ class Evaluator:
 
     def evaluate_oafv2(self, test_path: str, checkpoint_path: str,  \
         sample_rate: int = 16000, n_fft: int=2048, n_mels: int=229, htk: bool=True, fmin: int=32, \
-        hop_length: int=512, fmax: int|None=None, pad_mode: str="reflect", center: bool=True, \
+        hop_length: int=512, sequence_length: int|None=None, fmax: int|None=None, pad_mode: str="reflect", center: bool=True, \
         window: str="hann", in_features=229, out_features=88, model_complexity: int=48, threshold=0.5,\
         pitch_offset: int = 21):
         """
@@ -133,6 +133,10 @@ class Evaluator:
                     Use htk for mel spectrogram.
                 fmin (int):
                     Min. frequeny for FFT
+                hop_length (int):
+                    Hop length for FFT
+                sequence_length (int):
+                    Sequence length in samples.
                 fmax (int | None):
                     Max frequency for FFT.
                 pad_mode (str):
@@ -164,6 +168,8 @@ class Evaluator:
             n_mels=n_mels,
             htk=htk,
             fmin=fmin,
+            hop_length=hop_length,
+            sequence_length=sequence_length,
             fmax=fmax,
             pad_mode=pad_mode,
             center=center,

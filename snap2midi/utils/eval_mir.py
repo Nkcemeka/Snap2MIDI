@@ -277,64 +277,139 @@ def note_extract(onsets, frames, velocity,
     intervals = []
     velocities = []
 
-    # Track active notes per pitch
-    active = {}   # pitch -> (onset_time, velocity_samples)
-
-    T, P = onsets.shape
-
-    for t in range(T):
-        for p in range(P):
-
-            # --- CASE 1: onset event ---
-            if onset_diff[t, p].item():
-                if p in active:
-                    # Re-onset while note is active → merge by adding velocity
-                    if onsets[t, p].item():
-                        # active[p][1].append(velocity[t, p].item())
-                        active[p].append((t, velocity[t, p].item()))
-                else:
-                    # Start a new note
-                    active[p] = [(t, velocity[t, p].item())]
-
-            # --- CASE 2: note continuation or ending ---
-            if p in active:
-                still_on = onsets[t, p].item() or frames[t, p].item()
-
-                if not still_on:
-                    # Note ends here
-                    active_events = active[p] # active events for pitch p
-                    for i in range(len(active_events)-1):
-                        onset_time, v = active_events[i]
-                        next_onset_time, _ = active_events[i+1]
-                        pitches.append(p)
-                        intervals.append([onset_time, next_onset_time])
-                        velocities.append(v)
-                    
-                    # Then we add for the last element in the list
-                    onset_time, v = active_events[len(active_events)-1]
+    T, P = onset_diff.shape
+    for p in range(P):
+        note_on = None
+        note_off = None
+        for t in range(T):
+            # check if note is on
+            if onset_diff[t, p] == 1:
+                # note is on
+                if note_on is not None:
+                    # it means a previous note is still active
+                    # stop the note first
                     pitches.append(p)
-                    intervals.append([onset_time, t])
-                    velocities.append(v)
-                    del active[p]
-
-    # Close any notes that reach the final frame
-    for p, active_events in active.items():
-        for i in range(len(active_events)-1):
-            onset_time, v = active_events[i]
-            next_onset_time, _ = active_events[i+1]
-            pitches.append(p)
-            intervals.append([onset_time, next_onset_time])
-            velocities.append(v)
+                    intervals.append([note_on, t])
+                    velocities.append(velocity[note_on, p].item())
+                    note_on = None
+                    note_off = None
+                
+                # now create a note on at this time t
+                note_on = t
+            
+            # check if note has stopped
+            if note_on is not None and (frames[t, p] != 1 or t==T-1):
+                note_off = t
+            
+            # check if note was on and has now stopped
+            if note_on is not None and note_off is not None:
+                if note_off == note_on:
+                    note_on=None
+                    note_off=None
+                    continue
+                assert note_off > note_on, f"Note_off: {note_off} < Note_on: {note_on}"
+                pitches.append(p)
+                intervals.append([note_on, note_off])
+                velocities.append(velocity[note_on, p].item())
+                note_on = None
+                note_off = None
     
-    # Then we add for the last element in the list
-    onset_time, v = active_events[len(active_events)-1]
-    pitches.append(p)
-    intervals.append([onset_time, T])
-    velocities.append(v)
-
     return (np.array(pitches),
             np.array(intervals),
             np.array(velocities))
+
+
+
+# def note_extract(onsets, frames, velocity,
+#                 onset_thresh:float=0.5, frame_thresh:float=0.5):
+#     """
+#         Extract notes while dealing with overlapping 
+#         note events.
+
+#         Args
+#         ----
+#             onsets: Onsets roll
+#             frames: frames roll
+#             velocity: velcoity roll
+#             onset_thresh (float): Onset threshold
+#             frame_thresh (float): Frame threshold
+        
+#         Returns
+#         -------
+#             pitches (np.ndarray): pitches for each [onset, offset] interval
+#             intervals (np.ndarray): [onset, offset] intervals
+#             velocities (np.ndarray): velocities for each interval
+#     """
+
+#     # Binarize
+#     onsets = (onsets > onset_thresh).cpu().int()
+#     frames = (frames > frame_thresh).cpu().int()
+
+#     # Rising edges = onset events
+#     onset_diff = torch.cat([onsets[:1, :], onsets[1:, :] - onsets[:-1, :]], dim=0) == 1
+
+#     pitches = []
+#     intervals = []
+#     velocities = []
+
+#     # Track active notes per pitch
+#     active = {}   # pitch -> (onset_time, velocity_samples)
+
+#     T, P = onsets.shape
+
+#     for t in range(T):
+#         for p in range(P):
+
+#             # --- CASE 1: onset event ---
+#             if onset_diff[t, p].item():
+#                 if p in active:
+#                     # Re-onset while note is active → merge by adding velocity
+#                     if onsets[t, p].item():
+#                         # active[p][1].append(velocity[t, p].item())
+#                         active[p].append((t, velocity[t, p].item()))
+#                 else:
+#                     # Start a new note
+#                     active[p] = [(t, velocity[t, p].item())]
+
+#             # --- CASE 2: note continuation or ending ---
+#             if p in active:
+#                 still_on = onsets[t, p].item() or frames[t, p].item()
+
+#                 if not still_on:
+#                     # Note ends here
+#                     active_events = active[p] # active events for pitch p
+#                     for i in range(len(active_events)-1):
+#                         onset_time, v = active_events[i]
+#                         next_onset_time, _ = active_events[i+1]
+#                         pitches.append(p)
+#                         intervals.append([onset_time, next_onset_time])
+#                         velocities.append(v)
+                    
+#                     # Then we add for the last element in the list
+#                     onset_time, v = active_events[len(active_events)-1]
+#                     pitches.append(p)
+#                     intervals.append([onset_time, t])
+#                     velocities.append(v)
+#                     del active[p]
+
+#     # Close any notes that reach the final frame
+#     for p, active_events in active.items():
+#         for i in range(len(active_events)-1):
+#             onset_time, v = active_events[i]
+#             next_onset_time, _ = active_events[i+1]
+#             pitches.append(p)
+#             intervals.append([onset_time, next_onset_time])
+#             velocities.append(v)
+    
+#     # Then we add for the last element in the list
+#     onset_time, v = active_events[len(active_events)-1]
+#     pitches.append(p)
+#     intervals.append([onset_time, T])
+#     velocities.append(v)
+
+#     return (np.array(pitches),
+#             np.array(intervals),
+#             np.array(velocities))
 
 
 def notes_to_frames(notes: np.ndarray, intervals: np.ndarray, shape: tuple) -> np.ndarray:

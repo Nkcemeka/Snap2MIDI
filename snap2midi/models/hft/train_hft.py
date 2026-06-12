@@ -72,7 +72,7 @@ def main(config):
 
     # create checkpoint callback
     base_path = config["base_path"].rstrip('/')
-    val_flag = Path(f"{base_path}/val/").exists()
+    val_flag = Path(f"{base_path}/feature/val/").exists()
     if val_flag:
         checkpoint_callback = ModelCheckpoint(
             monitor='valid_total_loss',
