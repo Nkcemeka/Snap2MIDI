@@ -113,7 +113,9 @@ class HPPNet(pl.LightningModule):
         self.to_cqt = CQT(sr=config["sample_rate"], hop_length=config["hop_length"], fmin=27.5/self.e, n_bins=88*4, \
             bins_per_octave=config["bins_per_semitone"]*12, output_format='Magnitude')
         self.bce = nn.BCELoss()
-
+        self.automatic_optimization = False
+        self.frame_num = None
+        self.piano_roll_size = None
     
     def forward(self, waveform):
         '''
@@ -138,7 +140,7 @@ class HPPNet(pl.LightningModule):
             "velocity":
         }
         '''        
-        specgram_db = torch.unsqueeze(cqt_db, dim=1).to(self.config['device'])
+        specgram_db = torch.unsqueeze(cqt_db, dim=1).to(self.device)
         
         if self.inference_mode == False:
             specgram_db = specgram_db[:, :, :self.frame_num, :]
@@ -174,22 +176,22 @@ class HPPNet(pl.LightningModule):
             return (onset_label * (velocity_label - velocity_pred) ** 2).sum() / denominator
     
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.config["lr"])
+        SUBNETS_TO_TRAIN = self.config["SUBNETS_TO_TRAIN"]
+        opt_list = []
+        self.subnet_int_map = {}
+        for i, subnet in enumerate(SUBNETS_TO_TRAIN):
+            subnet_opt = torch.optim.Adam(self.subnets[subnet].parameters(), lr=self.config["lr"])
+            opt_list.append(subnet_opt)
+            self.subnet_int_map[subnet] = i
 
-        # optimizer = torch.optim.Adam([
-        #     {"params": self.subnets[], "lr": self.config["lr"]}
-        # ])
-
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=self.config['learning_rate_decay_steps'], \
+        sched_list = []
+        for subnet in SUBNETS_TO_TRAIN:
+            idx = self.subnet_int_map[subnet]
+            subnet_sched = torch.optim.lr_scheduler.StepLR(opt_list[idx], step_size=self.config['learning_rate_decay_steps'], \
                        gamma=self.config['learning_rate_decay_rate'])
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": scheduler,
-                "interval": "step",
-                "frequency": 1
-            }
-        }
+            sched_list.append(subnet_sched)
+
+        return opt_list, sched_list
         
     def training_step(self, train_batch, batch_idx):
         audio = train_batch["audio"]
@@ -218,24 +220,54 @@ class HPPNet(pl.LightningModule):
         if 'onset' in results.keys():
             predictions['onset'] = results['onset'].reshape(*y_onset.shape)
             # [b x T x 88]
-            losses['train_onset_loss'] = - 2 * y_onset * torch.log(predictions['onset']) - ( 1 - y_onset) * torch.log(1-predictions['onset'])
-            losses['train_onset_loss'] = losses['train_onset_loss'].mean()
+            losses['train_loss/onset'] = - 2 * y_onset * torch.log(predictions['onset']) - ( 1 - y_onset) * torch.log(1-predictions['onset'])
+            losses['train_loss/onset'] = losses['train_loss/onset'].mean()
         if 'offset' in results.keys():
             predictions['offset'] = results['offset'].reshape(*y_offset.shape)
-            losses['train_offset_loss'] = self.bce(predictions['offset'], y_offset)
+            losses['train_loss/offset'] = self.bce(predictions['offset'], y_offset)
         if 'frame' in results.keys():
             predictions['frame'] = results['frame'].reshape(*y_frame.shape)
-            losses['train_frame_loss'] = self.bce(predictions['frame'] , y_frame).mean()
+            losses['train_loss/frame'] = self.bce(predictions['frame'] , y_frame).mean()
         if 'velocity' in results.keys():
             predictions['velocity'] = results['velocity'].reshape(*y_velocity.shape)
-            losses['train_velocity_loss'] = self.loss_velocity(predictions['velocity'], y_velocity, y_onset)
+            losses['train_loss/velocity'] = self.loss_velocity(predictions['velocity'], y_velocity, y_onset)
         
+        losses['train_loss/all'] = sum(losses.values())
+
+        if 'onset_subnet' in self.config['SUBNETS_TO_TRAIN']:
+            losses['train_loss/onset_subnet'] = torch.tensor(0.0).to(self.device)
+            for head in self.config['onset_subnet_heads']:
+                losses['train_loss/onset_subnet'] += losses[f'train_loss/' + head]
+
+        if 'frame_subnet' in self.config['SUBNETS_TO_TRAIN']:
+            losses['train_loss/frame_subnet'] = torch.tensor(0.0).to(self.device)
+            for head in self.config['frame_subnet_heads']:
+                losses['train_loss/frame_subnet'] += losses[f'train_loss/' + head]
+        
+        # get optimizers
+        optimizers = self.optimizers()
+        schedulers = self.lr_schedulers()
+
+        for subnet in self.config["SUBNETS_TO_TRAIN"]:
+            loss_subnet = losses[f'train_loss/{subnet}']
+            idx = self.subnet_int_map[subnet]
+            optimizers[idx].zero_grad()
+            self.manual_backward(loss_subnet)
+            optimizers[idx].step()
+            schedulers[idx].step()
+        
+        # This being here makes no sense (but we leave it since the code had it...)
+        # clipping should be done before stepping the optimizers...
+        if self.config["clip_gradient_norm"]:
+            torch.nn.utils.clip_grad_norm_(self.parameters(), self.config["clip_gradient_norm"])
+
         losses['train_total_loss'] = sum(losses.values())
 
-        self.log_dict({
-            losses
-        }, logger=True, on_step=False, on_epoch=True)
-        return losses['train_total_loss']
+        log_losses = {}
+        for k in losses:
+            log_losses[k] = losses[k].item()
+
+        self.log_dict(log_losses, logger=True, on_step=False, on_epoch=True)
     
     def validation_step(self, val_batch, batch_idx):
         audio = val_batch["audio"]
@@ -264,21 +296,29 @@ class HPPNet(pl.LightningModule):
         if 'onset' in results.keys():
             predictions['onset'] = results['onset'].reshape(*y_onset.shape)
             # [b x T x 88]
-            losses['val_onset_loss'] = - 2 * y_onset * torch.log(predictions['onset']) - ( 1 - y_onset) * torch.log(1-predictions['onset'])
-            losses['val_onset_loss'] = losses['train_onset_loss'].mean()
+            losses['val_loss/onset'] = - 2 * y_onset * torch.log(predictions['onset']) - ( 1 - y_onset) * torch.log(1-predictions['onset'])
+            losses['val_loss/onset'] = losses['val_loss/onset'].mean()
         if 'offset' in results.keys():
             predictions['offset'] = results['offset'].reshape(*y_offset.shape)
-            losses['val_offset_loss'] = self.bce(predictions['offset'], y_offset)
+            losses['val_loss/offset'] = self.bce(predictions['offset'], y_offset)
         if 'frame' in results.keys():
             predictions['frame'] = results['frame'].reshape(*y_frame.shape)
-            losses['val_frame_loss'] = self.bce(predictions['frame'] , y_frame).mean()
+            losses['val_loss/frame'] = self.bce(predictions['frame'] , y_frame).mean()
         if 'velocity' in results.keys():
             predictions['velocity'] = results['velocity'].reshape(*y_velocity.shape)
-            losses['val_velocity_loss'] = self.loss_velocity(predictions['velocity'], y_velocity, y_onset)
+            losses['val_loss/velocity'] = self.loss_velocity(predictions['velocity'], y_velocity, y_onset)
+        
+        losses['val_loss/all'] = sum(losses.values())
+
+        if 'onset_subnet' in self.config['SUBNETS_TO_TRAIN']:
+            losses['val_loss/onset_subnet'] = torch.tensor(0.0).to(self.device)
+            for head in self.config['onset_subnet_heads']:
+                losses['val_loss/onset_subnet'] += losses[f'val_loss/' + head]
+
+        if 'frame_subnet' in self.config['SUBNETS_TO_TRAIN']:
+            losses['val_loss/frame_subnet'] = torch.tensor(0.0).to(self.device)
+            for head in self.config['frame_subnet_heads']:
+                losses['val_loss/frame_subnet'] += losses[f'val_loss/' + head]
         
         losses['val_total_loss'] = sum(losses.values())
-
-        self.log_dict({
-            losses
-        }, logger=True, on_step=False, on_epoch=True)
-        return losses['val_total_loss']
+        self.log_dict(losses, logger=True, on_step=False, on_epoch=True)

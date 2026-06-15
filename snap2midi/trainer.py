@@ -9,6 +9,7 @@ from .models.kong import train_kong as kong_train
 from .models.kong import train_kong_pedals as kong_train_pedals
 from .models.hft import train_hft as hft_train
 from .models.transkun import train_transkun as transkun_train
+from .models.hpp import train_hpp as hpp_train
 
 class Trainer:
     """
@@ -586,3 +587,109 @@ class Trainer:
             save_dir=save_dir
         )
         transkun_train.main(config)
+    
+    def train_hpp(self, base_path: str="./data/hpp/", model_type: str="sp", batch_size=4, lr=0.0006, iterations: int=600000,\
+        sequence_length: int=327680, seed: int=42, sample_rate: int=16000, \
+        bins_per_semitone: int = 4, hop_length: int=320, learning_rate_decay_rate=0.98, \
+        learning_rate_decay_steps=10000, clip_gradient_norm=3, \
+        pitch_offset: int = 21, num_workers: int=4, num_nodes: int=1, \
+        logger_name: str='csv', resume_path:str|None=None, \
+        save_dir: str="./save_dir"):
+        """
+            Train HPP with specified configuration.
+
+            Parameters
+            ----------
+                base_path (str):
+                    Path to extracted training data
+                model_type (str):
+                    Supported types are 'sp', 'base', 'tiny', 'ultra-tiny'.
+                batch_size (int): 
+                    Batch size for training/validation. Default is 8.
+                iterations (int): 
+                    Number of iterations for training. Default is 500000.
+                lr (float): 
+                    Learning rate for the optimizer. Default is 0.0006.
+                sample_rate (int):
+                    Sample rate. Default is 16000.
+                bins_per_semitone (int):
+                    Bins per semitone for CQT computation.
+                seed (int):
+                    Seed for sampling from dataset during training.
+                learning_rate_decay_rate (float): 
+                    Learning rate decay rate. Default is 0.98.
+                learning_rate_decay_steps (int): 
+                    Number of steps for learning rate decay. Default is 10000.
+                clip_gradient_norm (float): 
+                    Gradient clipping norm. Default is 3.
+                pitch_offset (int): 
+                    Pitch offset for MIDI notes. Default is 21. Used to evalutate test set.
+                num_workers (int):
+                    Number of workers. Defualt is 4.
+                num_nodes (int):
+                    Number of accelerator nodes to use for distributed training. Default is 1.
+                logger_name (str):
+                    Logger to use in pytorch_lightning. Default is `csv`
+                resume_path (str | None): 
+                    Whether to resume training from a checkpoint. Default is None. If 
+                    None, it trains from scratch.
+                save_dir (str):
+                    Path to save results, logs and checkpoints.
+                
+            Returns
+            --------
+                None
+        """    
+        config = self._build_config_from_kwargs(
+            project_name="snap2midi",
+            experiment_name=f"HPPNet_{model_type}",
+            base_path=base_path,
+            batch_size=batch_size,
+            iterations=iterations,
+            lr=lr,
+            sequence_length=sequence_length,
+            seed=seed,
+            sample_rate=sample_rate,
+            bins_per_semitone=bins_per_semitone,
+            hop_length=hop_length,
+            learning_rate_decay_rate=learning_rate_decay_rate,
+            learning_rate_decay_steps=learning_rate_decay_steps,
+            clip_gradient_norm=clip_gradient_norm,
+            pitch_offset=pitch_offset,
+            num_workers=num_workers,
+            num_nodes=num_nodes,
+            logger_name=logger_name,
+            resume_path=resume_path,
+            save_dir=save_dir
+        )
+
+        if model_type == "sp":
+            config["SUBNETS_TO_TRAIN"] = ['onset_subnet', 'frame_subnet']
+            config["onset_subnet_heads"] = ['onset']
+            config["frame_subnet_heads"]= ['frame', 'offset', 'velocity']
+            config["fixed_dilation"] = 24
+            config["model_size"] = 128
+        elif model_type == "base":
+            config["SUBNETS_TO_TRAIN"] = ['onset_subnet']
+            config["onset_subnet_heads"] = ['onset', 'frame', 'offset', 'velocity']
+            config["frame_subnet_heads"]= []
+            config["batch_size"] = 4
+            config["model_size"] = 128
+            config["iterations"] = 600000
+        elif model_type == "tiny":
+            config["SUBNETS_TO_TRAIN"] = ['onset_subnet']
+            config["onset_subnet_heads"] = ['onset', 'frame', 'offset', 'velocity']
+            config["frame_subnet_heads"]= []
+            config["batch_size"] = 4
+            config["model_size"] = 64
+            config["iterations"] = 600000
+        elif model_type == "ultra-tiny":
+            config["SUBNETS_TO_TRAIN"] = ['onset_subnet']
+            config["onset_subnet_heads"] = ['onset', 'frame', 'offset', 'velocity']
+            config["frame_subnet_heads"]= []
+            config["batch_size"] = 4
+            config["model_size"] = 48
+            config["iterations"] = 600000
+        else:
+            raise RuntimeError(f"Mode type: {model_type} not supported!")
+        hpp_train.main(config)

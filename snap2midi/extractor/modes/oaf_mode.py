@@ -708,7 +708,7 @@ class _OAFMode(_BaseMode):
 
         # create the directory for the splits
         for split in splits:
-            split_path = Path(f"./{self.save_name}/{split}")
+            split_path = Path(f"{self.save_name}/{split}")
             split_path.mkdir(parents=True, exist_ok=True)
 
         for idx, split in tqdm(enumerate(splits), desc="Processing splits"):
@@ -759,12 +759,12 @@ class _OAFMode(_BaseMode):
                     f"Feature {feature.shape} and label {label['label_frames'].shape} shapes do not match!"
                     
                     if self.dataset_name != "slakh":
-                        store_path = f"./{self.save_name}/{split}/{str(audio_file.stem)}_{idx_event}.npz"
+                        store_path = f"{self.save_name}/{split}/{str(audio_file.stem)}_{idx_event}.npz"
                     else:
                         # For slakh, we need to get the track name
                         # from the audio file path
                         track_name = audio_file.parent.parent.stem
-                        store_path = f"./{self.save_name}/{split}/{track_name}_{str(audio_file.stem)}_{idx_event}.npz"
+                        store_path = f"{self.save_name}/{split}/{track_name}_{str(audio_file.stem)}_{idx_event}.npz"
 
                     store_dict['audio'] = audio_frame
                     store_dict['feature'] = feature

@@ -7,6 +7,7 @@ from .models.oaf.evaluate import evaluate_test as oaf_eval
 from .models.oafv2.evaluate import evaluate_test as oafv2_eval
 from .models.kong.evaluate import evaluate as kong_eval
 from .models.kong.evaluate import evaluate_pedal as kong_pedal_eval
+from .models.hpp.evaluate import evaluate_test as hpp_eval
 
 class Evaluator:
     def __init__(self):
@@ -381,3 +382,91 @@ class Evaluator:
         )
         results = hft_eval(config)
         return results
+    
+    def evaluate_hpp(self, test_path: str, checkpoint_path: str, model_type: str="sp", bins_per_semitone: int = 4,  \
+        sample_rate: int = 16000,  hop_length: int=320, sequence_length: int|None=None, threshold=0.4,\
+        pitch_offset: int = 21):
+        """
+            Evaluate Onsets and Frames model (Version 2) with specified configuration.
+
+            Parameters
+            -----------
+                test_path (str): 
+                    Path to the test set.
+                checkpoint_path (str): 
+                    Path to the model checkpoint file.
+                sample_rate (int): 
+                    Sample rate of the input audio. Default is 16000.
+                in_features (int): 
+                    Number of input features. Default is 229.
+                out_features (int): 
+                    Number of output features. Default is 88.
+                threshold (float): 
+                    Threshold for onset detection. Default is 0.5.
+                n_fft (int):
+                    Size of fft window.
+                n_mels (int):
+                    Number of mel bands.
+                htk (bool):
+                    Use htk for mel spectrogram.
+                fmin (int):
+                    Min. frequeny for FFT
+                hop_length (int):
+                    Hop length for FFT
+                sequence_length (int):
+                    Sequence length in samples.
+                fmax (int | None):
+                    Max frequency for FFT.
+                pad_mode (str):
+                    Pad mode for FFT. Default is reflect.
+                center (str):
+                    Center window for FFT computation
+                window (str):
+                    Window for FFT. Default is 'hann'.
+                model_complexity (int):
+                    Model complexity. Default is 48.
+                pitch_offset (int): 
+                    Pitch offset for MIDI notes. Default is 21.
+        
+            Returns
+            -------
+                Midi_output (pretty_midi.PrettyMIDI | None): 
+                    Generated MIDI object. If filename is None, returns None.
+        """
+        frame_rate = sample_rate / hop_length
+        config = self._build_config_from_kwargs(
+            test_path=test_path,
+            checkpoint_path=checkpoint_path,
+            sample_rate=sample_rate,
+            frame_rate=frame_rate,
+            bins_per_semitone=bins_per_semitone,
+            threshold=threshold,
+            hop_length=hop_length,
+            pitch_offset=pitch_offset,
+            sequence_length=sequence_length,
+        )
+
+        if model_type == "sp":
+            config["SUBNETS_TO_TRAIN"] = ['onset_subnet', 'frame_subnet']
+            config["onset_subnet_heads"] = ['onset']
+            config["frame_subnet_heads"]= ['frame', 'offset', 'velocity']
+            config["fixed_dilation"] = 24
+            config["model_size"] = 128
+        elif model_type == "base":
+            config["SUBNETS_TO_TRAIN"] = ['onset_subnet']
+            config["onset_subnet_heads"] = ['onset', 'frame', 'offset', 'velocity']
+            config["frame_subnet_heads"]= []
+            config["model_size"] = 128
+        elif model_type == "tiny":
+            config["SUBNETS_TO_TRAIN"] = ['onset_subnet']
+            config["onset_subnet_heads"] = ['onset', 'frame', 'offset', 'velocity']
+            config["frame_subnet_heads"]= []
+            config["model_size"] = 64
+        elif model_type == "ultra-tiny":
+            config["SUBNETS_TO_TRAIN"] = ['onset_subnet']
+            config["onset_subnet_heads"] = ['onset', 'frame', 'offset', 'velocity']
+            config["frame_subnet_heads"]= []
+            config["model_size"] = 48
+        else:
+            raise RuntimeError(f"Mode type: {model_type} not supported!")
+        return hpp_eval(config)

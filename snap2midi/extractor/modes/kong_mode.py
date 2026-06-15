@@ -71,7 +71,7 @@ class _KongMode(_BaseMode):
         
         # create the directory for the splits
         for split in splits:
-            split_path = Path(f"./{self.save_name}/{split}")
+            split_path = Path(f"{self.save_name}/{split}")
             split_path.mkdir(parents=True, exist_ok=True)
 
         for idx, split in enumerate(splits):
@@ -83,12 +83,12 @@ class _KongMode(_BaseMode):
                 assert midi_file.exists(), f"{midi_file} does not exist"
 
                 if self.dataset_name != "slakh":
-                    store_path = f"./{self.save_name}/{split}/{str(audio_file.stem)}.h5" 
+                    store_path = f"{self.save_name}/{split}/{str(audio_file.stem)}.h5" 
                 else:
                     # For slakh, we need to get the track name
                     # from the audio file path
                     track_name = audio_file.parent.parent.stem
-                    store_path = f"./{self.save_name}/{split}/{track_name}_{str(audio_file.stem)}.h5"
+                    store_path = f"{self.save_name}/{split}/{track_name}_{str(audio_file.stem)}.h5"
                 
                 # Load the audio file
                 audio = librosa.load(str(audio_file), sr=self.sample_rate, mono=True)[0]
@@ -126,7 +126,7 @@ class _KongMode(_BaseMode):
                         hf.create_dataset('audio', data=audio, dtype=np.int16)
 
         # Store the extraction config
-        config_path = Path(f"./{self.save_name}/extraction_config.h5")
+        config_path = Path(f"{self.save_name}/extraction_config.h5")
         with h5py.File(config_path, 'w') as hf:
             for key, value in self.extraction_config.items():
                 if key == "feature_params":

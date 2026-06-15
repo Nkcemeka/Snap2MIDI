@@ -54,27 +54,19 @@ def main(config):
 
     # create checkpoint callback
     base_path = config["base_path"].rstrip('/')
-    val_flag = Path(f"{base_path}/val/").exists()
-    if val_flag:
-        checkpoint_callback = ModelCheckpoint(
-            monitor='val_total_loss',
-            filename='hpp-{epoch:02d}-{val_total_loss:.2f}',
-            dirpath=config["save_dir"],
-            save_top_k=5,
-            mode="min"
-        )
-    else:
-        checkpoint_callback = ModelCheckpoint(
-            dirpath=config["save_dir"],
-        )
+    checkpoint_callback = ModelCheckpoint(
+        dirpath=config["save_dir"],
+        filename="hpp-step={step}",
+        every_n_train_steps=2000,
+        save_top_k=-1,  # save all checkpoints
+        save_last=True
+    )
 
     # create trainer
     trainer = pl.Trainer(max_steps=config["iterations"], \
         callbacks=[checkpoint_callback],
-        check_val_every_n_epoch=1,
+        check_val_every_n_epoch=2,
         num_sanity_val_steps=0,
-        gradient_clip_algorithm="norm",
-        gradient_clip_val=config["clip_gradient_norm"],
         num_nodes=config["num_nodes"],
         logger=pl_logger(config["logger_name"], project_name=config["experiment_name"]))
     

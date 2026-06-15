@@ -326,7 +326,7 @@ class SnapExtractor:
                 offset_frame_length (int): 
                     Length of offset in frames. Default is 1.
                 hop_length (int): 
-                    Hop length in samples. Default is 512.
+                    Hop length in samples. Default is 320.
                 save_name (str):
                     Name of the path directory where you want to save the
                     data.

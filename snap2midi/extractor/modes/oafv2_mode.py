@@ -61,7 +61,7 @@ class _OAFV2Mode(_BaseMode):
 
         # create the directory for the splits
         for split in ["train", "val", "test"]:
-            split_path = Path(f"./{self.save_name}/{split}")
+            split_path = Path(f"{self.save_name}/{split}")
             split_path.mkdir(parents=True, exist_ok=True)
 
         for _ in [("train", train_files), ("val", val_files), ("test", test_files)]:
@@ -111,12 +111,12 @@ class _OAFV2Mode(_BaseMode):
                         velocity[onset_frame_start:offset_frame_start, pitch] = vel/128
 
             if self.dataset_name != "slakh":
-                store_path = f"./{self.save_name}/{split}/{str(audio_file.stem)}.npz"
+                store_path = f"{self.save_name}/{split}/{str(audio_file.stem)}.npz"
             else:
                 # For slakh, we need to get the track name
                 # from the audio file path
                 track_name = audio_file.parent.parent.stem
-                store_path = f"./{self.save_name}/{split}/{track_name}_{str(audio_file.stem)}.npz"
+                store_path = f"{self.save_name}/{split}/{track_name}_{str(audio_file.stem)}.npz"
 
             store_dict = {
                 "audio": audio,
