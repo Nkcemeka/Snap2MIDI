@@ -122,13 +122,14 @@ def main(config):
     # create trainer
     profiler = PyTorchProfiler(
         filename="profiler_log",
-        dirpath="./profiler_logs",
+        dirpath=None,
         group_by_input_shape=True,
         emit_nvtx=True,
     )
 
     trainer = pl.Trainer(max_epochs=config["epochs"], \
         devices=config["nProcess"],
+        strategy="ddp" if config["nProcess"] > 1 else "auto",
         callbacks=[checkpoint_callback, EpochUpdateCallback()],
         num_sanity_val_steps=0,
         num_nodes=config["num_nodes"],
