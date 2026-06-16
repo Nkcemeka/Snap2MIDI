@@ -119,7 +119,6 @@ def main(config):
     # create trainer
     trainer = pl.Trainer(max_epochs=config["epochs"], \
         devices=config["nProcess"],
-        strategy="ddp" if config["nProcess"]>1 else "auto",
         callbacks=[checkpoint_callback, EpochUpdateCallback()],
         num_sanity_val_steps=0,
         num_nodes=config["num_nodes"],
