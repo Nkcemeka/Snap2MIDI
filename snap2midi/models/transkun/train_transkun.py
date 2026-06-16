@@ -5,6 +5,7 @@ from .transkun_dataset import TranskunDataset
 import pytorch_lightning as pl
 from snap2midi.utils.train_utils import pl_logger
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.profilers import PyTorchProfiler
 import moduleconf
 from .utilities import collate_fn_batching
 
@@ -119,12 +120,20 @@ def main(config):
         )
 
     # create trainer
+    profiler = PyTorchProfiler(
+        filename="profiler_log",
+        dirpath="./profiler_logs",
+        group_by_input_shape=True,
+        emit_nvtx=True,
+    )
+
     trainer = pl.Trainer(max_epochs=config["epochs"], \
         devices=config["nProcess"],
         callbacks=[checkpoint_callback, EpochUpdateCallback()],
         num_sanity_val_steps=0,
         num_nodes=config["num_nodes"],
         check_val_every_n_epoch=1,
+        profiler=profiler,
         reload_dataloaders_every_n_epochs=1,
         logger=pl_logger(config["logger_name"], project_name=config["experiment_name"]))
     
