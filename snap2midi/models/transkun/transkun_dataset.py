@@ -202,5 +202,5 @@ class TranskunDataset(Dataset):
 # _, aud, fs = TranskunDataset("../../../../testing_snap/transkundata/train", 2, 2).fetchData(
 #     598, 0, 2, True, False
 # )
-
 # print(aud[:10], aud.max(), aud.shape)
+# print(len(TranskunDataset("../../../../testing_snap/transkundata/train", 44100, 8, 16)))
