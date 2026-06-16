@@ -18,9 +18,9 @@ def pl_logger(logger_name: str="csv", project_name: str="lightning_logs") -> Log
             logger (Logger): Logger instance
     """
     logger_dict = {
-        "csv": CSVLogger(".", name=project_name),
+        "csv": CSVLogger("./logs", name=project_name),
         "wandb": WandbLogger(name=project_name),
-        "tensorboard": TensorBoardLogger(name=project_name),
+        "tensorboard": TensorBoardLogger(save_dir="./logs",name=project_name),
     }
 
     assert logger_name in logger_dict, "[ERROR] Recognized loggers are `csv` and `wandb`"
