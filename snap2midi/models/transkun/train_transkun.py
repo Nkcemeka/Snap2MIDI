@@ -69,7 +69,7 @@ class TranskunDataModule(pl.LightningDataModule):
         # shuffle is False, because we already shuffle on build_chunks in the
         # dataset class
         return DataLoader(self.train_dataset, batch_size=self.config["batch_size"], \
-                prefetch_factor=4,
+                prefetch_factor=max(4, self.config["num_workers"]), persistent_workers=True,
                 num_workers=self.config["num_workers"], shuffle=True, drop_last=True, collate_fn=collate_fn_batching)
     
     def val_dataloader(self):
@@ -77,7 +77,7 @@ class TranskunDataModule(pl.LightningDataModule):
             return []
         
         return DataLoader(self.val_dataset, batch_size=self.config["batch_size"], \
-            prefetch_factor=4, \
+            prefetch_factor=max(4, self.config["num_workers"]), persistent_workers=True,\
             num_workers=self.config["num_workers"], shuffle=True, collate_fn=collate_fn_batching)
     
 

@@ -21,3 +21,4 @@ nnaudio2
 ncls
 moduleconf
 torch-optimizer
+tensorboard

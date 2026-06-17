@@ -79,8 +79,8 @@ def evaluate_test(config):
         frame_preds = frame_preds.squeeze()
         vel_preds = vel_preds.squeeze()
 
-        print(on_preds.max(), on_preds.min())
-        exit(1)
+        # print(on_preds.max(), on_preds.min())
+        # exit(1)
         note_preds, int_preds, vels = note_extract(on_preds, frame_preds, \
                                                vel_preds, onset_thresh=threshold, \
                                                frame_thresh=threshold)
@@ -145,6 +145,7 @@ def evaluate_test(config):
             metrics_frames[f"frame_"+key].append(frame_scores[key])
         for key in note_vel_scores.keys():
             metrics_velocities[f"note_vel_"+key].append(note_vel_scores[key])
+        torch.cuda.empty_cache()
 
     # Calculate the average scores
     avg_metrics_notes = {key: round(np.mean(value).item(), 3) for key, value in metrics_notes.items()}
