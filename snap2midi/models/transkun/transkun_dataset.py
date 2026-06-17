@@ -39,6 +39,7 @@ class TranskunDataset(Dataset):
 
         # load the data
         self.loaded_data = []
+        self.audio_dict = {}
         # self.loaded_duration = []
         # self.loaded_indices = [] # to speed up computation
         print(f"Loading data..")
@@ -50,6 +51,8 @@ class TranskunDataset(Dataset):
             index = createIndexEvents(obj["notes"])
             obj["index"] = index
             self.loaded_data.append(obj)
+            fs, aud = self.load_audio(obj["audio_filename"])
+            self.audio_dict[obj["audio_filename"]] = (fs, aud)
             # self.loaded_duration.append(npz["duration"].item())
             # self.loaded_indices.append(createIndexEvents(npz["notes"]))
         
@@ -62,6 +65,10 @@ class TranskunDataset(Dataset):
         self.seed = seed
         self.chunksAll = [] 
         self.build_chunks(self.seed)
+    
+    def load_audio(self, audioPath):
+        fs, data = wavfile.read(audioPath, mmap = True)
+        return fs, data
     
     def build_chunks(self, seed: float):
         print("Building chunks...")
@@ -174,7 +181,7 @@ class TranskunDataset(Dataset):
                 fs (float): Sample rate
         """
         # Load audio
-        fs, data = wavfile.read(audioPath, mmap = True)
+        fs, data = self.audio_dict[audioPath]
         assert float(fs) == float(self.sample_rate),\
             f"Audio files do not have the expected sample rate: {fs} != {self.sample_rate}"
         b = math.floor(begin * fs)
@@ -198,7 +205,7 @@ class TranskunDataset(Dataset):
         if lPad >0 or rPad>0:
             result = np.pad(result,  ((lPad, rPad),(0,0)), 'constant')
         return result, fs
-
+    
 # _, aud, fs = TranskunDataset("../../../../testing_snap/transkundata/train", 2, 2).fetchData(
 #     598, 0, 2, True, False
 # )

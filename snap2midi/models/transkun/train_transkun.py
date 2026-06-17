@@ -88,6 +88,7 @@ def main(config):
     confManager = moduleconf.parseFromFile(f"{current_file_path}/conf.json")
     Transkun = confManager["Model"].module.Transkun
     conf = confManager["Model"].config
+    conf.freq = config["freq"]
     model = Transkun(conf)
 
     # update config

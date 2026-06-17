@@ -535,7 +535,7 @@ class Trainer:
 
     def train_transkun(self, base_path: str="./data/transkun/", batch_size: int = 4, epochs: int = 1000000,\
         sample_rate: float = 44100, num_workers: int=4, logger_name: str='csv', num_nodes: int=1, 
-        val_steps: int=495, nProcess: int=1, resume_path:str|None=None, save_dir: str="./save_dir"):
+        val_steps: int=495, freq: int=3000, nProcess: int=1, resume_path:str|None=None, save_dir: str="./save_dir"):
         """
             Train the Transkun model.
 
@@ -555,6 +555,8 @@ class Trainer:
                     Logger to use in pytorch_lightning. Default is `csv`
                 val_steps (int):
                     How many N steps before performing validation.
+                freq (int):
+                    Frequency at which to compute stats for training.
                 nProcess (int):
                     Number of processes. Default is 1.
                 num_nodes (int):
@@ -578,6 +580,7 @@ class Trainer:
             epochs=epochs,
             seed=time.time(),
             sample_rate=sample_rate,
+            freq=freq,
             num_workers=num_workers,
             logger_name=logger_name,
             num_nodes=num_nodes,
