@@ -29,19 +29,24 @@ class HFTDataModule(pl.LightningDataModule):
 
     # Below are methods for setting up the dataloaders
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.config["batch_size"], \
-                        num_workers=self.config["num_workers"], shuffle=True)
+        return DataLoader(self.train_dataset,\
+            batch_size=self.config["batch_size"], \
+            num_workers=self.config["num_workers"], shuffle=True)
     
     def val_dataloader(self):
         if self.val_dataset is None:
             return []
         
-        return DataLoader(self.val_dataset, batch_size=self.config["batch_size"], \
-                          num_workers=self.config["num_workers"], shuffle=False)
-    
+        return DataLoader(self.val_dataset, \
+            batch_size=self.config["batch_size"], \
+            num_workers=self.config["num_workers"], shuffle=False)
 
 def main(config):
     # Create datasets 
+    torch.manual_seed(config["seed"])
+    torch.cuda.manual_seed(config["seed"])
+    torch.backends.cudnn.deterministic = True
+
     dm = HFTDataModule(config)
 
     # Load/initialize the model
@@ -76,7 +81,7 @@ def main(config):
     if val_flag:
         checkpoint_callback = ModelCheckpoint(
             monitor='valid_total_loss',
-            filename='hft-{epoch:02d}-{valid_total_loss:.2f}',
+            filename='hft-{epoch:02d}-{valid_total_loss:.4f}',
             dirpath=config["save_dir"],
             save_top_k=5,
             mode="min"

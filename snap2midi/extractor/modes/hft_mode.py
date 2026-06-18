@@ -173,7 +173,7 @@ class _HFTMode(_BaseMode):
 
         ## Process the labels
         print(f"Processing labels for {split}...")
-        dataset_label_frames = np.zeros((total_num_frame, config['midi']['num_note']), dtype=np.bool)
+        dataset_label_frames = np.zeros((total_num_frame, config['midi']['num_note']), dtype=bool)
         loc_d = config['input']['margin_b']
 
         for i, each in enumerate(files_all):
@@ -595,7 +595,7 @@ class _HFTMode(_BaseMode):
         nframe_in_sec = config['feature']['sr'] / config['feature']['hop_sample']
 
         nframe = int(max_offset * nframe_in_sec + 0.5) + 1
-        label_frames = np.zeros((nframe, config['midi']['num_note']), dtype=np.bool)
+        label_frames = np.zeros((nframe, config['midi']['num_note']), dtype=bool)
         label_onset = np.zeros((nframe, config['midi']['num_note']), dtype=np.float32)
         label_offset = np.zeros((nframe, config['midi']['num_note']), dtype=np.float32)
         label_velocity = np.zeros((nframe, config['midi']['num_note']), dtype=np.int8)

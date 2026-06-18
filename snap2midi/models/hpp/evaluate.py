@@ -67,10 +67,37 @@ def evaluate_test(config):
         piano_roll_size = y_frame.size()[-2:]
         model.frame_num = frame_num
         model.piano_roll_size = piano_roll_size
+        clip_len = 10240
 
 
         # Forward pass
-        predictions =  model(audio)
+        if frame_num <= clip_len:
+            torch.cuda.empty_cache()
+            predictions = model(audio)
+        else:
+            n_step = frame_num
+            clip_list = [clip_len] * (n_step//clip_len)
+            res = n_step % clip_len
+            if(n_step > clip_len and res != 0):
+                clip_list[-1] -= (clip_len - res)//2
+                clip_list += [res + (clip_len - res)//2]
+            
+            begin = 0
+            predictions = {}
+            for clip in clip_list:
+                end = begin + clip
+                audio_i = audio[:, config["hop_length"]*begin:config["hop_length"]*end]
+                torch.cuda.empty_cache()
+                model.frame_num = clip
+                predictions_i = model(audio_i)
+                for key, item in predictions_i.items():
+                    item = item.squeeze()
+                    if(key in predictions):
+                        predictions[key] = torch.cat([predictions[key], item], dim=0)
+                    else:
+                        predictions[key] = item
+                begin += clip
+
         on_preds = predictions['onset']
         frame_preds = predictions['frame']
         vel_preds = predictions["velocity"]
