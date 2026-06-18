@@ -8,6 +8,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.profilers import PyTorchProfiler
 import moduleconf
 from .utilities import collate_fn_batching
+import torch 
 
 class EpochUpdateCallback(pl.Callback):
 
@@ -82,6 +83,9 @@ class TranskunDataModule(pl.LightningDataModule):
     
 
 def main(config):
+    torch.backends.cuda.matmul.allow_tf32 = True 
+    torch.backends.cudnn.allow_tf32 = True
+
     # Load/initialize the model
     # obtain the Model Module
     current_file_path = str(Path(__file__).parent)
