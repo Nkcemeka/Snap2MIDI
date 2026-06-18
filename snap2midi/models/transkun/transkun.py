@@ -14,7 +14,6 @@ from .train_utils import PairwiseFeatureBatch, MovingBuffer
 import torch_optimizer as optim
 import torchmetrics
 
-
 class TrainTranskunMetric(torchmetrics.Metric):
     def __init__(self):
         super().__init__()
@@ -818,7 +817,7 @@ class Transkun(pl.LightningModule):
         return loss/50
 
     def on_train_batch_end(self, outputs, batch, batch_idx):
-        if batch_idx % 40 == 0:
+        if batch_idx % self.conf.freq == 0:
             audio = batch["audioSlices"]
             notes = batch["notes"]
             with torch.no_grad():

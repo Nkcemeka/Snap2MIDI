@@ -5,6 +5,7 @@ from .transkun_dataset import TranskunDataset
 import pytorch_lightning as pl
 from snap2midi.utils.train_utils import pl_logger
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.profilers import PyTorchProfiler
 import moduleconf
 from .utilities import collate_fn_batching
 
@@ -68,6 +69,7 @@ class TranskunDataModule(pl.LightningDataModule):
         # shuffle is False, because we already shuffle on build_chunks in the
         # dataset class
         return DataLoader(self.train_dataset, batch_size=self.config["batch_size"], \
+                prefetch_factor=max(4, self.config["num_workers"]), persistent_workers=True,
                 num_workers=self.config["num_workers"], shuffle=True, drop_last=True, collate_fn=collate_fn_batching)
     
     def val_dataloader(self):
@@ -75,6 +77,7 @@ class TranskunDataModule(pl.LightningDataModule):
             return []
         
         return DataLoader(self.val_dataset, batch_size=self.config["batch_size"], \
+            prefetch_factor=max(4, self.config["num_workers"]), persistent_workers=True,\
             num_workers=self.config["num_workers"], shuffle=True, collate_fn=collate_fn_batching)
     
 
@@ -85,6 +88,7 @@ def main(config):
     confManager = moduleconf.parseFromFile(f"{current_file_path}/conf.json")
     Transkun = confManager["Model"].module.Transkun
     conf = confManager["Model"].config
+    conf.freq = config["freq"]
     model = Transkun(conf)
 
     # update config
@@ -117,13 +121,21 @@ def main(config):
         )
 
     # create trainer
+    profiler = PyTorchProfiler(
+        filename="profiler_log",
+        dirpath=None,
+        group_by_input_shape=True,
+        emit_nvtx=True,
+    )
+
     trainer = pl.Trainer(max_epochs=config["epochs"], \
         devices=config["nProcess"],
-        strategy="ddp" if config["nProcess"]>1 else "auto",
+        strategy="ddp" if config["nProcess"] > 1 else "auto",
         callbacks=[checkpoint_callback, EpochUpdateCallback()],
         num_sanity_val_steps=0,
         num_nodes=config["num_nodes"],
         check_val_every_n_epoch=1,
+        profiler=profiler,
         reload_dataloaders_every_n_epochs=1,
         logger=pl_logger(config["logger_name"], project_name=config["experiment_name"]))
     

@@ -72,7 +72,7 @@ class _TranskunMode(_BaseMode):
 
         # create the directory for the splits
         for split in ["train", "val", "test"]:
-            split_path = Path(f"./{self.save_name}/{split}")
+            split_path = Path(f"{self.save_name}/{split}")
             split_path.mkdir(parents=True, exist_ok=True)
 
         for _ in [("train", train_files), ("val", val_files), ("test", test_files)]:
@@ -181,12 +181,12 @@ class _TranskunMode(_BaseMode):
                 assert midi_file.exists(), f"{midi_file} does not exist"
 
                 if self.dataset_name != "slakh":
-                    store_path = f"./{self.save_name}/{split}/{str(audio_file.stem)}.pt" 
+                    store_path = f"{self.save_name}/{split}/{str(audio_file.stem)}.pt" 
                 else:
                     # For slakh, we need to get the track name
                     # from the audio file path
                     track_name = audio_file.parent.parent.stem
-                    store_path = f"./{self.save_name}/{split}/{track_name}_{str(audio_file.stem)}.pt"
+                    store_path = f"{self.save_name}/{split}/{track_name}_{str(audio_file.stem)}.pt"
 
                 # audio, fs = librosa.load(audio_file, sr=self.sample_rate, mono=False)
                 midiObj: pretty_midi.PrettyMIDI = pretty_midi.PrettyMIDI(midi_file)

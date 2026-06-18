@@ -45,7 +45,6 @@ def evaluate_test(config: dict):
         # Convert regression roll to MIDI notes
         est_notes = frames_to_note(onset, offset, frames, velocity, config)
 
-
         for key, value in transcription_metrics(est_notes, ref_notes).items():
             trans_metrics[f"note_{key}"].append(value)
         
