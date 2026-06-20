@@ -263,7 +263,7 @@ class HFTEncoder(nn.Module):
         # position encoding
         # pos_freq = torch.arange(0, self.n_bin).unsqueeze(0).repeat(batch_size*self.n_frame, 1).to(self.device)
         pos_freq = torch.arange(0, self.n_bin, device=spectrogram.device).unsqueeze(0).repeat(batch_size*self.n_frame, 1)
-        scale_freq = torch.FloatTensor([self.d ** 0.5], device=spectrogram.device)
+        scale_freq = torch.FloatTensor([self.d ** 0.5]).to(spectrogram.device)
         spec_freq = self.dropout(spec_emb_freq * scale_freq + self.pos_embedding_freq(pos_freq))  # (batch_size*n_frame, n_bin, d)
         # spec_freq = self.dropout(spec_emb_freq * self.scale_freq + self.pos_embedding_freq(pos_freq))  # (batch_size*n_frame, n_bin, d)
 
@@ -372,7 +372,7 @@ class HFTDecoder(nn.Module):
                                 self.n_frame, self.d])  # (batch_size*n_note, n_frame, d)
         # pos_time = torch.arange(0, self.n_frame).unsqueeze(0).repeat(batch_size*self.n_note, 1).to(self.device)
         pos_time = torch.arange(0, self.n_frame, device=enc_output.device).unsqueeze(0).repeat(batch_size*self.n_note, 1)
-        scale_time = torch.FloatTensor([self.n_frame ** 0.5], device=enc_output.device)
+        scale_time = torch.FloatTensor([self.n_frame ** 0.5]).to(enc_output.device)
         midi_time = self.dropout(midi_time*scale_time + self.pos_embedding_time(pos_time))  # (batch_size*n_note, n_frame, d)
         # midi_time = self.dropout(midi_time*self.scale_time + self.pos_embedding_time(pos_time))  # (batch_size*n_note, n_frame, d)
 
@@ -563,7 +563,7 @@ class MultiHeadAttention(nn.Module):
         v = v.view(batch_size, -1, self.num_heads, self.dh).permute(0, 2, 1, 3)
 
         # scaled dot-product attention
-        scale = torch.FloatTensor([self.dh ** 0.5], device=query.device)
+        scale = torch.FloatTensor([self.dh ** 0.5]).to(query.device)
         similarity = torch.matmul(q, k.permute(0, 1, 3, 2)) / scale # (batch_size, num_heads, seq_len_q, seq_len_k)
         # similarity = torch.matmul(q, k.permute(0, 1, 3, 2)) / self.scale # (batch_size, num_heads, seq_len_q, seq_len_k)
         attn_weights = torch.softmax(similarity, dim=-1)
