@@ -17,30 +17,32 @@ class HFT(pl.LightningModule):
         """
         super().__init__()
         self.config = params
-        self.hft_encoder = HFTEncoder(
-            n_margin=params['margin_b'],
-            n_frame=params['num_frame'],
-            n_bin=params['n_bins'],
-            cnn_channel=params["cnn_channel"],
-            cnn_kernel=params["cnn_kernel"],
-            d=params["d"],
-            n_layers=params["enc_layer"],
-            num_heads=params["enc_head"],
-            pff_dim=params["pff_dim"],
-            dropout=params["dropout"],
-            device=self.device
-        )
+        self.hft_encoder = None
+        self.hft_decoder = None
+        # self.hft_encoder = HFTEncoder(
+        #     n_margin=params['margin_b'],
+        #     n_frame=params['num_frame'],
+        #     n_bin=params['n_bins'],
+        #     cnn_channel=params["cnn_channel"],
+        #     cnn_kernel=params["cnn_kernel"],
+        #     d=params["d"],
+        #     n_layers=params["enc_layer"],
+        #     num_heads=params["enc_head"],
+        #     pff_dim=params["pff_dim"],
+        #     dropout=params["dropout"],
+        #     device=self.device
+        # )
 
-        self.hft_decoder = HFTDecoder(
-                            n_frame=params['num_frame'],
-                            n_bin=params['n_bins'],
-                            n_note=params['num_note'],
-                            n_velocity=params['num_velocity'],
-                            d=params["d"],
-                            n_layers=params["dec_layer"],
-                            num_heads=params["dec_head"],
-                            pff_dim=params["pff_dim"],
-                            dropout=params["dropout"], device=self.device)
+        # self.hft_decoder = HFTDecoder(
+        #                     n_frame=params['num_frame'],
+        #                     n_bin=params['n_bins'],
+        #                     n_note=params['num_note'],
+        #                     n_velocity=params['num_velocity'],
+        #                     d=params["d"],
+        #                     n_layers=params["dec_layer"],
+        #                     num_heads=params["dec_head"],
+        #                     pff_dim=params["pff_dim"],
+        #                     dropout=params["dropout"], device=self.device)
         
         # self.init_weights()
         self.save_hyperparameters()
@@ -77,6 +79,30 @@ class HFT(pl.LightningModule):
                attn_freq, out_on_2nd, out_off_2nd, out_frame_2nd, out_velocity_2nd
 
     def on_fit_start(self):
+        self.hft_encoder = HFTEncoder(
+            n_margin=self.config['margin_b'],
+            n_frame=self.config['num_frame'],
+            n_bin=self.config['n_bins'],
+            cnn_channel=self.config["cnn_channel"],
+            cnn_kernel=self.config["cnn_kernel"],
+            d=self.config["d"],
+            n_layers=self.config["enc_layer"],
+            num_heads=self.config["enc_head"],
+            pff_dim=self.config["pff_dim"],
+            dropout=self.config["dropout"],
+            device=self.device
+        )
+
+        self.hft_decoder = HFTDecoder(
+                            n_frame=self.config['num_frame'],
+                            n_bin=self.config['n_bins'],
+                            n_note=self.config['num_note'],
+                            n_velocity=self.config['num_velocity'],
+                            d=self.config["d"],
+                            n_layers=self.config["dec_layer"],
+                            num_heads=self.config["dec_head"],
+                            pff_dim=self.config["pff_dim"],
+                            dropout=self.config["dropout"], device=self.device)
         self.apply(initialize_weights)
 
     def configure_optimizers(self):
