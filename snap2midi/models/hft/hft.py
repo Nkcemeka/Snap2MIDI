@@ -19,32 +19,31 @@ class HFT(pl.LightningModule):
         self.config = params
         self.hft_encoder = None
         self.hft_decoder = None
-        # self.hft_encoder = HFTEncoder(
-        #     n_margin=params['margin_b'],
-        #     n_frame=params['num_frame'],
-        #     n_bin=params['n_bins'],
-        #     cnn_channel=params["cnn_channel"],
-        #     cnn_kernel=params["cnn_kernel"],
-        #     d=params["d"],
-        #     n_layers=params["enc_layer"],
-        #     num_heads=params["enc_head"],
-        #     pff_dim=params["pff_dim"],
-        #     dropout=params["dropout"],
-        #     device=self.device
-        # )
+        self.hft_encoder = HFTEncoder(
+            n_margin=params['margin_b'],
+            n_frame=params['num_frame'],
+            n_bin=params['n_bins'],
+            cnn_channel=params["cnn_channel"],
+            cnn_kernel=params["cnn_kernel"],
+            d=params["d"],
+            n_layers=params["enc_layer"],
+            num_heads=params["enc_head"],
+            pff_dim=params["pff_dim"],
+            dropout=params["dropout"]
+        )
 
-        # self.hft_decoder = HFTDecoder(
-        #                     n_frame=params['num_frame'],
-        #                     n_bin=params['n_bins'],
-        #                     n_note=params['num_note'],
-        #                     n_velocity=params['num_velocity'],
-        #                     d=params["d"],
-        #                     n_layers=params["dec_layer"],
-        #                     num_heads=params["dec_head"],
-        #                     pff_dim=params["pff_dim"],
-        #                     dropout=params["dropout"], device=self.device)
+        self.hft_decoder = HFTDecoder(
+                            n_frame=params['num_frame'],
+                            n_bin=params['n_bins'],
+                            n_note=params['num_note'],
+                            n_velocity=params['num_velocity'],
+                            d=params["d"],
+                            n_layers=params["dec_layer"],
+                            num_heads=params["dec_head"],
+                            pff_dim=params["pff_dim"],
+                            dropout=params["dropout"])
         
-        # self.init_weights()
+        self.init_weights()
         self.save_hyperparameters()
         self.bce = nn.BCELoss()
         self.ce = nn.CrossEntropyLoss()
@@ -77,33 +76,6 @@ class HFT(pl.LightningModule):
         attn_freq, out_on_2nd, out_off_2nd, out_frame_2nd, out_velocity_2nd = self.hft_decoder(enc_output)
         return out_on_1st, out_off_1st, out_frame_1st, out_velocity_1st, \
                attn_freq, out_on_2nd, out_off_2nd, out_frame_2nd, out_velocity_2nd
-
-    def on_fit_start(self):
-        self.hft_encoder = HFTEncoder(
-            n_margin=self.config['margin_b'],
-            n_frame=self.config['num_frame'],
-            n_bin=self.config['n_bins'],
-            cnn_channel=self.config["cnn_channel"],
-            cnn_kernel=self.config["cnn_kernel"],
-            d=self.config["d"],
-            n_layers=self.config["enc_layer"],
-            num_heads=self.config["enc_head"],
-            pff_dim=self.config["pff_dim"],
-            dropout=self.config["dropout"],
-            device=self.device
-        )
-
-        self.hft_decoder = HFTDecoder(
-                            n_frame=self.config['num_frame'],
-                            n_bin=self.config['n_bins'],
-                            n_note=self.config['num_note'],
-                            n_velocity=self.config['num_velocity'],
-                            d=self.config["d"],
-                            n_layers=self.config["dec_layer"],
-                            num_heads=self.config["dec_head"],
-                            pff_dim=self.config["pff_dim"],
-                            dropout=self.config["dropout"], device=self.device)
-        self.apply(initialize_weights)
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.config["lr"])
@@ -229,7 +201,7 @@ class HFT(pl.LightningModule):
     
     
 class HFTEncoder(nn.Module):
-    def __init__(self, n_margin, n_frame, n_bin, cnn_channel, cnn_kernel, d, n_layers, num_heads, pff_dim, dropout, device):
+    def __init__(self, n_margin, n_frame, n_bin, cnn_channel, cnn_kernel, d, n_layers, num_heads, pff_dim, dropout):
         """
             Initializes the HFTEncoder class.
 
@@ -244,10 +216,8 @@ class HFTEncoder(nn.Module):
                 num_heads (int): The number of attention heads.
                 pff_dim (int): The dimension of the position-wise feed-forward network.
                 dropout (float): Dropout rate.
-                device (torch.device): The device to run the model on.
         """
         super().__init__()
-        self.device = device
         self.n_frame = n_frame
         self.n_bin = n_bin
         self.cnn_channel = cnn_channel
@@ -259,10 +229,10 @@ class HFTEncoder(nn.Module):
         self.tok_embedding_freq = nn.Linear(self.cnn_dim, d)
         self.pos_embedding_freq = nn.Embedding(n_bin, d) 
         self.layers_freq = nn.ModuleList([
-            TransformerEncoderLayer(d, num_heads, pff_dim, dropout, device) for _ in range(n_layers)
+            TransformerEncoderLayer(d, num_heads, pff_dim, dropout) for _ in range(n_layers)
         ])
         self.dropout = nn.Dropout(dropout)
-        self.scale_freq = torch.FloatTensor([self.d ** 0.5]).to(device)
+        # self.scale_freq = torch.FloatTensor([self.d ** 0.5]).to(device)
     
     def forward(self, spectrogram):
         """
@@ -291,8 +261,11 @@ class HFTEncoder(nn.Module):
         spec_emb_freq = self.tok_embedding_freq(spec_cnn_freq)  # (batch_size*n_frame, n_bin, d)
 
         # position encoding
-        pos_freq = torch.arange(0, self.n_bin).unsqueeze(0).repeat(batch_size*self.n_frame, 1).to(self.device)
-        spec_freq = self.dropout(spec_emb_freq * self.scale_freq + self.pos_embedding_freq(pos_freq))  # (batch_size*n_frame, n_bin, d)
+        # pos_freq = torch.arange(0, self.n_bin).unsqueeze(0).repeat(batch_size*self.n_frame, 1).to(self.device)
+        pos_freq = torch.arange(0, self.n_bin, device=spectrogram.device).unsqueeze(0).repeat(batch_size*self.n_frame, 1)
+        scale_freq = torch.FloatTensor([self.d ** 0.5], device=spectrogram.device)
+        spec_freq = self.dropout(spec_emb_freq * scale_freq + self.pos_embedding_freq(pos_freq))  # (batch_size*n_frame, n_bin, d)
+        # spec_freq = self.dropout(spec_emb_freq * self.scale_freq + self.pos_embedding_freq(pos_freq))  # (batch_size*n_frame, n_bin, d)
 
         # Pass through the transformer encoder layers
         for layer in self.layers_freq:
@@ -311,7 +284,7 @@ class HFTDecoder(nn.Module):
         This involves the two decoder sections (the one in the first hierarchy 
         and the one in the second hierarchy).
     """
-    def __init__(self, n_frame, n_bin, n_note, n_velocity, d, n_layers, num_heads, pff_dim, dropout, device):
+    def __init__(self, n_frame, n_bin, n_note, n_velocity, d, n_layers, num_heads, pff_dim, dropout):
         """
             Initializes the HFTDecoder class.
 
@@ -325,10 +298,8 @@ class HFTDecoder(nn.Module):
                 num_heads (int): The number of attention heads.
                 pff_dim (int): The dimension of the position-wise feed-forward network.
                 dropout (float): Dropout rate.
-                device (torch.device): The device to run the model on.
         """
         super().__init__()
-        self.device = device
         self.n_frame = n_frame
         self.n_note = n_note
         self.n_velocity = n_velocity
@@ -338,9 +309,9 @@ class HFTDecoder(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
         self.pos_embedding_freq = nn.Embedding(n_note, d)
-        self.layer_zero_freq = TransformerDecoderLayerZero(d, num_heads, pff_dim, dropout, device)
+        self.layer_zero_freq = TransformerDecoderLayerZero(d, num_heads, pff_dim, dropout)
         self.layers_freq = nn.ModuleList([
-            TransformerDecoderLayer(d, num_heads, pff_dim, dropout, device) for _ in range(n_layers-1)
+            TransformerDecoderLayer(d, num_heads, pff_dim, dropout) for _ in range(n_layers-1)
         ])
 
         self.fc_onset_freq = nn.Linear(d, 1)
@@ -348,10 +319,10 @@ class HFTDecoder(nn.Module):
         self.fc_frame_freq = nn.Linear(d, 1)
         self.fc_velocity_freq = nn.Linear(d, n_velocity)
 
-        self.scale_time = torch.FloatTensor([n_frame ** 0.5]).to(device)
+        # self.scale_time = torch.FloatTensor([n_frame ** 0.5]).to(device)
         self.pos_embedding_time = nn.Embedding(n_frame, d)
         self.layers_time = nn.ModuleList([
-            TransformerEncoderLayer(d, num_heads, pff_dim, dropout, device) for _ in range(n_layers)
+            TransformerEncoderLayer(d, num_heads, pff_dim, dropout) for _ in range(n_layers)
         ])
 
         self.fc_onset_time = nn.Linear(d, 1)
@@ -374,7 +345,8 @@ class HFTDecoder(nn.Module):
         batch_size = enc_output.size(0)
         enc_output = enc_output.reshape([batch_size*self.n_frame, self.n_bin, self.d])
 
-        pos_freq = torch.arange(0, self.n_note).unsqueeze(0).repeat(batch_size*self.n_frame, 1).to(self.device)
+        # pos_freq = torch.arange(0, self.n_note).unsqueeze(0).repeat(batch_size*self.n_frame, 1).to(self.device)
+        pos_freq = torch.arange(0, self.n_note, device=enc_output.device).unsqueeze(0).repeat(batch_size*self.n_frame, 1)
         midi_freq = self.pos_embedding_freq(pos_freq)  # (batch_size*n_frame, n_note, d)
 
         midi_freq, attn_freq = self.layer_zero_freq(enc_output, midi_freq)
@@ -398,8 +370,11 @@ class HFTDecoder(nn.Module):
         midi_time = midi_freq.reshape([batch_size, self.n_frame, self.n_note, \
         self.d]).permute(0, 2, 1, 3).contiguous().reshape([batch_size*self.n_note, \
                                 self.n_frame, self.d])  # (batch_size*n_note, n_frame, d)
-        pos_time = torch.arange(0, self.n_frame).unsqueeze(0).repeat(batch_size*self.n_note, 1).to(self.device)
-        midi_time = self.dropout(midi_time*self.scale_time + self.pos_embedding_time(pos_time))  # (batch_size*n_note, n_frame, d)
+        # pos_time = torch.arange(0, self.n_frame).unsqueeze(0).repeat(batch_size*self.n_note, 1).to(self.device)
+        pos_time = torch.arange(0, self.n_frame, device=enc_output.device).unsqueeze(0).repeat(batch_size*self.n_note, 1)
+        scale_time = torch.FloatTensor([self.n_frame ** 0.5], device=enc_output.device)
+        midi_time = self.dropout(midi_time*scale_time + self.pos_embedding_time(pos_time))  # (batch_size*n_note, n_frame, d)
+        # midi_time = self.dropout(midi_time*self.scale_time + self.pos_embedding_time(pos_time))  # (batch_size*n_note, n_frame, d)
 
         for layer in self.layers_time:
             # midi_time is of shape (batch_size*n_note, n_frame, d)
@@ -415,7 +390,7 @@ class HFTDecoder(nn.Module):
 
 
 class TransformerDecoderLayerZero(nn.Module):
-    def __init__(self, d, num_heads, pff_dim, dropout, device):
+    def __init__(self, d, num_heads, pff_dim, dropout):
         """
             Initializes the TransformerDecoderLayerZero class.
 
@@ -424,11 +399,10 @@ class TransformerDecoderLayerZero(nn.Module):
                 num_heads (int): The number of attention heads.
                 pff_dim (int): The dimension of the position-wise feed-forward network.
                 dropout (float): Dropout rate.
-                device (torch.device): The device to run the model on.
         """
         super().__init__()
         self.layer_norm = nn.LayerNorm(d)
-        self.cross_attn = MultiHeadAttention(d, num_heads, dropout, device)
+        self.cross_attn = MultiHeadAttention(d, num_heads, dropout)
         self.ff = FeedForward(d, pff_dim, dropout)
         self.dropout = nn.Dropout(dropout)
     
@@ -457,7 +431,7 @@ class TransformerDecoderLayerZero(nn.Module):
         return dec_input, cross_attn_weights  
 
 class TransformerDecoderLayer(nn.Module):
-    def __init__(self, d, num_heads, pff_dim, dropout, device):
+    def __init__(self, d, num_heads, pff_dim, dropout):
         """
             Initializes the TransformerDecoderLayer class.
 
@@ -466,12 +440,11 @@ class TransformerDecoderLayer(nn.Module):
                 num_heads (int): The number of attention heads.
                 pff_dim (int): The dimension of the position-wise feed-forward network.
                 dropout (float): Dropout rate.
-                device (torch.device): The device to run the model on.
         """
         super().__init__()
         self.layer_norm = nn.LayerNorm(d)
-        self.self_attn = MultiHeadAttention(d, num_heads, dropout, device)
-        self.cross_attn = MultiHeadAttention(d, num_heads, dropout, device)
+        self.self_attn = MultiHeadAttention(d, num_heads, dropout)
+        self.cross_attn = MultiHeadAttention(d, num_heads, dropout)
         self.ff = FeedForward(d, pff_dim, dropout)
         self.dropout = nn.Dropout(dropout)
     
@@ -504,7 +477,7 @@ class TransformerDecoderLayer(nn.Module):
 
 
 class TransformerEncoderLayer(nn.Module):
-    def __init__(self, d, num_heads, pff_dim, dropout, device):
+    def __init__(self, d, num_heads, pff_dim, dropout):
         """
         TransformerEncoderLayer implements a single layer of the Transformer encoder.
         It consists of multi-head self-attention and position-wise feed-forward networks.
@@ -514,11 +487,10 @@ class TransformerEncoderLayer(nn.Module):
             num_heads (int): The number of attention heads.
             pff_dim (int): The dimension of the position-wise feed-forward network.
             dropout (float): Dropout rate.
-            device (torch.device): The device to run the model on.
     """
         super().__init__()
         self.layer_norm = nn.LayerNorm(d)
-        self.self_attn = MultiHeadAttention(d, num_heads, dropout, device)
+        self.self_attn = MultiHeadAttention(d, num_heads, dropout)
         self.ff = FeedForward(d, pff_dim, dropout)
         self.dropout = nn.Dropout(dropout)
     
@@ -541,7 +513,7 @@ class TransformerEncoderLayer(nn.Module):
         return x  # (batch_size, seq_len, d)
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, d, num_heads, dropout, device):
+    def __init__(self, d, num_heads, dropout):
         """
             Initializes the MultiHeadAttention class.
 
@@ -549,7 +521,6 @@ class MultiHeadAttention(nn.Module):
                 d (int): The dimension of the input.
                 num_heads (int): The number of attention heads.
                 dropout (float): Dropout rate.
-                device (torch.device): The device to run the model on.
         """
 
         super().__init__()
@@ -562,7 +533,7 @@ class MultiHeadAttention(nn.Module):
         self.fc_value = nn.Linear(d, d)
         self.fc_out = nn.Linear(d, d)
         self.dropout = nn.Dropout(dropout)
-        self.scale = torch.FloatTensor([self.dh ** 0.5]).to(device)
+        # self.scale = torch.FloatTensor([self.dh ** 0.5]).to(device)
 
     def forward(self, query, key, value):
         """
@@ -592,7 +563,9 @@ class MultiHeadAttention(nn.Module):
         v = v.view(batch_size, -1, self.num_heads, self.dh).permute(0, 2, 1, 3)
 
         # scaled dot-product attention
-        similarity = torch.matmul(q, k.permute(0, 1, 3, 2)) / self.scale # (batch_size, num_heads, seq_len_q, seq_len_k)
+        scale = torch.FloatTensor([self.dh ** 0.5], device=query.device)
+        similarity = torch.matmul(q, k.permute(0, 1, 3, 2)) / scale # (batch_size, num_heads, seq_len_q, seq_len_k)
+        # similarity = torch.matmul(q, k.permute(0, 1, 3, 2)) / self.scale # (batch_size, num_heads, seq_len_q, seq_len_k)
         attn_weights = torch.softmax(similarity, dim=-1)
 
 
