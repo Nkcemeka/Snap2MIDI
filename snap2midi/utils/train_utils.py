@@ -23,5 +23,5 @@ def pl_logger(logger_name: str="csv", project_name: str="lightning_logs") -> Log
         "tensorboard": TensorBoardLogger(save_dir="./logs",name=project_name),
     }
 
-    assert logger_name in logger_dict, "[ERROR] Recognized loggers are `csv` and `wandb`"
+    assert logger_name in logger_dict, "[ERROR] Recognized loggers are `csv`, `tensorboard` and `wandb`"
     return logger_dict[logger_name]

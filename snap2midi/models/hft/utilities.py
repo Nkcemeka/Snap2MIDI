@@ -6,8 +6,15 @@ import mir_eval
 import torch.nn as nn
 
 def initialize_weights(m):
-    if hasattr(m, 'weight') and m.weight.dim() > 1:
-        nn.init.xavier_uniform_(m.weight.data)
+    weight = getattr(m, "weight", None)
+
+    if hasattr(m, "weight") and weight is None:
+        print("weight=None:", type(m), m)
+
+    if weight is not None and weight.dim() > 1:
+        nn.init.xavier_uniform_(weight)
+    # if hasattr(m, 'weight') and m.weight.dim() > 1:
+    #     nn.init.xavier_uniform_(m.weight.data)
 
 def half_stride(model, feature, shift: int, config: dict):
     """
