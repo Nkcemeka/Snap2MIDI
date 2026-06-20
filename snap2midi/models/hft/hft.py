@@ -27,7 +27,8 @@ class HFT(pl.LightningModule):
             n_layers=params["enc_layer"],
             num_heads=params["enc_head"],
             pff_dim=params["pff_dim"],
-            dropout=params["dropout"]
+            dropout=params["dropout"],
+            device=self.device
         )
 
         self.hft_decoder = HFTDecoder(
@@ -39,7 +40,7 @@ class HFT(pl.LightningModule):
                             n_layers=params["dec_layer"],
                             num_heads=params["dec_head"],
                             pff_dim=params["pff_dim"],
-                            dropout=params["dropout"])
+                            dropout=params["dropout"], device=self.device)
         
         # self.init_weights()
         self.save_hyperparameters()
@@ -200,8 +201,9 @@ class HFT(pl.LightningModule):
         }, logger=True, on_step=False, on_epoch=True)
         return loss
     
+    
 class HFTEncoder(nn.Module):
-    def __init__(self, n_margin, n_frame, n_bin, cnn_channel, cnn_kernel, d, n_layers, num_heads, pff_dim, dropout):
+    def __init__(self, n_margin, n_frame, n_bin, cnn_channel, cnn_kernel, d, n_layers, num_heads, pff_dim, dropout, device):
         """
             Initializes the HFTEncoder class.
 
@@ -216,8 +218,10 @@ class HFTEncoder(nn.Module):
                 num_heads (int): The number of attention heads.
                 pff_dim (int): The dimension of the position-wise feed-forward network.
                 dropout (float): Dropout rate.
+                device (torch.device): The device to run the model on.
         """
         super().__init__()
+        self.device = device
         self.n_frame = n_frame
         self.n_bin = n_bin
         self.cnn_channel = cnn_channel
@@ -229,10 +233,10 @@ class HFTEncoder(nn.Module):
         self.tok_embedding_freq = nn.Linear(self.cnn_dim, d)
         self.pos_embedding_freq = nn.Embedding(n_bin, d) 
         self.layers_freq = nn.ModuleList([
-            TransformerEncoderLayer(d, num_heads, pff_dim, dropout) for _ in range(n_layers)
+            TransformerEncoderLayer(d, num_heads, pff_dim, dropout, device) for _ in range(n_layers)
         ])
         self.dropout = nn.Dropout(dropout)
-        self.scale_freq = torch.FloatTensor([self.d ** 0.5], device=self.device)
+        self.scale_freq = torch.FloatTensor([self.d ** 0.5]).to(device)
     
     def forward(self, spectrogram):
         """
@@ -281,7 +285,7 @@ class HFTDecoder(nn.Module):
         This involves the two decoder sections (the one in the first hierarchy 
         and the one in the second hierarchy).
     """
-    def __init__(self, n_frame, n_bin, n_note, n_velocity, d, n_layers, num_heads, pff_dim, dropout):
+    def __init__(self, n_frame, n_bin, n_note, n_velocity, d, n_layers, num_heads, pff_dim, dropout, device):
         """
             Initializes the HFTDecoder class.
 
@@ -295,8 +299,10 @@ class HFTDecoder(nn.Module):
                 num_heads (int): The number of attention heads.
                 pff_dim (int): The dimension of the position-wise feed-forward network.
                 dropout (float): Dropout rate.
+                device (torch.device): The device to run the model on.
         """
         super().__init__()
+        self.device = device
         self.n_frame = n_frame
         self.n_note = n_note
         self.n_velocity = n_velocity
@@ -306,9 +312,9 @@ class HFTDecoder(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
         self.pos_embedding_freq = nn.Embedding(n_note, d)
-        self.layer_zero_freq = TransformerDecoderLayerZero(d, num_heads, pff_dim, dropout)
+        self.layer_zero_freq = TransformerDecoderLayerZero(d, num_heads, pff_dim, dropout, device)
         self.layers_freq = nn.ModuleList([
-            TransformerDecoderLayer(d, num_heads, pff_dim, dropout) for _ in range(n_layers-1)
+            TransformerDecoderLayer(d, num_heads, pff_dim, dropout, device) for _ in range(n_layers-1)
         ])
 
         self.fc_onset_freq = nn.Linear(d, 1)
@@ -316,10 +322,10 @@ class HFTDecoder(nn.Module):
         self.fc_frame_freq = nn.Linear(d, 1)
         self.fc_velocity_freq = nn.Linear(d, n_velocity)
 
-        self.scale_time = torch.FloatTensor([n_frame ** 0.5]).to(self.device)
+        self.scale_time = torch.FloatTensor([n_frame ** 0.5]).to(device)
         self.pos_embedding_time = nn.Embedding(n_frame, d)
         self.layers_time = nn.ModuleList([
-            TransformerEncoderLayer(d, num_heads, pff_dim, dropout) for _ in range(n_layers)
+            TransformerEncoderLayer(d, num_heads, pff_dim, dropout, device) for _ in range(n_layers)
         ])
 
         self.fc_onset_time = nn.Linear(d, 1)
@@ -383,7 +389,7 @@ class HFTDecoder(nn.Module):
 
 
 class TransformerDecoderLayerZero(nn.Module):
-    def __init__(self, d, num_heads, pff_dim, dropout):
+    def __init__(self, d, num_heads, pff_dim, dropout, device):
         """
             Initializes the TransformerDecoderLayerZero class.
 
@@ -392,10 +398,11 @@ class TransformerDecoderLayerZero(nn.Module):
                 num_heads (int): The number of attention heads.
                 pff_dim (int): The dimension of the position-wise feed-forward network.
                 dropout (float): Dropout rate.
+                device (torch.device): The device to run the model on.
         """
         super().__init__()
         self.layer_norm = nn.LayerNorm(d)
-        self.cross_attn = MultiHeadAttention(d, num_heads, dropout)
+        self.cross_attn = MultiHeadAttention(d, num_heads, dropout, device)
         self.ff = FeedForward(d, pff_dim, dropout)
         self.dropout = nn.Dropout(dropout)
     
@@ -424,7 +431,7 @@ class TransformerDecoderLayerZero(nn.Module):
         return dec_input, cross_attn_weights  
 
 class TransformerDecoderLayer(nn.Module):
-    def __init__(self, d, num_heads, pff_dim, dropout):
+    def __init__(self, d, num_heads, pff_dim, dropout, device):
         """
             Initializes the TransformerDecoderLayer class.
 
@@ -433,11 +440,12 @@ class TransformerDecoderLayer(nn.Module):
                 num_heads (int): The number of attention heads.
                 pff_dim (int): The dimension of the position-wise feed-forward network.
                 dropout (float): Dropout rate.
+                device (torch.device): The device to run the model on.
         """
         super().__init__()
         self.layer_norm = nn.LayerNorm(d)
-        self.self_attn = MultiHeadAttention(d, num_heads, dropout)
-        self.cross_attn = MultiHeadAttention(d, num_heads, dropout)
+        self.self_attn = MultiHeadAttention(d, num_heads, dropout, device)
+        self.cross_attn = MultiHeadAttention(d, num_heads, dropout, device)
         self.ff = FeedForward(d, pff_dim, dropout)
         self.dropout = nn.Dropout(dropout)
     
@@ -470,7 +478,7 @@ class TransformerDecoderLayer(nn.Module):
 
 
 class TransformerEncoderLayer(nn.Module):
-    def __init__(self, d, num_heads, pff_dim, dropout):
+    def __init__(self, d, num_heads, pff_dim, dropout, device):
         """
         TransformerEncoderLayer implements a single layer of the Transformer encoder.
         It consists of multi-head self-attention and position-wise feed-forward networks.
@@ -480,10 +488,11 @@ class TransformerEncoderLayer(nn.Module):
             num_heads (int): The number of attention heads.
             pff_dim (int): The dimension of the position-wise feed-forward network.
             dropout (float): Dropout rate.
+            device (torch.device): The device to run the model on.
     """
         super().__init__()
         self.layer_norm = nn.LayerNorm(d)
-        self.self_attn = MultiHeadAttention(d, num_heads, dropout)
+        self.self_attn = MultiHeadAttention(d, num_heads, dropout, device)
         self.ff = FeedForward(d, pff_dim, dropout)
         self.dropout = nn.Dropout(dropout)
     
@@ -506,7 +515,7 @@ class TransformerEncoderLayer(nn.Module):
         return x  # (batch_size, seq_len, d)
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, d, num_heads, dropout):
+    def __init__(self, d, num_heads, dropout, device):
         """
             Initializes the MultiHeadAttention class.
 
@@ -514,6 +523,7 @@ class MultiHeadAttention(nn.Module):
                 d (int): The dimension of the input.
                 num_heads (int): The number of attention heads.
                 dropout (float): Dropout rate.
+                device (torch.device): The device to run the model on.
         """
 
         super().__init__()
@@ -526,7 +536,7 @@ class MultiHeadAttention(nn.Module):
         self.fc_value = nn.Linear(d, d)
         self.fc_out = nn.Linear(d, d)
         self.dropout = nn.Dropout(dropout)
-        self.scale = torch.FloatTensor([self.dh ** 0.5]).to(self.device)
+        self.scale = torch.FloatTensor([self.dh ** 0.5]).to(device)
 
     def forward(self, query, key, value):
         """
@@ -599,7 +609,7 @@ class FeedForward(nn.Module):
         x = self.dropout(x)
         x = self.fc2(x)
         return x
-    
+
 
 # # Import the necessary libraries
 # import torch
