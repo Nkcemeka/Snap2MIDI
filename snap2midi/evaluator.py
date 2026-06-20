@@ -277,7 +277,7 @@ class Evaluator:
 
     def evaluate_hft(self, test_path: str, checkpoint_path: str, margin_b: int = 32, margin_f: int = 32, \
                   n_bins: int = 256, n_slice: int=16, frame_threshold: float = 0.5, onset_threshold: float = 0.5, \
-                  offset_threshold: float = 0.5, num_frame: int = 128, epochs: int = 50, frame_rate: int = 100, \
+                  offset_threshold: float = 0.5, num_frame: int = 128, frame_rate: int = 100, \
                   num_velocity: int = 128, note_min: int = 21, note_max: int = 108, hop_sample: int = 256, sr: int = 16000, 
                   cnn_channel: int = 4, cnn_kernel: int = 5, d: int = 256, pff_dim: int = 512, 
                   enc_layer: int = 3, dropout: float = 0.1, dec_layer: int = 3, enc_head: int = 4, dec_head: int = 4, \
@@ -307,8 +307,6 @@ class Evaluator:
                     Threshold for offset prediction. Default is 0.5.
                 num_frame (int): 
                     Number of frames for input feature. Default is 128.
-                epochs (int): 
-                    Number of training epochs. Default is 50.
                 frame_rate (int): 
                     Frame rate for the model. Default is 100.
                 num_velocity (int): 
@@ -359,7 +357,6 @@ class Evaluator:
             onset_threshold=onset_threshold,
             offset_threshold=offset_threshold,
             num_frame=num_frame,
-            epochs=epochs,
             frame_rate=frame_rate,
             num_velocity=num_velocity,
             note_min=note_min,

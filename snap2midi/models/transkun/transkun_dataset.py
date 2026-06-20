@@ -198,6 +198,7 @@ class TranskunDataset(Dataset):
         rPad = max(e-l, 0)
 
         # normalize the audio to [-1,1] accoriding to the type
+        # can move this normalize to init?? For speedup??
         if normalize:
             tMax = (np.iinfo(result.dtype)).max
             result = np.divide(result, tMax, dtype=np.float32)

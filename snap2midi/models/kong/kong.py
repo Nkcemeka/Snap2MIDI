@@ -327,7 +327,7 @@ class KongModel(pl.LightningModule):
         self.frame_fc = nn.Linear(512, self.classes, bias=True)
 
         # initialize the weights for architecture
-        self.weights_init()
+        self,self.weights_init()
         self.save_hyperparameters()
         self.config = config
     
@@ -561,8 +561,7 @@ class KongPedal(pl.LightningModule):
             Weight initialization for the 
             architecture!
         """
-        bnorm_initialize(self.bn0)
-    
+        bnorm_initialize(self.bn0)    
 
     def forward(self, x: torch.Tensor) -> dict:
         """
