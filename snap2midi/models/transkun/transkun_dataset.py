@@ -13,7 +13,7 @@ from scipy.io import wavfile
 class TranskunDataset(Dataset):
     def __init__(self, emb_path: str, sample_rate: float, hopSizeInSecond: float, \
         chunkSizeInSecond: float, audioNormalize: bool=True, notesStrictlyContained: bool=True, \
-        ditheringFrames: bool=True, seed: int=1234, augmentator=None):
+        ditheringFrames: bool=True, augmentator=None):
         """ 
             Instantiate TranskunDataset class.
 
@@ -27,8 +27,6 @@ class TranskunDataset(Dataset):
                 notesStrictlyContained (bool): Select only notes strictly contained
                                                in segment of interest.
                 ditheringFrames (bool): Dither frames
-                seed (int): Useful for slighlty shifting the (begin, end) indices
-                            for chunks during training
                 augmentator: Augmentator object
         """
         super().__init__()
@@ -62,9 +60,7 @@ class TranskunDataset(Dataset):
         self.notesStrictlyContained = notesStrictlyContained
         self.ditheringFrames = ditheringFrames
         self.augmentator = augmentator
-        self.seed = seed
-        self.chunksAll = [] 
-        self.build_chunks(self.seed)
+        self.chunksAll = []
     
     def load_audio(self, audioPath):
         fs, data = wavfile.read(audioPath, mmap = True)
@@ -206,9 +202,6 @@ class TranskunDataset(Dataset):
         if lPad >0 or rPad>0:
             result = np.pad(result,  ((lPad, rPad),(0,0)), 'constant')
         return result, fs
-    
-# _, aud, fs = TranskunDataset("../../../../testing_snap/transkundata/train", 2, 2).fetchData(
-#     598, 0, 2, True, False
-# )
-# print(aud[:10], aud.max(), aud.shape)
-# print(len(TranskunDataset("../../../../testing_snap/transkundata/train", 44100, 8, 16)))
+   
+# dset = TranskunDataset("../../../../testing_snap/transkundata/train", 44100, 8, 16)
+# dset.fetchData(0, 0, 20, audioNormalize=True, notesStrictlyContained=True)

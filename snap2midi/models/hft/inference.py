@@ -3,6 +3,48 @@ from .hft import *
 import torch
 import torchaudio
 
+# def init_weights(m):
+#     """
+#         Initialize weights of the model using Xavier uniform initialization.
+
+#         Args:
+#             m (torch.nn.Module): The module to initialize weights for.
+#     """
+#     if hasattr(m, 'weight') and (m.weight.dim() > 1):
+#         nn.init.xavier_uniform_(m.weight.data)
+# def load_hft(config):
+#     # Load/initialize the model
+#     encoder = HFTEncoder(n_margin=config['margin_b'],
+#                          n_frame=config['num_frame'],
+#                          n_bin=config['n_bins'],
+#                          cnn_channel=config["cnn_channel"],
+#                          cnn_kernel=config["cnn_kernel"],
+#                          d=config["d"],
+#                          n_layers=config["enc_layer"],
+#                          num_heads=config["enc_head"],
+#                          pff_dim=config["pff_dim"],
+#                          dropout=config["dropout"],
+#                          device="cuda" if torch.cuda.is_available() else "cpu")
+
+#     decoder = HFTDecoder(n_frame=config['num_frame'],
+#                          n_bin=config['n_bins'],
+#                          n_note=config['num_note'],
+#                          n_velocity=config['num_velocity'],
+#                          d=config["d"],
+#                          n_layers=config["dec_layer"],
+#                          num_heads=config["dec_head"],
+#                          pff_dim=config["pff_dim"],
+#                          dropout=config["dropout"],
+#                          device="cuda" if torch.cuda.is_available() else "cpu")
+    
+#     model = HFT(encoder=encoder, decoder=decoder)
+#     model = model.to("cuda" if torch.cuda.is_available() else "cpu")
+#     model.apply(init_weights)
+#     checkpoint = torch.load(config["checkpoint_path"], map_location="cuda" if torch.cuda.is_available() else "cpu")
+#     model.load_state_dict(checkpoint['model_state_dict'])
+#     model.eval()
+#     return model
+
 def load_hft(config: dict):
     """ 
         Loads the HFT model given the 
@@ -17,31 +59,8 @@ def load_hft(config: dict):
             model (HFT): HFT model
     """
     # Load/initialize the model
-    encoder = HFTEncoder(n_margin=config['margin_b'],
-                         n_frame=config['num_frame'],
-                         n_bin=config['n_bins'],
-                         cnn_channel=config["cnn_channel"],
-                         cnn_kernel=config["cnn_kernel"],
-                         d=config["d"],
-                         n_layers=config["enc_layer"],
-                         num_heads=config["enc_head"],
-                         pff_dim=config["pff_dim"],
-                         dropout=config["dropout"])
-
-    decoder = HFTDecoder(n_frame=config['num_frame'],
-                         n_bin=config['n_bins'],
-                         n_note=config['num_note'],
-                         n_velocity=config['num_velocity'],
-                         d=config["d"],
-                         n_layers=config["dec_layer"],
-                         num_heads=config["dec_head"],
-                         pff_dim=config["pff_dim"],
-                         dropout=config["dropout"])
-    
     model = HFT.load_from_checkpoint(
         config["checkpoint_path"],
-        encoder=encoder,
-        decoder=decoder,
         params=config
     )
     

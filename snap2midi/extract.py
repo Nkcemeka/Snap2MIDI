@@ -264,7 +264,8 @@ class SnapExtractor:
     
     def extract_transkun(self, path: str, dataset_name: str="maestro", \
         extend_pedal: bool=True, sample_rate: int = 44100, resample: bool=True,\
-        save_name:str="data/transkun"):
+        chunkSizeInSecond: float=16, hopSizeInSecond: float=8,\
+        normalize: bool=True, save_name:str="data/transkun"):
         """
             Extract audio and MIDI files from the Transkun mode.
 
@@ -281,6 +282,12 @@ class SnapExtractor:
                 resample (bool):
                     Flag to resample the entire dataset to sample_rate
                     before extraction.
+                chunkSizeInSecond (float):
+                    Chunk size in seconds
+                hopSizeInSecond (float):
+                    Hop size in seconds
+                normalize (bool):
+                    Normalize the audio array
                 save_name (str):
                     Name of the path directory where you want to save the
                     data.
@@ -297,6 +304,9 @@ class SnapExtractor:
             path=path, 
             resample=resample,
             sample_rate=sample_rate, 
+            chunkSizeInSecond=chunkSizeInSecond,
+            hopSizeInSecond=hopSizeInSecond,
+            normalize=normalize,
             save_name=save_name)
         _TranskunMode(config)
     

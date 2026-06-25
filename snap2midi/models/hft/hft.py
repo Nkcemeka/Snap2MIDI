@@ -17,8 +17,6 @@ class HFT(pl.LightningModule):
         """
         super().__init__()
         self.config = params
-        self.hft_encoder = None
-        self.hft_decoder = None
         self.hft_encoder = HFTEncoder(
             n_margin=params['margin_b'],
             n_frame=params['num_frame'],

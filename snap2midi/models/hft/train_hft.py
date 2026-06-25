@@ -477,6 +477,4 @@ def main(config):
 #     for key, value in test_loss_dict.items():
 #         results_test[f'{key}'] = value
 #     wandb.log(results_test)
-
 #     wandb.finish()
-
