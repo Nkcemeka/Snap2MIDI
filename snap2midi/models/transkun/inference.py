@@ -1,43 +1,9 @@
 import torch
 import moduleconf
 import pretty_midi
-from .utilities import validateNotes
+from .utilities import validateNotes, writeMidi, readAudio
 import numpy as np
 from pathlib import Path
-
-def readAudio(path,  normalize= True):
-    import pydub
-    audio = pydub.AudioSegment.from_wav(path)
-    y = np.array(audio.get_array_of_samples())
-    y = y.reshape(-1, audio.channels)
-    if normalize:
-        y =  np.float32(y)/2**15
-    return audio.frame_rate, y
-
-
-def writeMidi(notes, resolution = 960): 
-    validateNotes(notes)
-    outputMidi = pretty_midi.PrettyMIDI(resolution=resolution)
-
-    piano_program = pretty_midi.instrument_name_to_program('Acoustic Grand Piano')
-    piano= pretty_midi.Instrument(program = piano_program)
-
-
-    for note in notes:
-        if note.pitch>0:
-            note = pretty_midi.Note(start = note.start,
-                                    end = note.end,
-                                    pitch = note.pitch,
-                                    velocity = note.velocity)
-            piano.notes.append(note)
-        else:
-            cc_on = pretty_midi.ControlChange(-note.pitch, note.velocity, note.start)
-            cc_off = pretty_midi.ControlChange(-note.pitch, 0, note.end)
-
-            piano.control_changes.append(cc_on)
-            piano.control_changes.append(cc_off)      
-    outputMidi.instruments.append(piano)
-    return outputMidi
 
 
 def trans(audioPath: str, \

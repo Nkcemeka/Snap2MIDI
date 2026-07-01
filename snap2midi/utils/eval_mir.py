@@ -4,6 +4,8 @@ import mir_eval
 import torch
 import pretty_midi
 from collections import defaultdict
+from mir_eval.transcription import precision_recall_f1_overlap as prf
+
 
 # Function that takes a piano roll and gets the
 # ref and est intervals and pitches
@@ -499,3 +501,64 @@ def compute_activation_metrics(pred: str|pretty_midi.PrettyMIDI, gt: str|pretty_
     r = num_correct/(num_gt + 1e-8)
     f = (2*num_correct)/(num_pred + num_gt + 1e-8)
     return p, r, f
+
+def get_note_scores(pred_midi, gt_midi):
+    """ 
+        Get note-level scores for transcription
+        and ground truth P-MIDI. Note that this
+        function does not extend the note-offsets
+        in order to simulate a piano performance.
+
+        Args:
+            pred_midi: (str|pretty_midi.PrettyMIDI) Transcribed MIDI
+            gt_midi: (str|pretty_midi.PrettyMIDI) Predicted MIIDI
+        
+        Returns:
+            {
+                p: note-onset precision
+                r: note-onset recall
+                f: note-onset f1
+                p_off: note-onset-offset precision
+                r_off: note-onset-offset recall
+                f_off: note-onset-offset f1
+            }
+    """
+    # load ground truth midi
+    if isinstance(gt_midi, str):
+        gt_midi = pretty_midi.PrettyMIDI(gt_midi)
+    else:
+        gt_midi = gt_midi
+
+    if isinstance(pred_midi, str):
+        pred_midi = pretty_midi.PrettyMIDI(pred_midi)
+    else:
+        pred_midi = pred_midi
+
+    # get notes for ground truth midi
+    gt_midi_notes = []
+    for instrument in gt_midi.instruments:
+        for note in instrument.notes:
+            gt_midi_notes.append((note.start, note.end, note.pitch, note.velocity))
+    gt_midi_arr = np.array(gt_midi_notes)
+
+    # get notes for predicted midi
+    pred_midi_notes = []
+    for instrument in pred_midi.instruments:
+        for note in instrument.notes:
+            pred_midi_notes.append((note.start, note.end, note.pitch, note.velocity))
+    pred_midi_arr = np.array(pred_midi_notes)
+    pred_ints = pred_midi_arr[:, :2]
+    pred_pitches = pred_midi_arr[:, 2]
+    gt_ints = gt_midi_arr[:, :2]
+    gt_pitches = gt_midi_arr[:, 2]
+    p, r, f, _ = prf(gt_ints, gt_pitches, pred_ints, pred_pitches, offset_ratio=None)
+    p_off, r_off, f_off, _ = prf(gt_ints, gt_pitches, pred_ints, pred_pitches)
+    result = {
+        'p': p,
+        'r': r,
+        'f': f,
+        'p_off': p_off,
+        'r_off': r_off,
+        'f_off': f_off
+    }
+    return result

@@ -38,7 +38,8 @@ class SnapExtractor:
             config[key] = value
         return config
 
-    def extract_hft(self, path: str, dataset_name: str="maps", extend_pedal: bool=True, margin_b: int = 32, margin_f: int = 32, 
+    def extract_hft(self, path: str, dataset_name: str="maps", n_div_train: int=1, n_div_val: int=1, n_div_test: int=1,\
+            extend_pedal: bool=True, margin_b: int = 32, margin_f: int = 32, 
             sample_rate: int = 16000, hop_sample: int = 256, num_frame: int = 128, note_min: int = 21,
             note_max: int = 108, num_velocity: int = 128, mel_bins: int = 256, n_bins: int = 256, 
             fft_bins: int = 2048, window_length: int = 2048, log_offset: float = 1e-8,
@@ -52,6 +53,12 @@ class SnapExtractor:
                     Path to the MAPS dataset. Other datasets not supported yet.
                 dataset_name (str): 
                     Name of the dataset. Default is "maps".
+                n_div_train (int):
+                    Number of training divisions
+                n_div_val (int):
+                    Number of validation divisions
+                n_div_test (int):
+                    Number of testing divisions
                 extend_pedal (bool):
                     Extend the note offsets based on pedal information. Default is True.
                 margin_b (int): 
@@ -107,6 +114,9 @@ class SnapExtractor:
         config["input"] = input_config
         config["midi"] = midi_config
         config["extend_pedal"] = extend_pedal
+        config["n_div_train"] = n_div_train
+        config["n_div_val"] = n_div_val
+        config["n_div_test"] = n_div_test
 
         _HFTMode(config)
 

@@ -5,6 +5,9 @@ import math
 import numpy as np
 from collections import defaultdict
 from ncls import FNCLS
+import moduleconf
+from pathlib import Path
+import pretty_midi
 
 def computeParamSize(module):
     total_params = sum(p.numel() for p in module.parameters())
@@ -393,3 +396,65 @@ def collate_fn_batching(batch):
             audioSlices, dim = 0)
 
     return {"notes": notesBatch, "audioSlices":audioSlices} 
+
+def load_transkun(checkpoint_path: str):
+    """ 
+        Load transkun model. 
+
+        Args:
+            checkpoint_path (str): Path to checkpoint
+        
+        Returns:
+            model: Transkun model
+    """
+    confPath = str(Path(__file__).parent / "conf.json")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    confManager = moduleconf.parseFromFile(confPath)
+    
+    # For this to work, change the 
+    TransKun = confManager["Model"].module.Transkun
+    conf = confManager["Model"].config
+
+    checkpoint = torch.load(checkpoint_path, map_location = device)
+    model = TransKun(conf = conf).to(device)
+    if not "best_state_dict" in checkpoint:
+        model.load_state_dict(checkpoint["state_dict"], strict=False)
+    else:
+        model.load_state_dict(checkpoint["best_state_dict"], strict=False)
+
+    model.eval()
+    return model, conf, device
+
+def readAudio(path,  normalize= True):
+    import pydub
+    audio = pydub.AudioSegment.from_wav(path)
+    y = np.array(audio.get_array_of_samples())
+    y = y.reshape(-1, audio.channels)
+    if normalize:
+        y =  np.float32(y)/2**15
+    return audio.frame_rate, y
+
+
+def writeMidi(notes, resolution = 960): 
+    validateNotes(notes)
+    outputMidi = pretty_midi.PrettyMIDI(resolution=resolution)
+
+    piano_program = pretty_midi.instrument_name_to_program('Acoustic Grand Piano')
+    piano= pretty_midi.Instrument(program = piano_program)
+
+
+    for note in notes:
+        if note.pitch>0:
+            note = pretty_midi.Note(start = note.start,
+                                    end = note.end,
+                                    pitch = note.pitch,
+                                    velocity = note.velocity)
+            piano.notes.append(note)
+        else:
+            cc_on = pretty_midi.ControlChange(-note.pitch, note.velocity, note.start)
+            cc_off = pretty_midi.ControlChange(-note.pitch, 0, note.end)
+
+            piano.control_changes.append(cc_on)
+            piano.control_changes.append(cc_off)      
+    outputMidi.instruments.append(piano)
+    return outputMidi

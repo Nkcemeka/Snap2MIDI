@@ -8,6 +8,7 @@ from .models.oafv2.evaluate import evaluate_test as oafv2_eval
 from .models.kong.evaluate import evaluate as kong_eval
 from .models.kong.evaluate import evaluate_pedal as kong_pedal_eval
 from .models.hpp.evaluate import evaluate_test as hpp_eval
+from .models.transkun.evaluate import evaluate_test as trans_eval
 
 class Evaluator:
     def __init__(self):
@@ -424,11 +425,11 @@ class Evaluator:
                     Model complexity. Default is 48.
                 pitch_offset (int): 
                     Pitch offset for MIDI notes. Default is 21.
-        
+            
             Returns
             -------
-                Midi_output (pretty_midi.PrettyMIDI | None): 
-                    Generated MIDI object. If filename is None, returns None.
+                results (dict): 
+                    Evaluation results.
         """
         frame_rate = sample_rate / hop_length
         config = self._build_config_from_kwargs(
@@ -467,3 +468,25 @@ class Evaluator:
         else:
             raise RuntimeError(f"Mode type: {model_type} not supported!")
         return hpp_eval(config)
+
+    def evaluate_transkun(self, test_path: str, checkpoint_path: str):
+        """
+            Evaluate the Transkun model.
+
+            Parameters
+            -----------
+                test_path (str): 
+                    Path to the test set.
+                checkpoint_path (str): 
+                    Path to the model checkpoint file.
+        
+            Returns
+            -------
+                results (dict): 
+                    Evaluation results.
+        """
+        config = self._build_config_from_kwargs(
+            test_path=test_path,
+            checkpoint_path=checkpoint_path
+        )
+        return trans_eval(config)

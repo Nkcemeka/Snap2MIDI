@@ -5,6 +5,7 @@ from tqdm import tqdm
 import torch
 import pretty_midi
 import torchaudio
+import os
 
 class Message:
     """ 
@@ -78,13 +79,30 @@ class _HFTMode(_BaseMode):
         self._collate_hft_split(config, "test")
     
     def _collate_hft_split(self, config: dict, split: str):
+        files_all = sorted(Path(f"{self.save_name}/feature/{split}").rglob("*.npz"))
+        files_all_div = []
+        n_divs = config[f"n_div_{split}"]
+
+        for div in range(n_divs):
+            files_all_div.append([])
+
+        for i, f in enumerate(files_all):
+            div = i % n_divs
+            files_all_div[div].append(f)
+
+        for div in range(n_divs):
+            self._collate_hft_split_div(files_all_div[div], config, split, div)
+    
+    def _collate_hft_split_div(self, files_all: list, config: dict, split: str, div):
         """ 
             Does the collation for each split (train/test/validation)
 
             Args
             -----
+                files_all (list): List of files for the division under consideration
                 config (dict): Configuration dictionary containing the parameters
                 split (str): training, validation or teat split.
+                div (int): split division number
         """
         num_frame_list = [] # stores the number of frames for each file
 
@@ -100,9 +118,6 @@ class _HFTMode(_BaseMode):
 
         # the total or actual number of frames read from the features
         total_num_frame_idx = 0 
-
-        # load the list of the filenames in the feature directory
-        files_all = sorted(Path(f"{self.save_name}/feature/{split}").rglob("*.npz"))
 
         for i, each in enumerate(files_all):
             # load the npz file
@@ -144,7 +159,7 @@ class _HFTMode(_BaseMode):
             loc_d += num_frame + config['input']['margin_f'] + config['input']['num_frame'] - 1
         
         # store dataset_idx in the save_name directory as a npz file
-        np.savez(f"{self.save_name}/idx/{split}/dataset_idx.npz", dataset_idx=dataset_idx)
+        np.savez(f"{self.save_name}/idx/{split}/dataset_idx" + str(div).zfill(3) +".npz", dataset_idx=dataset_idx)
         del dataset_idx # delete to free memory
 
         ## Process the features
@@ -168,7 +183,7 @@ class _HFTMode(_BaseMode):
             del npz_file # delete npz file to free memory
 
         # store the dataset_feature in the save_name directory as a npz file
-        np.savez(f"{self.save_name}/feature/{split}/dataset_feature.npz", dataset_feature=dataset_feature)
+        np.savez(f"{self.save_name}/feature/{split}/dataset_feature" + str(div).zfill(3) +".npz", dataset_feature=dataset_feature)
         del dataset_feature # delete to free memory
 
         ## Process the labels
@@ -187,7 +202,7 @@ class _HFTMode(_BaseMode):
             loc_d += num_frame + config['input']['margin_f'] + config['input']['num_frame'] - 1
         
         # store the dataset_label_frames in the save_name directory as a npz file
-        np.savez(f"{self.save_name}/label_frames/{split}/dataset_label_frames.npz", dataset_label_frames=dataset_label_frames)
+        np.savez(f"{self.save_name}/label_frames/{split}/dataset_label_frames" + str(div).zfill(3) +".npz", dataset_label_frames=dataset_label_frames)
         del dataset_label_frames # delete to free memory
 
         ## process the onsets
@@ -205,7 +220,7 @@ class _HFTMode(_BaseMode):
             loc_d += num_frame + config['input']['margin_f'] + config['input']['num_frame'] - 1
         
         # store the dataset_label_onset in the save_name directory as a npz file
-        np.savez(f"{self.save_name}/label_onset/{split}/dataset_label_onset.npz", dataset_label_onset=dataset_label_onset)
+        np.savez(f"{self.save_name}/label_onset/{split}/dataset_label_onset" + str(div).zfill(3) +".npz", dataset_label_onset=dataset_label_onset)
         del dataset_label_onset # delete to free memory
 
         ## process the offsets
@@ -223,7 +238,7 @@ class _HFTMode(_BaseMode):
             loc_d += num_frame + config['input']['margin_f'] + config['input']['num_frame'] - 1
         
         # store the dataset_label_offset in the save_name directory as a npz file
-        np.savez(f"{self.save_name}/label_offset/{split}/dataset_label_offset.npz", dataset_label_offset=dataset_label_offset)
+        np.savez(f"{self.save_name}/label_offset/{split}/dataset_label_offset" + str(div).zfill(3) +".npz", dataset_label_offset=dataset_label_offset)
         del dataset_label_offset # delete to free memory
 
         ## process the velocities
@@ -241,8 +256,13 @@ class _HFTMode(_BaseMode):
             loc_d += num_frame + config['input']['margin_f'] + config['input']['num_frame'] - 1
 
         # store the dataset_label_velocity in the save_name directory as a npz file
-        np.savez(f"{self.save_name}/label_velocity/{split}/dataset_label_velocity.npz", dataset_label_velocity=dataset_label_velocity)
+        np.savez(f"{self.save_name}/label_velocity/{split}/dataset_label_velocity" + str(div).zfill(3) +".npz", dataset_label_velocity=dataset_label_velocity)
         del dataset_label_velocity # delete to free memory
+
+        # delete the feature npz files for train and val
+        for i, each in enumerate(files_all):
+            if (split == "train" or split == "val") and os.path.exists(each):
+                    os.remove(each)
     
     def _extract_hft(self, config: dict):
         """
@@ -292,7 +312,6 @@ class _HFTMode(_BaseMode):
         Path(f"{self.save_name}/idx/val").mkdir(parents=True, exist_ok=True)
         Path(f"{self.save_name}/idx/test").mkdir(parents=True, exist_ok=True)
             
-
         print(f"Extracting features and labels for the hFT-Transformer model...")
         for i, split in tqdm(enumerate(split_files)):
             split_name = split_str[i]
@@ -764,34 +783,7 @@ class _HFTMode(_BaseMode):
         test_files = []
 
         if self.dataset_name == "maps":
-            # collect all tunes for test first from the ENSTDkAm and ENSTDkCl
-            # After that, collect the rest of the tunes for train and val
-            tunes = []
-            for i, each in enumerate(self.data[0]):
-                tmp = str(each).replace(f"{self.path}", "").replace(\
-                    f".{self.ext_audio}", "").rstrip('\n').split('/')
-                code = tmp[1] # folder name
-                content = tmp[2] # category name (MUS, ISOL, etc.)
-                tune = tmp[-1].rstrip(code).lstrip('MAPS_'+content+'-') # tune name
-
-                if (code == 'ENSTDkAm' or code == 'ENSTDkCl'):
-                    # append tune name to the tunes list
-                    test_files.append((each, self.data[1][i]))
-                    if tune not in tunes:
-                        tunes.append(tune)
-            
-            for i, each in enumerate(self.data[0]):
-                tmp = str(each).replace(f"{self.path}", "").replace(\
-                    f".{self.ext_audio}", "").rstrip('\n').split('/')
-                code = tmp[1] # folder name
-                content = tmp[2] # category name (MUS, ISOL, etc.)
-                tune = tmp[-1].rstrip(code).lstrip('MAPS_'+content+'-') # tune name
-
-                if (code != 'ENSTDkAm' and code != 'ENSTDkCl'):
-                    if tune not in tunes:
-                        train_files.append((each, self.data[1][i]))
-                    else:
-                        val_files.append((each, self.data[1][i]))
+            train_files, val_files, test_files = self._get_maps_train_val_test()
         elif self.dataset_name == "maestro":
             train_files, val_files, test_files = self._get_maestro_train_val_test()
                     
