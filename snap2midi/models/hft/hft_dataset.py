@@ -1,20 +1,61 @@
 # Import the necessary libraries
 import torch
 import numpy as np
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, IterableDataset, get_worker_info
 from pathlib import Path
 from typing import Optional
+
+
+class HFTDivDataset(IterableDataset):
+    def __init__(self, config: dict, split: str=Optional[None], shuffle: bool=False):
+        super().__init__()
+        self.config = config
+        self.split = split
+        self.shuffle = shuffle
+
+        if split is None:
+            raise ValueError("Split must be specified. Use 'train', 'val', or 'test'.")
+        
+        self.base_path = Path(config["base_path"])
+        self.ndivs = config[f"n_div_{split}"]
+        self.g = torch.Generator()
+        self.g.manual_seed(self.config["seed"])   # or any integer
+    
+    def __iter__(self):
+        worker_info = get_worker_info()
+
+        if worker_info is None:
+            div_ids = range(self.ndivs)
+        else:
+            # share across the workers
+            div_ids = range(worker_info.id, self.ndivs, worker_info.num_workers)
+        
+        for div in div_ids:
+            dataset = HFTDataset(self.config, div, split=self.split)
+            if self.shuffle:
+                indices = torch.randperm(len(dataset), generator=self.g).tolist()
+            else:
+                indices = range(len(dataset))
+            
+            for idx in indices:
+                yield dataset[idx]
+        
+            del dataset
+
 
 class HFTDataset(Dataset):
     """
         A PyTorch Dataset class for the hFT-Transformer dataset.
         This class handles the loading and processing of features and labels for training.
     """
-    def __init__(self, config: dict, split: str = Optional[None]):
+    def __init__(self, config: dict, div: int, split: str = Optional[None]):
         """
             Initializes the HFTDataset class.
 
             Args:
+                config (dict): Config dicionary
+                div (int): Current division under consideration
+                split (str): Split: train, val or test
                 
         """
         # Initialize the parent class
@@ -26,12 +67,12 @@ class HFTDataset(Dataset):
 
         # Stores the path so we don't load data into memory
         self.base_path = Path(config["base_path"])
-        self.feature_path = self.base_path / "feature" / split / "dataset_feature.npz"
-        self.frames_path = self.base_path / "label_frames" / split / "dataset_label_frames.npz"
-        self.onset_path = self.base_path / "label_onset" / split / "dataset_label_onset.npz"
-        self.offset_path = self.base_path / "label_offset" / split / "dataset_label_offset.npz"
-        self.velocity_path = self.base_path / "label_velocity" / split / "dataset_label_velocity.npz"
-        self.idx_path = self.base_path / "idx" / split / "dataset_idx.npz"
+        self.feature_path = self.base_path / "feature" / split / (f"dataset_feature" + str(div).zfill(3)  + ".npz")
+        self.frames_path = self.base_path / "label_frames" / split / (f"dataset_label_frames" + str(div).zfill(3) + ".npz")
+        self.onset_path = self.base_path / "label_onset" / split / (f"dataset_label_onset" + str(div).zfill(3) + ".npz")
+        self.offset_path = self.base_path / "label_offset" / split / (f"dataset_label_offset" + str(div).zfill(3) + ".npz")
+        self.velocity_path = self.base_path / "label_velocity" / split / (f"dataset_label_velocity" + str(div).zfill(3) + ".npz")
+        self.idx_path = self.base_path / "idx" / split / (f"dataset_idx" + str(div).zfill(3) + ".npz")
         self.config = config
 
         # load the idx

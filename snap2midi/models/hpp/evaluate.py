@@ -9,7 +9,6 @@ from pathlib import Path
 from torch.utils.data import DataLoader
 from .dataset_hpp import HPPDataset
 from tqdm import tqdm
-from nnAudio2.features.mel import MelSpectrogram
 
 @torch.no_grad()
 def evaluate_test(config):

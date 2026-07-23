@@ -1,7 +1,7 @@
 # Imports
 from pathlib import Path
 from snap2midi.models.hft.hft import *
-from .hft_dataset import HFTDataset
+from .hft_dataset import HFTDivDataset
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 from snap2midi.utils.train_utils import pl_logger
@@ -23,15 +23,14 @@ class HFTDataModule(pl.LightningDataModule):
         return super().prepare_data()
 
     def setup(self, stage):
-        self.train_dataset = HFTDataset(self.config, split="train")
-        self.val_dataset = HFTDataset(self.config, split="val")
-        self.test_dataset = HFTDataset(self.config, split="test")
+        self.train_dataset = HFTDivDataset(self.config, split="train", shuffle=True)
+        self.val_dataset = HFTDivDataset(self.config, split="val", shuffle=False)
 
     # Below are methods for setting up the dataloaders
     def train_dataloader(self):
         return DataLoader(self.train_dataset,\
             batch_size=self.config["batch_size"], \
-            num_workers=self.config["num_workers"], shuffle=True)
+            num_workers=self.config["num_workers"])
     
     def val_dataloader(self):
         if self.val_dataset is None:
@@ -39,41 +38,15 @@ class HFTDataModule(pl.LightningDataModule):
         
         return DataLoader(self.val_dataset, \
             batch_size=self.config["batch_size"], \
-            num_workers=self.config["num_workers"], shuffle=False)
+            num_workers=self.config["num_workers"])
 
 def main(config):
-    # Create datasets 
-    torch.manual_seed(config["seed"])
-    torch.cuda.manual_seed(config["seed"])
-    torch.backends.cudnn.deterministic = True
-
+    # Create datasets and set seed
+    pl.seed_everything(config["seed"], workers=True)
     dm = HFTDataModule(config)
 
     # Load/initialize the model
-    encoder = HFTEncoder(
-        n_margin=config['margin_b'],
-        n_frame=config['num_frame'],
-        n_bin=config['n_bins'],
-        cnn_channel=config["cnn_channel"],
-        cnn_kernel=config["cnn_kernel"],
-        d=config["d"],
-        n_layers=config["enc_layer"],
-        num_heads=config["enc_head"],
-        pff_dim=config["pff_dim"],
-        dropout=config["dropout"]
-    )
-
-    decoder = HFTDecoder(n_frame=config['num_frame'],
-                         n_bin=config['n_bins'],
-                         n_note=config['num_note'],
-                         n_velocity=config['num_velocity'],
-                         d=config["d"],
-                         n_layers=config["dec_layer"],
-                         num_heads=config["dec_head"],
-                         pff_dim=config["pff_dim"],
-                         dropout=config["dropout"])
-    
-    model = HFT(encoder, decoder, config)
+    model = HFT(config)
 
     # create checkpoint callback
     base_path = config["base_path"].rstrip('/')
@@ -93,6 +66,7 @@ def main(config):
 
     # create trainer
     trainer = pl.Trainer(max_epochs=config["epochs"], \
+        deterministic=True,
         callbacks=[checkpoint_callback],
         num_sanity_val_steps=0,
         check_val_every_n_epoch=1,

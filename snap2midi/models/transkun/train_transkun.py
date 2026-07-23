@@ -8,6 +8,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.profilers import PyTorchProfiler
 import moduleconf
 from .utilities import collate_fn_batching
+import torch 
 
 class EpochUpdateCallback(pl.Callback):
 
@@ -48,7 +49,6 @@ class TranskunDataModule(pl.LightningDataModule):
             audioNormalize=self.config["audioNormalize"],
             notesStrictlyContained=self.config["notesStrictlyContained"],
             ditheringFrames=self.config["ditheringFrames"],
-            seed=self.config["seed"]+(100*self.current_epoch),
             augmentator=self.config["augmentator"]
         )
 
@@ -60,7 +60,6 @@ class TranskunDataModule(pl.LightningDataModule):
             audioNormalize=self.config["audioNormalize"],
             notesStrictlyContained=self.config["notesStrictlyContained"],
             ditheringFrames=self.config["ditheringFrames"],
-            seed=self.config["seed"]+(100*self.current_epoch),
             augmentator=self.config["augmentator"]
         )
 
@@ -68,6 +67,7 @@ class TranskunDataModule(pl.LightningDataModule):
     def train_dataloader(self):
         # shuffle is False, because we already shuffle on build_chunks in the
         # dataset class
+        self.train_dataset.build_chunks(self.config["seed"]+(100*self.current_epoch))
         return DataLoader(self.train_dataset, batch_size=self.config["batch_size"], \
                 prefetch_factor=max(4, self.config["num_workers"]), persistent_workers=True,
                 num_workers=self.config["num_workers"], shuffle=True, drop_last=True, collate_fn=collate_fn_batching)
@@ -76,12 +76,16 @@ class TranskunDataModule(pl.LightningDataModule):
         if self.val_dataset is None:
             return []
         
+        self.val_dataset.build_chunks(self.config["seed"]+(100*self.current_epoch))
         return DataLoader(self.val_dataset, batch_size=self.config["batch_size"], \
             prefetch_factor=max(4, self.config["num_workers"]), persistent_workers=True,\
             num_workers=self.config["num_workers"], shuffle=True, collate_fn=collate_fn_batching)
     
 
 def main(config):
+    torch.backends.cuda.matmul.allow_tf32 = True 
+    torch.backends.cudnn.allow_tf32 = True
+
     # Load/initialize the model
     # obtain the Model Module
     current_file_path = str(Path(__file__).parent)

@@ -848,24 +848,44 @@ class Transkun(pl.LightningModule):
             self.train()
     
     def configure_optimizers(self):
+        # optimizer = optim.AdaBelief(
+        #     self.getOptimizerGroup(),
+        #     lr=1e-5, #self.conf.max_lr,
+        #     weight_decouple=True,
+        #     weight_decay=1e-2,#self.conf.weight_decay,
+        #     eps=1e-8,
+        #     rectify=True
+        # )
+
+        # scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        #     optimizer,
+        #     max_lr=4e-4,#self.conf.max_lr,
+        #     total_steps=500000,#self.conf.nIter,
+        #     pct_start=0.05,
+        #     cycle_momentum=False,
+        #     final_div_factor=2,
+        #     div_factor=20
+        # )
+
         optimizer = optim.AdaBelief(
             self.getOptimizerGroup(),
-            lr=1e-5, #self.conf.max_lr,
+            lr=2e-4, #self.conf.max_lr,
             weight_decouple=True,
-            weight_decay=1e-2,#self.conf.weight_decay,
+            weight_decay=1e-4,#self.conf.weight_decay,
             eps=1e-8,
             rectify=True
         )
 
         scheduler = torch.optim.lr_scheduler.OneCycleLR(
             optimizer,
-            max_lr=4e-4,#self.conf.max_lr,
-            total_steps=500000,#self.conf.nIter,
+            max_lr=2e-4,#self.conf.max_lr,
+            total_steps=180000,#self.conf.nIter,
             pct_start=0.05,
             cycle_momentum=False,
             final_div_factor=2,
             div_factor=20
         )
+
 
         return {
             "optimizer": optimizer,

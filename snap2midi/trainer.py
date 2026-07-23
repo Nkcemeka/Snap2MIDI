@@ -415,7 +415,7 @@ class Trainer:
         )
         kong_train_pedals.main(config)
 
-    def train_hft(self, base_path: str="./data/hft/", batch_size: int = 4, margin_b: int = 32, margin_f: int = 32, n_bins: int = 256, n_slice: int=16, \
+    def train_hft(self, base_path: str="./data/hft/", batch_size: int = 4, n_div_train: int=1, n_div_val: int=1, margin_b: int = 32, margin_f: int = 32, n_bins: int = 256, n_slice: int=16, \
         num_frame: int = 128, epochs: int = 50, frame_rate: int = 100, num_velocity: int = 128, num_note: int = 88, \
         lr: float = 1e-4, dropout: float = 0.1, clip_gradient_norm: float = 1.0,seed: int = 1234, \
         cnn_channel: int = 4, cnn_kernel: int = 5, d: int = 256, pff_dim: int = 512, enc_layer: int = 3, \
@@ -431,6 +431,10 @@ class Trainer:
                     Path to extracted data
                 batch_size (int): 
                     Batch size for training. Default is 4.
+                n_div_train (int):
+                    Number of training divisions
+                n_div_val (int):
+                    Number of validation divisions
                 margin_b (int): 
                     Margin before the input frame. Default is 32.
                 margin_f (int): 
@@ -501,6 +505,8 @@ class Trainer:
             experiment_name="HFT",
             base_path=base_path,
             batch_size=batch_size,
+            n_div_train=n_div_train,
+            n_div_val=n_div_val,
             margin_b=margin_b,
             margin_f=margin_f,
             n_bins=n_bins,

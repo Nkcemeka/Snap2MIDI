@@ -5,6 +5,8 @@ from snap2midi.utils.eval_mir import note_extract
 import pretty_midi
 import librosa
 from nnAudio2.features.mel import MelSpectrogram
+import os
+os.environ["NNAUDIO_DISABLE_CITATION_REMINDER"] = "1"
 
 def load_hpp(config: dict):
     """ 

@@ -5,6 +5,7 @@ from tqdm import tqdm
 import torch
 import pretty_midi
 import torchaudio
+import os
 
 class Message:
     """ 
@@ -78,13 +79,30 @@ class _HFTMode(_BaseMode):
         self._collate_hft_split(config, "test")
     
     def _collate_hft_split(self, config: dict, split: str):
+        files_all = sorted(Path(f"{self.save_name}/feature/{split}").rglob("*.npz"))
+        files_all_div = []
+        n_divs = config[f"n_div_{split}"]
+
+        for div in range(n_divs):
+            files_all_div.append([])
+
+        for i, f in enumerate(files_all):
+            div = i % n_divs
+            files_all_div[div].append(f)
+
+        for div in range(n_divs):
+            self._collate_hft_split_div(files_all_div[div], config, split, div)
+    
+    def _collate_hft_split_div(self, files_all: list, config: dict, split: str, div):
         """ 
             Does the collation for each split (train/test/validation)
 
             Args
             -----
+                files_all (list): List of files for the division under consideration
                 config (dict): Configuration dictionary containing the parameters
                 split (str): training, validation or teat split.
+                div (int): split division number
         """
         num_frame_list = [] # stores the number of frames for each file
 
@@ -100,9 +118,6 @@ class _HFTMode(_BaseMode):
 
         # the total or actual number of frames read from the features
         total_num_frame_idx = 0 
-
-        # load the list of the filenames in the feature directory
-        files_all = sorted(Path(f"{self.save_name}/feature/{split}").rglob("*.npz"))
 
         for i, each in enumerate(files_all):
             # load the npz file
@@ -144,7 +159,7 @@ class _HFTMode(_BaseMode):
             loc_d += num_frame + config['input']['margin_f'] + config['input']['num_frame'] - 1
         
         # store dataset_idx in the save_name directory as a npz file
-        np.savez(f"{self.save_name}/idx/{split}/dataset_idx.npz", dataset_idx=dataset_idx)
+        np.savez(f"{self.save_name}/idx/{split}/dataset_idx" + str(div).zfill(3) +".npz", dataset_idx=dataset_idx)
         del dataset_idx # delete to free memory
 
         ## Process the features
@@ -168,7 +183,7 @@ class _HFTMode(_BaseMode):
             del npz_file # delete npz file to free memory
 
         # store the dataset_feature in the save_name directory as a npz file
-        np.savez(f"{self.save_name}/feature/{split}/dataset_feature.npz", dataset_feature=dataset_feature)
+        np.savez(f"{self.save_name}/feature/{split}/dataset_feature" + str(div).zfill(3) +".npz", dataset_feature=dataset_feature)
         del dataset_feature # delete to free memory
 
         ## Process the labels
@@ -187,7 +202,7 @@ class _HFTMode(_BaseMode):
             loc_d += num_frame + config['input']['margin_f'] + config['input']['num_frame'] - 1
         
         # store the dataset_label_frames in the save_name directory as a npz file
-        np.savez(f"{self.save_name}/label_frames/{split}/dataset_label_frames.npz", dataset_label_frames=dataset_label_frames)
+        np.savez(f"{self.save_name}/label_frames/{split}/dataset_label_frames" + str(div).zfill(3) +".npz", dataset_label_frames=dataset_label_frames)
         del dataset_label_frames # delete to free memory
 
         ## process the onsets
@@ -205,7 +220,7 @@ class _HFTMode(_BaseMode):
             loc_d += num_frame + config['input']['margin_f'] + config['input']['num_frame'] - 1
         
         # store the dataset_label_onset in the save_name directory as a npz file
-        np.savez(f"{self.save_name}/label_onset/{split}/dataset_label_onset.npz", dataset_label_onset=dataset_label_onset)
+        np.savez(f"{self.save_name}/label_onset/{split}/dataset_label_onset" + str(div).zfill(3) +".npz", dataset_label_onset=dataset_label_onset)
         del dataset_label_onset # delete to free memory
 
         ## process the offsets
@@ -223,7 +238,7 @@ class _HFTMode(_BaseMode):
             loc_d += num_frame + config['input']['margin_f'] + config['input']['num_frame'] - 1
         
         # store the dataset_label_offset in the save_name directory as a npz file
-        np.savez(f"{self.save_name}/label_offset/{split}/dataset_label_offset.npz", dataset_label_offset=dataset_label_offset)
+        np.savez(f"{self.save_name}/label_offset/{split}/dataset_label_offset" + str(div).zfill(3) +".npz", dataset_label_offset=dataset_label_offset)
         del dataset_label_offset # delete to free memory
 
         ## process the velocities
@@ -241,8 +256,13 @@ class _HFTMode(_BaseMode):
             loc_d += num_frame + config['input']['margin_f'] + config['input']['num_frame'] - 1
 
         # store the dataset_label_velocity in the save_name directory as a npz file
-        np.savez(f"{self.save_name}/label_velocity/{split}/dataset_label_velocity.npz", dataset_label_velocity=dataset_label_velocity)
+        np.savez(f"{self.save_name}/label_velocity/{split}/dataset_label_velocity" + str(div).zfill(3) +".npz", dataset_label_velocity=dataset_label_velocity)
         del dataset_label_velocity # delete to free memory
+
+        # delete the feature npz files for train and val
+        for i, each in enumerate(files_all):
+            if (split == "train" or split == "val") and os.path.exists(each):
+                    os.remove(each)
     
     def _extract_hft(self, config: dict):
         """
@@ -292,7 +312,6 @@ class _HFTMode(_BaseMode):
         Path(f"{self.save_name}/idx/val").mkdir(parents=True, exist_ok=True)
         Path(f"{self.save_name}/idx/test").mkdir(parents=True, exist_ok=True)
             
-
         print(f"Extracting features and labels for the hFT-Transformer model...")
         for i, split in tqdm(enumerate(split_files)):
             split_name = split_str[i]
@@ -493,56 +512,128 @@ class _HFTMode(_BaseMode):
         notes.sort(key=lambda x: x['onset']) # sort by onset time
         return notes
 
-    def _midi2note(self, config: dict, f_midi: str):
-        """ 
-            Converts MIDI file to mote-leve
-            events.
+    def _midi2note(self, config, f_midi, verbose_flag = False):
+        import mido
+        NUM_PITCH = 128
+        # (1) read MIDI file
+        midi_file = mido.MidiFile(f_midi)
+        ticks_per_beat = midi_file.ticks_per_beat
+        num_tracks = len(midi_file.tracks)
 
-            Args
-            ----
-                config (dict): Configuration dictionary
-                f_midi (str): MIDI file
-            
-            Returns
-            --------
-                notes (dict): Dictionary containing note 
-                              information.
-        """
-        # Get the midi object
-        midi_obj = pretty_midi.PrettyMIDI(f_midi)
-        events = []
-        extend_pedal = config['extend_pedal']
+        # (2) tempo curve
+        max_ticks_total = 0
+        for it in range(len(midi_file.tracks)):
+            ticks_total = 0
+            for message in midi_file.tracks[it]:
+                ticks_total += int(message.time)
+            if max_ticks_total < ticks_total:
+                max_ticks_total = ticks_total
+        a_time_in_sec = [0.0 for i in range(max_ticks_total+1)]
+        ticks_curr = 0
+        ticks_prev = 0
+        tempo_curr = 0
+        tempo_prev = 0
+        time_in_sec_prev = 0.0
+        for im, message in enumerate(midi_file.tracks[0]):
+            ticks_curr += message.time
+            if 'set_tempo' in str(message):
+                tempo_curr = int(message.tempo)
+                for i in range(ticks_prev, ticks_curr):
+                    a_time_in_sec[i] = time_in_sec_prev + ((i-ticks_prev) / ticks_per_beat * tempo_prev / 1e06)
+                if ticks_curr > 0:
+                    time_in_sec_prev = time_in_sec_prev + ((ticks_curr-ticks_prev) / ticks_per_beat * tempo_prev / 1e06)
+                tempo_prev = tempo_curr
+                ticks_prev = ticks_curr
+        for i in range(ticks_prev, max_ticks_total+1):
+            a_time_in_sec[i] = time_in_sec_prev + ((i-ticks_prev) / ticks_per_beat * tempo_curr / 1e06)
 
-        if not extend_pedal:
-            # If we are not extending pedal, we can directly get the notes
-            return self._get_notes(midi_obj)
+        # (3) obtain MIDI message
+        a_note = []
+        a_onset = []
+        a_velocity = []
+        a_reonset = []
+        a_push = []
+        a_sustain = []
+        for i in range(NUM_PITCH):
+            a_onset.append(-1)
+            a_velocity.append(-1)
+            a_reonset.append(False)
+            a_push.append(False)
+            a_sustain.append(False)
 
-        # store note events
-        for instrument in midi_obj.instruments:
-            if not instrument.is_drum:
-                for note in instrument.notes:
-                    msg_note_on = Message(time=note.start, type='note_on', note=note.pitch, velocity=note.velocity)
-                    msg_note_off = Message(time=note.end, type='note_off', note=note.pitch, velocity=0)
-                    events.append(msg_note_on)
-                    events.append(msg_note_off)
+        ticks = 0
+        sustain_flag = False
+        for message in midi_file.tracks[num_tracks-1]:
+            ticks += message.time
+            time_in_sec = a_time_in_sec[ticks]
+            if ('control_change' in str(message)) and ('control=64' in str(message)):
+                if message.value < 64:
+                    # sustain off
+                    for i in range(config['midi']['note_min'], config['midi']['note_max']+1):
+                        if (a_push[i] is False) and (a_sustain[i] is True):
+                            a_note.append({'onset': a_onset[i],
+                                        'offset': time_in_sec,
+                                        'pitch': i,
+                                        'velocity': a_velocity[i],
+                                        'reonset': a_reonset[i]})
+                            a_onset[i] = -1
+                            a_velocity[i] = -1
+                            a_reonset[i] = False
+                    sustain_flag = False
+                    for i in range(config['midi']['note_min'], config['midi']['note_max']+1):
+                        a_sustain[i] = False
+                else:
+                    # sustain on
+                    sustain_flag = True
+                    for i in range(config['midi']['note_min'], config['midi']['note_max']+1):
+                        if a_push[i] is True:
+                            a_sustain[i] = True
+            elif ('note_on' in str(message)) and (int(message.velocity) > 0):
+                # note on
+                note = message.note
+                velocity = message.velocity
+                if (a_push[note] is True) or (a_sustain[note] is True):
+                    # reonset
+                    a_note.append({'onset': a_onset[note],
+                                'offset': time_in_sec,
+                                'pitch': note,
+                                'velocity': a_velocity[note],
+                                'reonset': a_reonset[note]})
+                    a_reonset[note] = True
+                else:
+                    a_reonset[note] = False
+                a_onset[note] = time_in_sec
+                a_velocity[note] = velocity
+                a_push[note] = True
+                if sustain_flag is True:
+                    a_sustain[note] = True
+            elif (('note_off' in str(message)) or \
+                (('note_on' in str(message)) and (int(message.velocity) == 0))):
+                # note off
+                note = message.note
+                velocity = message.velocity
+                if (a_push[note] is True) and (a_sustain[note] is False):
+                    # offset
+                    a_note.append({'onset': a_onset[note],
+                                'offset': time_in_sec,
+                                'pitch': note,
+                                'velocity': a_velocity[note],
+                                'reonset': a_reonset[note]})
+                    a_onset[note] = -1
+                    a_velocity[note] = -1
+                    a_reonset[note] = False
+                a_push[note] = False
 
-        # store control change events for sustain pedal
-        for instrument in midi_obj.instruments:
-            if not instrument.is_drum:
-                for cc in instrument.control_changes:
-                    if cc.number == 64:  # Sustain pedal
-                        value = cc.value
-                        time = cc.time
-                        msg_type = 'control_change_on' if value >= 64 else 'control_change_off'
-                        msg_cc = Message(time=time, type=msg_type, note=None, velocity=value)
-                        events.append(msg_cc)
-        
-        # For this to work correctly, we need to sort the events by time
-        events.sort(key=lambda x: x.time)
+        for i in range(config['midi']['note_min'], config['midi']['note_max']+1):
+            if (a_push[i] is True) or (a_sustain[i] is True):
+                a_note.append({'onset': a_onset[i],
+                            'offset': time_in_sec,
+                            'pitch': i,
+                            'velocity': a_velocity[i],
+                            'reonset': a_reonset[i]})
+        a_note_sort = sorted(sorted(a_note, key=lambda x: x['pitch']), key=lambda x: x['onset'])
 
-        # Now, extend the note offsets based on the pedal events
-        notes = self._extend_note_offsets(events, config)
-        return notes
+        return a_note_sort
 
     def _get_label_hft(self, midi_file: str, config: dict) -> dict:
         """ 
@@ -692,34 +783,7 @@ class _HFTMode(_BaseMode):
         test_files = []
 
         if self.dataset_name == "maps":
-            # collect all tunes for test first from the ENSTDkAm and ENSTDkCl
-            # After that, collect the rest of the tunes for train and val
-            tunes = []
-            for i, each in enumerate(self.data[0]):
-                tmp = str(each).replace(f"{self.path}", "").replace(\
-                    f".{self.ext_audio}", "").rstrip('\n').split('/')
-                code = tmp[1] # folder name
-                content = tmp[2] # category name (MUS, ISOL, etc.)
-                tune = tmp[-1].rstrip(code).lstrip('MAPS_'+content+'-') # tune name
-
-                if (code == 'ENSTDkAm' or code == 'ENSTDkCl'):
-                    # append tune name to the tunes list
-                    test_files.append((each, self.data[1][i]))
-                    if tune not in tunes:
-                        tunes.append(tune)
-            
-            for i, each in enumerate(self.data[0]):
-                tmp = str(each).replace(f"{self.path}", "").replace(\
-                    f".{self.ext_audio}", "").rstrip('\n').split('/')
-                code = tmp[1] # folder name
-                content = tmp[2] # category name (MUS, ISOL, etc.)
-                tune = tmp[-1].rstrip(code).lstrip('MAPS_'+content+'-') # tune name
-
-                if (code != 'ENSTDkAm' and code != 'ENSTDkCl'):
-                    if tune not in tunes:
-                        train_files.append((each, self.data[1][i]))
-                    else:
-                        val_files.append((each, self.data[1][i]))
+            train_files, val_files, test_files = self._get_maps_train_val_test()
         elif self.dataset_name == "maestro":
             train_files, val_files, test_files = self._get_maestro_train_val_test()
         elif self.dataset_name == "goat":
