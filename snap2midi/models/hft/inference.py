@@ -2,6 +2,7 @@ from .utilities import frames_to_note, notes_to_midi, half_stride
 from .hft import *
 import torch
 import torchaudio
+from functools import lru_cache
 
 # def init_weights(m):
 #     """
@@ -68,6 +69,58 @@ def load_hft(config: dict):
     model.eval()
     return model
 
+@lru_cache(maxsize=8)
+def mel_transform_hft(sr: int, fft_bins: int, hop_sample: int, window_length: int,
+                      mel_bins: int, pad_mode: str, center: bool = True):
+        """
+            The hFT mel front end, built once per parameter set.
+
+            Constructing a MelSpectrogram builds a mel_bins x (fft_bins // 2 + 1)
+            filterbank, which is wasted work if it happens per call. Harmless once
+            per track; on the dataset's per-item path it would sit directly in the
+            training loop, so it is cached here rather than at each call site.
+            The module is stateless in forward -- buffers only -- so sharing one
+            instance is safe, and each dataloader worker gets its own cache.
+
+            center=False is what the dataset needs: it rebuilds a slice of the
+            whole-track feature from a buffer that already carries the padding.
+        """
+        return torchaudio.transforms.MelSpectrogram(
+            sample_rate=sr,
+            n_fft=fft_bins,
+            hop_length=hop_sample,
+            win_length=window_length,
+            n_mels=mel_bins,
+            pad_mode=pad_mode,
+            norm="slaney",
+            center=center,
+        )
+
+def mel_from_audio(audio: torch.Tensor, config: dict, center: bool = True) -> torch.Tensor:
+        """
+            Log-mel for an already-loaded waveform at config["sr"].
+
+            Extraction stores audio now rather than a spectrogram, so inference,
+            evaluation and the dataset all have to turn a waveform into the same
+            feature. That arithmetic lives here once.
+
+            Args
+            ----
+                audio (torch.Tensor): Mono waveform at config["sr"]
+                config (dict): Configuration dictionary containing the parameters
+                center (bool): Pad the signal before framing. True for a whole
+                    track, False for a pre-padded per-item buffer.
+
+            Returns
+            -------
+                feature (torch.Tensor): [num_frames, mel_bins] log-mel
+        """
+        mel_transform = mel_transform_hft(
+            config["sr"], config["fft_bins"], config["hop_sample"],
+            config["window_length"], config["mel_bins"], config["pad_mode"], center)
+        feature = mel_transform(audio)
+        return (torch.log(feature + config['log_offset'])).T
+
 def get_feature_hft(audio_file: str, config: dict) -> torch.Tensor:
         """
             Get the feature for the audio file for the hFT-Transformer model by Sony.
@@ -87,18 +140,7 @@ def get_feature_hft(audio_file: str, config: dict) -> torch.Tensor:
         audio = torch.mean(audio, dim=0)
         resample = torchaudio.transforms.Resample(sr, config["sr"])
         audio = resample(audio)
-        mel_transform = torchaudio.transforms.MelSpectrogram(
-            sample_rate=config["sr"],
-            n_fft=config["fft_bins"],
-            hop_length=config["hop_sample"],
-            win_length=config["window_length"],
-            n_mels=config["mel_bins"],
-            pad_mode=config["pad_mode"],
-            norm="slaney"
-        )
-        feature = mel_transform(audio)
-        feature = (torch.log(feature + config['log_offset'])).T
-        return feature
+        return mel_from_audio(audio, config)
 
 def inference(config: dict):
     """ 

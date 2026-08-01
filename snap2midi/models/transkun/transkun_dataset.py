@@ -61,13 +61,49 @@ class TranskunDataset(Dataset):
         self.ditheringFrames = ditheringFrames
         self.augmentator = augmentator
         self.chunksAll = []
+        self.epoch = 0
     
     def load_audio(self, audioPath):
         fs, data = wavfile.read(audioPath, mmap = True)
         return fs, data
+
+    def _check_stereo_safe(self, audioSlice) -> None:
+        """Reject reverb_level="peak" on multi-channel audio.
+
+        The reverb stage under "peak" normalizes its output to a peak of 0.5,
+        and it does so per call -- which here means per channel. Two channels
+        then receive unrelated gains and the left/right balance is re-rolled at
+        random on every excerpt the stage fires on, which is about half of them.
+        Measured on a MAESTRO chunk that moves the balance by 0.76 dB on average
+        and up to 2.5 dB, against 0.17 dB under "rms".
+
+        "rms" restores each channel to its own original energy, so the stage
+        leaves the balance where it found it; what movement remains comes from
+        the equalizer applying one filter to two different channel spectra,
+        which is what a room does and not an artifact.
+
+        Checked once, on the first augmented item, because the channel count is
+        a property of the store rather than of the excerpt.
+        """
+        if getattr(self, "_stereo_checked", False):
+            return
+        self._stereo_checked = True
+        if audioSlice.shape[-1] > 1 and getattr(self.augmentator, "reverb_level", "peak") == "peak":
+            raise ValueError(
+                f"this store is {audioSlice.shape[-1]}-channel and the "
+                "augmentator uses reverb_level='peak', which normalizes each "
+                "channel separately and so randomizes the stereo balance on "
+                "every excerpt the reverb fires on. Pass reverb_level='rms' "
+                "for multi-channel audio.")
     
-    def build_chunks(self, seed: float):
+    def build_chunks(self, seed: float, epoch: int = 0):
+        # `epoch` is only carried so the augmentator can vary its draw from one
+        # epoch to the next. build_chunks is the right place to take it: it is
+        # already called once per epoch, and the dataloader is rebuilt straight
+        # after (reload_dataloaders_every_n_epochs=1), so workers fork from a
+        # dataset that already holds the new value.
         print("Building chunks...")
+        self.epoch = epoch
         randGen = random.Random(
             seed
         )
@@ -112,7 +148,32 @@ class TranskunDataset(Dataset):
         )
 
         if self.augmentator is not None:
-            audioSlice = self.augmentator(audioSlice)
+            # readSlice hands back (samples, channels). The Augmentator takes a
+            # bare mono waveform, so each channel goes through separately and
+            # the channel axis is restored afterwards.
+            #
+            # Every channel is passed the identical (track_id, excerpt_start,
+            # epoch), so all of them draw the same room, the same equalizer
+            # curve and the same pitch shift -- one microphone pair in one
+            # space, not a different space per channel. Seeding from the chunk's
+            # identity rather than from call order is also what lets a different
+            # architecture, with a different batch size and step count, receive
+            # the identical augmentation of this same chunk. Passing nothing
+            # here would silently fall back to the ambient RNG and give both
+            # properties up.
+            self._check_stereo_safe(audioSlice)
+            audioSlice = np.stack(
+                [
+                    self.augmentator(
+                        audioSlice[:, channel],
+                        track_id=self.loaded_data[piece_idx]["audio_filename"],
+                        excerpt_start=begin,
+                        epoch=self.epoch,
+                    )
+                    for channel in range(audioSlice.shape[-1])
+                ],
+                axis=-1,
+            )
 
         return {
             "notes": notes,

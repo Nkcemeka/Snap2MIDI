@@ -136,10 +136,18 @@ class _KongMode(_BaseMode):
                 if key == "feature_params":
                     for fkey, fvalue in value.items():
                         hf.attrs.create(fkey, fvalue)
+                elif value is None:
+                    # HDF5 has no native None. The goat_* options default to
+                    # None for every other dataset, so writing them raised
+                    # "Object dtype has no native HDF5 equivalent" *after* all
+                    # the audio had been extracted -- an hour of work lost to
+                    # the last statement in the run.
+                    continue
+                elif isinstance(value, str):
+                    hf.attrs.create(key, value, dtype='S100')
+                elif isinstance(value, (list, tuple)):
+                    hf.attrs.create(key, [str(v) for v in value])
                 else:
-                    if isinstance(value, str):
-                        hf.attrs.create(key, value, dtype='S100')
-                    else:
-                        hf.attrs.create(key, value)
+                    hf.attrs.create(key, value)
 
         print(f"Extraction complete! Total files extracted: {len(train_files) + len(val_files) + len(test_files)}")

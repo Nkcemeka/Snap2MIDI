@@ -4,8 +4,55 @@ from .hpp import HPPNet
 from .dataset_hpp import HPPDataset
 from torch.utils.data.dataloader import DataLoader
 from snap2midi.utils.train_utils import pl_logger
+from snap2midi.utils.augmentator import Augmentator
 from pathlib import Path
 from pytorch_lightning.callbacks import ModelCheckpoint
+
+
+class EpochUpdateCallback(pl.Callback):
+    """Tell the dataset which epoch it is, so augmentation is redrawn.
+
+    The augmentator seeds each excerpt from (track_id, excerpt_start, epoch).
+    Leave `epoch` at 0 and every pass applies the identical draw to the
+    identical excerpt, which is a fixed pre-corrupted dataset rather than
+    augmentation -- and it fails silently.
+
+    Setting the attribute here reaches the workers only because they re-fork
+    each epoch, which holds while `persistent_workers` is False. Turning it on
+    for speed would freeze the epoch with no error, so the coupling is checked
+    against the live dataloader rather than left as a comment.
+    """
+
+    def on_train_epoch_start(self, trainer, pl_module):
+        dataset = trainer.datamodule.train_dataset
+        if dataset.augmentator is not None:
+            loader = trainer.train_dataloader
+            if getattr(loader, "persistent_workers", False):
+                raise RuntimeError(
+                    "hpp augmentation needs persistent_workers=False: workers "
+                    "must re-fork each epoch to pick up the new epoch number. "
+                    "With persistent workers the augmentation silently freezes "
+                    "at the first epoch's draw.")
+        dataset.epoch = trainer.current_epoch
+
+
+def build_augmentator(config: dict):
+    """Construct the training augmentator, or None for a clean run."""
+    if not config.get("augment"):
+        return None
+    if not config.get("augment_asset_root"):
+        raise ValueError(
+            "augment=True requires augment_asset_root, the directory "
+            "holding room_ir/ and bg_noise/.")
+    return Augmentator(
+        sample_rate=config["sample_rate"],
+        asset_root=config["augment_asset_root"],
+        split="train",
+        manifest_dir=config.get("augment_manifest_dir"),
+        seed=config.get("seed", 1234),
+        reverb_level=config.get("reverb_level", "peak"),
+    )
+
 
 class HPPDataModule(pl.LightningDataModule):
     def __init__(self, config: dict):
@@ -27,7 +74,12 @@ class HPPDataModule(pl.LightningDataModule):
         val_path = f"{self.config["base_path"].rstrip('/')}/val/"
 
         assert Path(train_path).exists(), f"[TRAIN PATH]: {train_path} does not exist!"
-        self.train_dataset = HPPDataset(self.config, [f"{train_path}"])
+
+        # Train only. Augmenting validation would make the loss curve partly a
+        # measure of the augmentation draw rather than of the model, and the
+        # checkpoint selection monitors the validation loss.
+        self.train_dataset = HPPDataset(self.config, [f"{train_path}"],
+                                        augmentator=build_augmentator(self.config))
 
         # We don't necessarily need a validation dataset
         if Path(val_path).exists():
@@ -37,8 +89,10 @@ class HPPDataModule(pl.LightningDataModule):
 
     # Below are methods for setting up the dataloaders
     def train_dataloader(self):
+        # persistent_workers stays False on purpose -- see EpochUpdateCallback.
         return DataLoader(self.train_dataset, batch_size=self.config["batch_size"], \
-                        num_workers=self.config["num_workers"], shuffle=True)
+                        num_workers=self.config["num_workers"], shuffle=True, \
+                        persistent_workers=False)
     
     def val_dataloader(self):
         if self.val_dataset is None:
@@ -64,7 +118,7 @@ def main(config):
 
     # create trainer
     trainer = pl.Trainer(max_steps=config["iterations"], \
-        callbacks=[checkpoint_callback],
+        callbacks=[checkpoint_callback, EpochUpdateCallback()],
         check_val_every_n_epoch=2,
         num_sanity_val_steps=0,
         num_nodes=config["num_nodes"],

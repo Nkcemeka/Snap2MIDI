@@ -3,18 +3,6 @@ import torch
 import numpy as np
 import pretty_midi
 import mir_eval
-import torch.nn as nn
-
-def initialize_weights(m):
-    weight = getattr(m, "weight", None)
-
-    if hasattr(m, "weight") and weight is None:
-        print("weight=None:", type(m), m)
-
-    if weight is not None and weight.dim() > 1:
-        nn.init.xavier_uniform_(weight)
-    # if hasattr(m, 'weight') and m.weight.dim() > 1:
-    #     nn.init.xavier_uniform_(m.weight.data)
 
 def half_stride(model, feature, shift: int, config: dict):
     """
@@ -43,7 +31,6 @@ def half_stride(model, feature, shift: int, config: dict):
     # behind, see the paper)
     # -18.42 was used in the main code; this is the log of 1e-8 which is the log_offset....
     pad_behind = np.full((back_margin + shift, num_bins), -18.42068099975586, dtype=np.float32)
-
     # now, we want to move our window such that the entire length is a multiple of the half_frames
     # np.ceil below allows us know what length to add to make full_length a multiple of half_frames
     # why add half_frame??? Now, when we get to the last segemtn (if feature is not a multuple of half_frames),

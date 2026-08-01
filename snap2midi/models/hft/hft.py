@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 from torchinfo import summary
 import pytorch_lightning as pl
-from .utilities import initialize_weights
 
 class HFT(pl.LightningModule):
     def __init__(self, params: dict):

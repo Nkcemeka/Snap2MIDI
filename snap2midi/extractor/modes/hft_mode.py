@@ -5,6 +5,7 @@ from tqdm import tqdm
 import torch
 import pretty_midi
 import torchaudio
+import json
 import os
 
 class Message:
@@ -79,7 +80,7 @@ class _HFTMode(_BaseMode):
         self._collate_hft_split(config, "test")
     
     def _collate_hft_split(self, config: dict, split: str):
-        files_all = sorted(Path(f"{self.save_name}/feature/{split}").rglob("*.npz"))
+        files_all = sorted(Path(f"{self.save_name}/audio/{split}").rglob("*.npz"))
         files_all_div = []
         n_divs = config[f"n_div_{split}"]
 
@@ -93,8 +94,54 @@ class _HFTMode(_BaseMode):
         for div in range(n_divs):
             self._collate_hft_split_div(files_all_div[div], config, split, div)
     
+    def _stride(self, config: dict) -> int:
+        """
+            Frames between the start of one track and the start of the next.
+
+            Every array in a division -- audio, idx and all four label arrays --
+            has to advance by this same amount or they drift apart, so it lives
+            in one place. The old code advanced the feature slab by the track's
+            own frame count while advancing the labels by max(feature, label),
+            which silently offset the two whenever a MIDI file outlived its audio.
+        """
+        return config['input']['margin_f'] + config['input']['num_frame'] - 1
+
+    def _fill_label_slab(self, files_all: list, num_frame_list: list, config: dict,
+                         path: str, key: str, total_num_frame: int, dtype) -> None:
+        """
+            Write one label array for a division, laid out track after track.
+
+            Uses open_memmap so the array is built on disk rather than in RAM --
+            a full division of onsets is gigabytes and the old code held it all
+            in memory before saving.
+
+            Args
+            -----
+                files_all (list): Per-track npz files for this division
+                num_frame_list (list): Frame count of each track, same order
+                config (dict): Configuration dictionary containing the parameters
+                path (str): Destination .npy path
+                key (str): Key to read out of each per-track npz
+                total_num_frame (int): Height of the division's arrays
+                dtype: dtype of the destination array
+        """
+        slab = np.lib.format.open_memmap(
+            path, mode='w+', dtype=dtype,
+            shape=(total_num_frame, config['midi']['num_note']))
+
+        loc_d = config['input']['margin_b']
+        for i, each in enumerate(files_all):
+            npz_file = np.load(each, allow_pickle=True)
+            label = npz_file[key]
+            slab[loc_d:loc_d + len(label), :] = label
+            del npz_file
+            loc_d += num_frame_list[i] + self._stride(config)
+
+        slab.flush()
+        del slab
+
     def _collate_hft_split_div(self, files_all: list, config: dict, split: str, div):
-        """ 
+        """
             Does the collation for each split (train/test/validation)
 
             Args
@@ -105,6 +152,7 @@ class _HFTMode(_BaseMode):
                 div (int): split division number
         """
         num_frame_list = [] # stores the number of frames for each file
+        num_frame_audio_list = [] # frames the audio alone accounts for
 
         # the total number of frames read including the margins
         # we are trying to get a window of Nctx from L frames from the actual feature
@@ -121,14 +169,15 @@ class _HFTMode(_BaseMode):
 
         for i, each in enumerate(files_all):
             # load the npz file
-            npz_file = np.load(each)
-            num_frame_feature = npz_file['feature'].shape[0] # number of frames for the feature
+            npz_file = np.load(each, allow_pickle=True)
+            num_frame_feature = int(npz_file['num_frames']) # frames the audio will produce
             num_frame_label = len(npz_file['label_frames']) # number of frames for MPE
             del npz_file # delete npz file to free memory
 
             # Get the number of frames based on the maximum for the feature and label
             num_frame = max(num_frame_feature, num_frame_label)
             num_frame_list.append(num_frame)
+            num_frame_audio_list.append(num_frame_feature)
 
             # So, here we go: we have num_frame (L) for the number of features
             # But we want config['input']['num_frame'] (Nctx) instead. 
@@ -143,12 +192,33 @@ class _HFTMode(_BaseMode):
             # us the starting point of our window as any frame of L frames...
             total_num_frame += num_frame + config['input']['margin_f'] + config['input']['num_frame'] - 1
             total_num_frame_idx += num_frame
-        
+
+        # Where the MIDI outlives the audio, the division carries active labels
+        # over frames the slab has no samples for -- the model is asked to
+        # transcribe notes from silence. This was equally true of the old feature
+        # slab, so it is not new, but it is invisible and worth saying out loud:
+        # 0 of 139 train and 0 of 60 test MAPS tracks hit it, other datasets may.
+        overrun = [(f.name, nl - na) for f, na, nl
+                   in zip(files_all, num_frame_audio_list, num_frame_list) if nl > na]
+        if overrun:
+            worst = max(overrun, key=lambda x: x[1])
+            hop_ms = 1000 * config['feature']['hop_sample'] / config['feature']['sr']
+            print(f"  note: {len(overrun)}/{len(files_all)} {split} tracks have MIDI "
+                  f"extending past the audio; labels there sit over silence. "
+                  f"Worst: {worst[0]} by {worst[1]} frames ({worst[1] * hop_ms / 1000:.1f} s)")
+
+
+        # Everything below is written as .npy rather than .npz. A npz is a zip
+        # archive and cannot be memory-mapped, and the dataset needs to map these
+        # so that dataloader workers share one copy instead of each loading its
+        # own (which is where hFT's per-worker memory blow-up comes from).
+        suffix = str(div).zfill(3) + ".npy"
+
         # dataset_idx (helps us keep track of the location of the actual features)
         print(f"Processing dataset_idx for {split}...")
         dataset_idx = np.zeros(total_num_frame_idx, dtype=np.int32)
         loc_i = 0
-        loc_d = config['input']['margin_b'] 
+        loc_d = config['input']['margin_b']
         for i, each in enumerate(files_all):
             # Tells us where our segemnt L ended up in.
             # so for each raw frame in the unpadded, where did it
@@ -156,110 +226,118 @@ class _HFTMode(_BaseMode):
             num_frame = num_frame_list[i]
             dataset_idx[loc_i:loc_i + num_frame] = np.arange(loc_d, loc_d + num_frame)
             loc_i += num_frame
-            loc_d += num_frame + config['input']['margin_f'] + config['input']['num_frame'] - 1
-        
-        # store dataset_idx in the save_name directory as a npz file
-        np.savez(f"{self.save_name}/idx/{split}/dataset_idx" + str(div).zfill(3) +".npz", dataset_idx=dataset_idx)
+            loc_d += num_frame + self._stride(config)
+
+        # store dataset_idx in the save_name directory. Still in frame units --
+        # nothing about the audio slab changes what an index means.
+        np.save(f"{self.save_name}/idx/{split}/dataset_idx" + suffix, dataset_idx)
         del dataset_idx # delete to free memory
 
-        ## Process the features
-        print(f"Processing features for {split}...")
-        if config['feature']['log_offset'] > 0.0:
-            zero_value = np.log(config['feature']['log_offset'])
-        else:
-            zero_value = config['feature']['log_offset']
-        
-        dataset_feature = np.full((total_num_frame, config['feature']['mel_bins']), zero_value, dtype=np.float32)
-        loc_d = config['input']['margin_b'] 
+        ## Process the audio
+        # The slab holds total_num_frame frames' worth of samples, plus fft_bins
+        # // 2 of headroom at each end. That headroom is what lets the dataset
+        # read an item as one flat slice: the samples a centred frame f needs
+        # start at f * hop_sample - fft_bins // 2, which would run negative at
+        # f = 0 without it. So sample position of frame f is f * hop + audio_pad,
+        # and an item starting at frame f reads slab[f * hop : f * hop + length].
+        print(f"Processing audio for {split}...")
+        hop = config['feature']['hop_sample']
+        audio_pad = config['feature']['fft_bins'] // 2
+        stride_samples = self._stride(config) * hop
 
+        dataset_audio = np.lib.format.open_memmap(
+            f"{self.save_name}/audio/{split}/dataset_audio" + suffix,
+            mode='w+', dtype=np.float32, shape=(total_num_frame * hop + 2 * audio_pad,))
+
+        loc_s = config['input']['margin_b'] * hop + audio_pad
         for i, each in enumerate(files_all):
             num_frame = num_frame_list[i]
 
-            # load the npz file and store the features at the right location
-            npz_file = np.load(each)
-            num_frame_feature = npz_file['feature'].shape[0] # number of frames for the feature
-            dataset_feature[loc_d:loc_d + num_frame_feature, :] = npz_file['feature']
-            loc_d += num_frame_feature + config['input']['margin_f'] + config['input']['num_frame'] - 1
-            del npz_file # delete npz file to free memory
+            # load the npz file and store the audio at the right location
+            npz_file = np.load(each, allow_pickle=True)
+            audio = npz_file['audio']
 
-        # store the dataset_feature in the save_name directory as a npz file
-        np.savez(f"{self.save_name}/feature/{split}/dataset_feature" + str(div).zfill(3) +".npz", dataset_feature=dataset_feature)
-        del dataset_feature # delete to free memory
+            # The layout is driven by the num_frames written at extraction, and
+            # the slab check in scripts/verify_hft_slab_layout.py cannot catch a
+            # wrong value there -- it rebuilds its reference from the same
+            # layout, so both sides would move together. Check it here instead,
+            # against the audio actually being written. A track of F frames is
+            # always under F * hop samples long, so this also rules out one
+            # track overwriting the next.
+            # Raised rather than asserted: these guard against silent data
+            # corruption, and `python -O` strips assert statements.
+            if self._num_frames_hft(audio, config) != num_frame_audio_list[i]:
+                raise ValueError(
+                    f"{each.name}: {len(audio)} samples give "
+                    f"{self._num_frames_hft(audio, config)} frames but num_frames "
+                    f"says {num_frame_audio_list[i]}")
+            if len(audio) >= num_frame * hop:
+                raise ValueError(
+                    f"{each.name}: {len(audio)} samples will not fit in "
+                    f"{num_frame} frames")
+
+            dataset_audio[loc_s:loc_s + len(audio)] = audio
+            del npz_file # delete npz file to free memory
+            loc_s += num_frame * hop + stride_samples
+
+        dataset_audio.flush()
+        del dataset_audio # delete to free memory
+
+        # Silence between tracks needs no filling: the gaps are zeros, and
+        # log(0 + log_offset) is exactly the log(log_offset) the old feature slab
+        # was pre-filled with, so the padding reproduces itself for free.
 
         ## Process the labels
         print(f"Processing labels for {split}...")
-        dataset_label_frames = np.zeros((total_num_frame, config['midi']['num_note']), dtype=bool)
-        loc_d = config['input']['margin_b']
-
-        for i, each in enumerate(files_all):
-            num_frame = num_frame_list[i]
-
-            # load the npz file and store the labels at the right location
-            npz_file = np.load(each)
-            num_frame_label = len(npz_file['label_frames'])
-            dataset_label_frames[loc_d:loc_d + num_frame_label, :] = npz_file['label_frames'][:]
-            del npz_file # delete npz file to free memory
-            loc_d += num_frame + config['input']['margin_f'] + config['input']['num_frame'] - 1
-        
-        # store the dataset_label_frames in the save_name directory as a npz file
-        np.savez(f"{self.save_name}/label_frames/{split}/dataset_label_frames" + str(div).zfill(3) +".npz", dataset_label_frames=dataset_label_frames)
-        del dataset_label_frames # delete to free memory
+        self._fill_label_slab(
+            files_all, num_frame_list, config,
+            f"{self.save_name}/label_frames/{split}/dataset_label_frames" + suffix,
+            'label_frames', total_num_frame, bool)
 
         ## process the onsets
         print(f"Processing onsets for {split}...")
-        dataset_label_onset = np.zeros((total_num_frame, config['midi']['num_note']), dtype=np.float32)
-        loc_d = config['input']['margin_b']
-        for i, each in enumerate(files_all):
-            num_frame = num_frame_list[i]
-
-            # load the npz file and store the labels at the right location
-            npz_file = np.load(each)
-            num_frame_label = len(npz_file['label_onset'])
-            dataset_label_onset[loc_d:loc_d + num_frame_label, :] = npz_file['label_onset'][:]
-            del npz_file
-            loc_d += num_frame + config['input']['margin_f'] + config['input']['num_frame'] - 1
-        
-        # store the dataset_label_onset in the save_name directory as a npz file
-        np.savez(f"{self.save_name}/label_onset/{split}/dataset_label_onset" + str(div).zfill(3) +".npz", dataset_label_onset=dataset_label_onset)
-        del dataset_label_onset # delete to free memory
+        self._fill_label_slab(
+            files_all, num_frame_list, config,
+            f"{self.save_name}/label_onset/{split}/dataset_label_onset" + suffix,
+            'label_onset', total_num_frame, np.float32)
 
         ## process the offsets
         print(f"Processing offsets for {split}...")
-        dataset_label_offset = np.zeros((total_num_frame, config['midi']['num_note']), dtype=np.float32)
-        loc_d = config['input']['margin_b']
-        for i, each in enumerate(files_all):
-            num_frame = num_frame_list[i]
-
-            # load the npz file and store the labels at the right location
-            npz_file = np.load(each)
-            num_frame_label = len(npz_file['label_offset'])
-            dataset_label_offset[loc_d:loc_d + num_frame_label, :] = npz_file['label_offset'][:]
-            del npz_file
-            loc_d += num_frame + config['input']['margin_f'] + config['input']['num_frame'] - 1
-        
-        # store the dataset_label_offset in the save_name directory as a npz file
-        np.savez(f"{self.save_name}/label_offset/{split}/dataset_label_offset" + str(div).zfill(3) +".npz", dataset_label_offset=dataset_label_offset)
-        del dataset_label_offset # delete to free memory
+        self._fill_label_slab(
+            files_all, num_frame_list, config,
+            f"{self.save_name}/label_offset/{split}/dataset_label_offset" + suffix,
+            'label_offset', total_num_frame, np.float32)
 
         ## process the velocities
         print(f"Processing velocities for {split}...")
-        dataset_label_velocity = np.zeros((total_num_frame, config['midi']['num_note']), dtype=np.int8)
-        loc_d = config['input']['margin_b']
-        for i, each in enumerate(files_all):
-            num_frame = num_frame_list[i]
+        self._fill_label_slab(
+            files_all, num_frame_list, config,
+            f"{self.save_name}/label_velocity/{split}/dataset_label_velocity" + suffix,
+            'label_velocity', total_num_frame, np.int8)
 
-            # load the npz file and store the labels at the right location
-            npz_file = np.load(each)
-            num_frame_label = len(npz_file['label_velocity'])
-            dataset_label_velocity[loc_d:loc_d + num_frame_label, :] = npz_file['label_velocity'][:]
-            del npz_file
-            loc_d += num_frame + config['input']['margin_f'] + config['input']['num_frame'] - 1
+        # Record the layout so the dataset can check its frame -> sample
+        # arithmetic against what was actually written instead of assuming it.
+        # An off-by-one in the * hop conversion is 16 ms of label drift, well
+        # inside the 50 ms tolerance, so it would never raise on its own.
+        meta = {
+            'total_num_frame': int(total_num_frame),
+            'num_tracks': len(files_all),
+            'sr': config['feature']['sr'],
+            'hop_sample': hop,
+            'fft_bins': config['feature']['fft_bins'],
+            'window_length': config['feature']['window_length'],
+            'mel_bins': config['feature']['mel_bins'],
+            'log_offset': config['feature']['log_offset'],
+            'pad_mode': config['feature']['pad_mode'],
+            'audio_pad': audio_pad,
+            'margin_b': config['input']['margin_b'],
+            'margin_f': config['input']['margin_f'],
+            'num_frame': config['input']['num_frame'],
+        }
+        with open(f"{self.save_name}/meta/{split}/dataset_meta" + str(div).zfill(3) + ".json", "w") as f:
+            json.dump(meta, f, indent=2)
 
-        # store the dataset_label_velocity in the save_name directory as a npz file
-        np.savez(f"{self.save_name}/label_velocity/{split}/dataset_label_velocity" + str(div).zfill(3) +".npz", dataset_label_velocity=dataset_label_velocity)
-        del dataset_label_velocity # delete to free memory
-
-        # delete the feature npz files for train and val
+        # delete the per-track npz files for train and val
         for i, each in enumerate(files_all):
             if (split == "train" or split == "val") and os.path.exists(each):
                     os.remove(each)
@@ -285,10 +363,10 @@ class _HFTMode(_BaseMode):
         print(f"Number of val files: {len(split_files[1])}")
         print(f"Number of test files: {len(split_files[2])}")
 
-        # make a feature directory if it does not exist
-        Path(f"{self.save_name}/feature/train").mkdir(parents=True, exist_ok=True)
-        Path(f"{self.save_name}/feature/val").mkdir(parents=True, exist_ok=True)
-        Path(f"{self.save_name}/feature/test").mkdir(parents=True, exist_ok=True)
+        # make an audio directory if it does not exist
+        Path(f"{self.save_name}/audio/train").mkdir(parents=True, exist_ok=True)
+        Path(f"{self.save_name}/audio/val").mkdir(parents=True, exist_ok=True)
+        Path(f"{self.save_name}/audio/test").mkdir(parents=True, exist_ok=True)
 
         # Also create paths for the labels, we will use them later on
         Path(f"{self.save_name}/label_frames/train").mkdir(parents=True, exist_ok=True)
@@ -311,31 +389,45 @@ class _HFTMode(_BaseMode):
         Path(f"{self.save_name}/idx/train").mkdir(parents=True, exist_ok=True)
         Path(f"{self.save_name}/idx/val").mkdir(parents=True, exist_ok=True)
         Path(f"{self.save_name}/idx/test").mkdir(parents=True, exist_ok=True)
-            
-        print(f"Extracting features and labels for the hFT-Transformer model...")
+
+        # and one for the per-division layout metadata
+        Path(f"{self.save_name}/meta/train").mkdir(parents=True, exist_ok=True)
+        Path(f"{self.save_name}/meta/val").mkdir(parents=True, exist_ok=True)
+        Path(f"{self.save_name}/meta/test").mkdir(parents=True, exist_ok=True)
+
+        print(f"Extracting audio and labels for the hFT-Transformer model...")
         for i, split in tqdm(enumerate(split_files)):
             split_name = split_str[i]
             for (audio_file, midi_file) in tqdm(split, total=len(split), desc="Extracting files"):
                 filename = audio_file.stem
-                feature = self._get_feature_hft(str(audio_file), config)
+                audio = self._get_audio_hft(str(audio_file), config)
                 label = self._get_label_hft(str(midi_file), config)
-                feature_dict = {'feature': feature}
-                feature_dict.update(label)
-                
-                # Save the feature and label to a npz file
+
+                # num_frames is stored so collation can lay out the division
+                # without loading every waveform just to measure it.
+                audio_dict = {'audio': audio, 'num_frames': self._num_frames_hft(audio, config)}
+                audio_dict.update(label)
+
+                # Save the audio and label to a npz file
                 if self.dataset_name != "slakh":
-                    store_path = f"{self.save_name}/feature/{split_name}/{filename}.npz"
+                    store_path = f"{self.save_name}/audio/{split_name}/{filename}.npz"
                 else:
                     # For slakh, we need to get the track name
                     # from the audio file path
                     track_name = audio_file.parent.parent.stem
-                    store_path = f"{self.save_name}/feature/{split_name}/{track_name}_{filename}.npz"
+                    store_path = f"{self.save_name}/audio/{split_name}/{track_name}_{filename}.npz"
 
-                np.savez(store_path, **feature_dict)
+                np.savez(store_path, **audio_dict)
     
-    def _get_feature_hft(self, audio_file: str, config: dict) -> torch.Tensor:
+    def _get_audio_hft(self, audio_file: str, config: dict) -> np.ndarray:
         """
-            Get the feature for the audio file for the hFT-Transformer model by Sony.
+            Get the resampled mono waveform for the audio file.
+
+            hFT used to store a log-mel here and slice it by frame index at
+            training time, which left no waveform to augment. We store the audio
+            instead and compute the mel per item in the dataset; see
+            `scripts/verify_hft_frame_equivalence.py` for the proof that a
+            per-item mel reproduces the whole-track one exactly.
 
             Args
             ------
@@ -344,27 +436,27 @@ class _HFTMode(_BaseMode):
 
             Returns
             --------
-                feature (torch.Tensor): Feature for the audio file
+                audio (np.ndarray): Mono waveform at config["feature"]["sr"]
         """
-        # Get the feature for the audio file
         # we use torchaudio to speed this up; librosa is too slow
         audio, sr = torchaudio.load(audio_file)
         audio = torch.mean(audio, dim=0)
         resample = torchaudio.transforms.Resample(sr, config["feature"]["sr"])
         audio = resample(audio)
-        mel_transform = torchaudio.transforms.MelSpectrogram(
-            sample_rate=config["feature"]["sr"],
-            n_fft=config["feature"]["fft_bins"],
-            hop_length=config["feature"]["hop_sample"],
-            win_length=config["feature"]["window_length"],
-            n_mels=config["feature"]["mel_bins"],
-            pad_mode=config["feature"]["pad_mode"],
-            norm="slaney"
-        )
-        feature = mel_transform(audio)
-        feature = (torch.log(feature + config['feature']['log_offset'])).T
-        return feature
-        
+        return audio.numpy().astype(np.float32)
+
+    @staticmethod
+    def _num_frames_hft(audio: np.ndarray, config: dict) -> int:
+        """
+            Frames a centred STFT produces for this waveform.
+
+            torch.stft with center=True pads by n_fft // 2 on both sides, so the
+            count is floor(len / hop) + 1. This has to match what the old stored
+            feature had, because dataset_idx and every label array are laid out
+            in these units.
+        """
+        return len(audio) // config["feature"]["hop_sample"] + 1
+
     def _extend_note_offsets(self, events, config: dict) -> list:
         """ 
             This method sort of mirrors _midi2note from hfTransformer implementation by Sony.

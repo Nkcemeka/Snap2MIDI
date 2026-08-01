@@ -15,9 +15,28 @@ Two filters are applied to the room impulse responses:
      smears note onsets while the labels stay at their original times, which
      is label noise rather than augmentation.
 
-Background noise is filtered for stationarity: impulsive material (horns,
-door chimes, dropped objects) adds spurious onset evidence at the SNRs used
-here, so recordings with a wide short-term energy spread are dropped.
+Two filters are applied to the background noise:
+
+  1. Stationarity. Impulsive material (horns, door chimes, dropped objects)
+     adds spurious onset evidence at the SNRs used here, so recordings with a
+     wide short-term energy spread are dropped.
+
+  2. In-band energy. The source pool is TUT-acoustic-scenes-2016, which covers
+     buses, cars, trams and metro stations, and the stationarity filter above
+     actively selects for them: engine rumble is the most stationary material
+     in the set. Because AddBackgroundNoise sets the SNR broadband, a recording
+     whose energy sits almost entirely below 100 Hz is mixed in far quieter
+     than the nominal SNR suggests inside the band the models actually see.
+     That is the same silent no-op guarded against by RT60_MIN, in frequency
+     rather than in time, so it is filtered the same way.
+
+The room impulse response manifests are written as two columns, `space` and
+`path`, because the physical space is what should be sampled uniformly at
+training time. The pool holds 228 files but only 167 distinct spaces: the
+AachenIR rooms are each measured from many microphone positions, so drawing
+uniformly over files would spend a quarter of the reverb draws on six rooms.
+Edwards et al. sample one of fourteen distinct spaces, so grouping here and
+sampling per space at training time is the closer match.
 
 Training draws only from the train manifests; the test manifests are reserved
 for the robustness evaluation, so measured robustness is generalization rather
@@ -66,13 +85,27 @@ EXCLUDE_KEYWORDS = [
     "fastfood", "hospital", "doctorsoffice", "docrorsoffice", "mallfoodcourt",
 ]
 
-# RT60 bounds in seconds: small room through concert hall.
+# RT60 bounds in seconds: small room through concert hall. The upper bound is
+# deliberately conservative. MAESTRO already contains the reverberation of the
+# hall it was recorded in, so the convolution stacks a second space on top of
+# the first rather than replacing it, and the risk is asymmetric: too much tail
+# smears note onsets while the labels stay put, which is label noise, whereas
+# too little only yields a smaller robustness gain. Only two of 228 impulse
+# responses fall between 2.0 s and 2.5 s, so the tighter bound costs ~1% of the
+# pool and removes the worst case.
 RT60_MIN = 0.30
-RT60_MAX = 2.50
+RT60_MAX = 2.00
 
 # Stationarity bounds for background noise.
 CREST_MAX_DB = 25.0
 FRAME_STD_MAX_DB = 4.5
+
+# Minimum share of a noise recording's energy inside the transcription band.
+# Chosen so the gap between the nominal broadband SNR and the SNR the models
+# actually experience stays under ~8 dB, while keeping roughly two thirds of
+# the stationary pool -- diversity is worth more here than SNR precision, since
+# the whole background noise stage is worth about one F1 point either way.
+BAND_FRACTION_MIN = 0.15
 
 # Fraction of impulse response spaces held out for the robustness evaluation.
 IR_TEST_FRACTION = 0.25
@@ -150,21 +183,33 @@ def filter_irs(records: list[dict]) -> tuple[list[dict], Counter]:
 
 
 def filter_noise(records: list[dict]) -> tuple[list[dict], Counter]:
-    """Drop impulsive noise recordings, keeping stationary ambience."""
+    """Drop impulsive and out-of-band noise, keeping audible stationary ambience."""
     kept, rejected = [], Counter()
     for rec in records:
         if rec["crest_factor_db"] > CREST_MAX_DB:
             rejected["crest factor too high (impulsive)"] += 1
         elif rec["frame_db_std"] > FRAME_STD_MAX_DB:
             rejected["energy too variable (non-stationary)"] += 1
+        elif rec["band_energy_fraction"] < BAND_FRACTION_MIN:
+            rejected["too little energy in band (rumble)"] += 1
         else:
             kept.append(rec)
     return kept, rejected
 
 
-def write_manifest(path: Path, records: list[dict], split: str) -> int:
-    """Write the relative paths for one split, sorted for reproducibility."""
-    rows = sorted(r["path"] for r in records if r["split"] == split)
+def write_manifest(path: Path, records: list[dict], split: str,
+                   group: bool = False) -> int:
+    """Write one split, sorted for reproducibility.
+
+    With group=True each line is `space<TAB>path`, so the consumer can sample a
+    physical space before sampling a measurement within it. Without it each
+    line is a bare relative path.
+    """
+    selected = [r for r in records if r["split"] == split]
+    if group:
+        rows = sorted(f"{space_id(r)}\t{r['path']}" for r in selected)
+    else:
+        rows = sorted(r["path"] for r in selected)
     path.write_text("\n".join(rows) + "\n")
     return len(rows)
 
@@ -201,10 +246,11 @@ def main() -> None:
           f"({sum(v == 'test' for v in assignment.values())} held out)")
 
     print()
-    for name, kept in (("room_ir", ir_kept), ("bg_noise", noise_kept)):
+    for name, kept, group in (("room_ir", ir_kept, True),
+                              ("bg_noise", noise_kept, False)):
         for split in ("train", "test"):
             manifest = args.out / f"{name}_{split}.txt"
-            count = write_manifest(manifest, kept, split)
+            count = write_manifest(manifest, kept, split, group=group)
             print(f"  {manifest}  ({count} files)")
 
 

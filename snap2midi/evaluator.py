@@ -279,8 +279,10 @@ class Evaluator:
     def evaluate_hft(self, test_path: str, checkpoint_path: str, margin_b: int = 32, margin_f: int = 32, \
                   n_bins: int = 256, n_slice: int=16, frame_threshold: float = 0.5, onset_threshold: float = 0.5, \
                   offset_threshold: float = 0.5, num_frame: int = 128, frame_rate: int = 100, \
-                  num_velocity: int = 128, note_min: int = 21, note_max: int = 108, hop_sample: int = 256, sr: int = 16000, 
-                  cnn_channel: int = 4, cnn_kernel: int = 5, d: int = 256, pff_dim: int = 512, 
+                  num_velocity: int = 128, note_min: int = 21, note_max: int = 108, hop_sample: int = 256, sr: int = 16000,
+                  fft_bins: int = 2048, window_length: int = 2048, mel_bins: int = 256, log_offset: float = 1e-8,
+                  pad_mode: str = "constant",
+                  cnn_channel: int = 4, cnn_kernel: int = 5, d: int = 256, pff_dim: int = 512,
                   enc_layer: int = 3, dropout: float = 0.1, dec_layer: int = 3, enc_head: int = 4, dec_head: int = 4, \
                   weight_A: float = 1.0, weight_B: float = 1.0):
         """
@@ -318,9 +320,19 @@ class Evaluator:
                     Maximum MIDI note number. Default is 108.
                 hop_sample (int): 
                     Hop size in samples for input feature. Default is 256.
-                sr (int): 
+                sr (int):
                     Sampling rate for input feature. Default is 16000.
-                cnn_channel (int): 
+                fft_bins (int):
+                    Number of FFT bins. Default is 2048.
+                window_length (int):
+                    Window length in samples. Default is 2048.
+                mel_bins (int):
+                    Number of mel bins. Default is 256.
+                log_offset (float):
+                    Log offset for numerical stability. Default is 1e-8.
+                pad_mode (str):
+                    Padding mode for the STFT. Default is "constant".
+                cnn_channel (int):
                     Number of channels for CNN layers. Default is 4.
                 cnn_kernel (int): 
                     Kernel size for CNN layers. Default is 5.
@@ -365,6 +377,13 @@ class Evaluator:
             num_note=note_max - note_min + 1,
             hop_sample=hop_sample,
             sr=sr,
+            # Needed to rebuild the log-mel: the test set stores audio now, not
+            # a precomputed feature. Must match extract_hft's feature config.
+            fft_bins=fft_bins,
+            window_length=window_length,
+            mel_bins=mel_bins,
+            log_offset=log_offset,
+            pad_mode=pad_mode,
             cnn_channel=cnn_channel,
             cnn_kernel=cnn_kernel,
             d=d,

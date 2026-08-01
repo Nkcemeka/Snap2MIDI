@@ -5,8 +5,10 @@ Computes the acoustic statistics used to filter the augmentation pools:
 
   * Room IRs   -> RT60, early/late energy ratio, duration.
                   Long tails smear note onsets; near-anechoic IRs are no-ops.
-  * Bg noise   -> crest factor and short-term energy variance.
-                  Impulsive noise adds spurious onset evidence.
+  * Bg noise   -> crest factor, short-term energy variance, and the fraction of
+                  energy inside the transcription band. Impulsive noise adds
+                  spurious onset evidence; noise that is almost entirely rumble
+                  is inaudible to the model at the SNRs used here.
 
 Writes a JSON record per pool; thresholds are applied later by
 build_augment_manifests.py so the analysis is only run once.
@@ -25,6 +27,14 @@ from tqdm import tqdm
 
 EARLY_TIME_MS = 50  # early reflection window, matches the room IR literature
 FRAME_MS = 50       # short-term energy frame for the stationarity measure
+
+# Band used to decide whether a noise recording is audible to the transcription
+# models at all. The upper edge is C8 = 4186 Hz, the highest piano fundamental.
+# The lower edge excludes the sub-100 Hz region, where traffic and ventilation
+# rumble concentrate and where the models carry little note evidence.
+BAND_LOW_HZ = 100.0
+BAND_HIGH_HZ = 4200.0
+SPECTRUM_N_FFT = 16384  # ~1 s at 16 kHz; resolves the 100 Hz edge cleanly
 
 
 def load_mono(path: Path) -> tuple[np.ndarray, int]:
@@ -68,6 +78,25 @@ def analyze_ir(path: Path) -> dict:
     }
 
 
+def band_energy_fraction(audio: np.ndarray, sr: int) -> float:
+    """Fraction of the total energy that falls inside the transcription band.
+
+    Averaged over non-overlapping windows so a stationary recording is measured
+    the same way regardless of its length. Recordings shorter than one window
+    are measured from a single zero-padded window.
+    """
+    n_fft = min(SPECTRUM_N_FFT, len(audio))
+    n_windows = max(len(audio) // n_fft, 1)
+    windows = np.resize(audio, n_windows * n_fft).reshape(n_windows, n_fft)
+
+    spectrum = np.abs(np.fft.rfft(windows * np.hanning(n_fft), axis=1)) ** 2
+    psd = spectrum.mean(axis=0)
+    freq = np.fft.rfftfreq(n_fft, 1 / sr)
+
+    band = (freq >= BAND_LOW_HZ) & (freq < BAND_HIGH_HZ)
+    return float(psd[band].sum() / (psd.sum() + 1e-20))
+
+
 def analyze_noise(path: Path) -> dict:
     """Descriptors capturing how impulsive a noise recording is."""
     audio, sr = load_mono(path)
@@ -87,6 +116,7 @@ def analyze_noise(path: Path) -> dict:
     return {
         "rms": rms,
         "crest_factor_db": float(crest_db),
+        "band_energy_fraction": band_energy_fraction(audio, sr),
         "frame_db_std": float(np.std(frame_db)),
         "frame_db_range": float(np.percentile(frame_db, 95) - np.percentile(frame_db, 5)),
         "duration_s": float(len(audio) / sr),
@@ -141,7 +171,8 @@ def main() -> None:
     summarize(irs, ["rt60_s", "early_late_ratio_db", "duration_s"])
     print(f"\nbg_noise (n={len(noise)})")
     print(header)
-    summarize(noise, ["crest_factor_db", "frame_db_std", "frame_db_range"])
+    summarize(noise, ["crest_factor_db", "frame_db_std", "frame_db_range",
+                      "band_energy_fraction"])
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps({"room_ir": irs, "bg_noise": noise}, indent=1))

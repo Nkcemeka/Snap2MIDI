@@ -41,7 +41,11 @@ class Trainer:
                 pool_sizes=[1, 2, 2], dropout_probs=[0, 0.25, 0.25], dropout_fc=0.5, \
                 fc_size=512, onset_lstm_units=128, combined_lstm_units=128, pitch_offset: int = 21, \
                 num_workers: int=4, num_nodes: int=1, logger_name: str='csv', resume_path:str|None=None, \
-                save_dir: str="./save_dir"):
+                save_dir: str="./save_dir", feature: str="mel", sample_rate: int=16000, \
+                max_frame_secs: float=20.0, n_mels: int=229, mel_n_fft: int=2048, \
+                hop_length: int=512, seed: int=1234, augment: bool=False, \
+                augment_asset_root: str|None=None, augment_manifest_dir: str|None=None, \
+                reverb_level: str="rms"):
         """
             Train Onsets and Frames model with specified configuration.
 
@@ -100,7 +104,30 @@ class Trainer:
                     None, it trains from scratch.
                 save_dir (str):
                     Path to save results, logs and checkpoints.
-                
+                feature (str), sample_rate (int), max_frame_secs (float),
+                n_mels (int), mel_n_fft (int), hop_length (int):
+                    The feature parameters this store was extracted with.
+                    OAF trains on the feature written at extraction time, so
+                    augmentation has to rebuild it from the augmented waveform;
+                    these have to match the extract_oaf call that wrote the
+                    store, and the dataset verifies that they do. Defaults
+                    match extract_oaf's own defaults.
+                seed (int):
+                    Salts the per-excerpt augmentation seed. Default is 1234.
+                augment (bool):
+                    Apply Edwards et al.'s augmentation to training excerpts on
+                    the fly. Validation is never augmented. Default is False.
+                augment_asset_root (str | None):
+                    Directory holding room_ir/ and bg_noise/. Required when
+                    augment is True.
+                augment_manifest_dir (str | None):
+                    Overrides the packaged asset manifests. Default is None.
+                reverb_level (str):
+                    How the reverb stage sets its output level. "rms" preserves
+                    the excerpt's energy, as Kaldi's wav-reverberate does,
+                    removing the loudness shortcut; "peak" reproduces
+                    audiomentations and therefore Edwards. Default is "rms".
+
             Returns
             --------
                 None
@@ -133,7 +160,18 @@ class Trainer:
             num_nodes=num_nodes,
             logger_name=logger_name,
             resume_path=resume_path,
-            save_dir=save_dir
+            save_dir=save_dir,
+            feature=feature,
+            sample_rate=sample_rate,
+            max_frame_secs=max_frame_secs,
+            n_mels=n_mels,
+            mel_n_fft=mel_n_fft,
+            hop_length=hop_length,
+            seed=seed,
+            augment=augment,
+            augment_asset_root=augment_asset_root,
+            augment_manifest_dir=augment_manifest_dir,
+            reverb_level=reverb_level
         )
         oaf_train.main(config)
     
@@ -145,7 +183,8 @@ class Trainer:
         learning_rate_decay_rate=0.98, learning_rate_decay_steps=10000, clip_gradient_norm=3, \
         pitch_offset: int = 21, num_workers: int=4, num_nodes: int=1, \
         logger_name: str='csv', resume_path:str|None=None, \
-        save_dir: str="./save_dir"):
+        save_dir: str="./save_dir", augment: bool=False, augment_asset_root: str|None=None, \
+        augment_manifest_dir: str|None=None, reverb_level: str="rms"):
         """
             Train Onsets and Frames model version 2 with specified configuration.
 
@@ -204,6 +243,20 @@ class Trainer:
                     None, it trains from scratch.
                 save_dir (str):
                     Path to save results, logs and checkpoints.
+                augment (bool):
+                    Apply Edwards et al.'s augmentation to training excerpts on
+                    the fly. Validation is never augmented. Default is False.
+                augment_asset_root (str | None):
+                    Directory holding room_ir/ and bg_noise/. Required when
+                    augment is True.
+                augment_manifest_dir (str | None):
+                    Overrides the packaged asset manifests. Default is None.
+                reverb_level (str):
+                    How the reverb stage sets its output level. "rms" preserves
+                    the excerpt's energy, as Kaldi's wav-reverberate does,
+                    removing the loudness shortcut; "peak" reproduces
+                    audiomentations and therefore Edwards. Default is "rms".
+
                 
             Returns
             --------
@@ -239,7 +292,11 @@ class Trainer:
             num_nodes=num_nodes,
             logger_name=logger_name,
             resume_path=resume_path,
-            save_dir=save_dir
+            save_dir=save_dir,
+            augment=augment,
+            augment_asset_root=augment_asset_root,
+            augment_manifest_dir=augment_manifest_dir,
+            reverb_level=reverb_level
         )
         oafv2_train.main(config)
 
@@ -249,9 +306,20 @@ class Trainer:
                 momentum: float = 0.01, learning_rate_decay_rate: float = 0.9, learning_rate_decay_steps: int = 10000, \
                 clip_gradient_norm: float = 3.0, num_workers: int=4, logger_name: str='csv',\
                 val_steps: int=5000, num_nodes: int=1, \
-                resume_path:str|None=None, save_dir: str="./save_dir"):
+                resume_path:str|None=None, save_dir: str="./save_dir", seed: int=1234, \
+                augment: bool=False, augment_asset_root: str|None=None, \
+                augment_manifest_dir: str|None=None, reverb_level: str="rms", \
+                experiment_name: str="Kong", log_steps: int|None=None):
         """
             Train Kong model with specified configuration.
+
+            Augmentation is off by default. Turning it on applies Edwards et
+            al.'s pipeline to the training excerpts only; validation stays
+            clean, since checkpoint selection monitors valid_total_loss.
+            reverb_level selects how the reverb stage sets its output level:
+            "rms", the default, preserves the excerpt's energy as Kaldi's
+            wav-reverberate does; "peak" reproduces audiomentations and
+            therefore Edwards.
 
             Parameters
             ----------
@@ -305,7 +373,7 @@ class Trainer:
         """
         config = self._build_config_from_kwargs(
             project_name="snap2midi",
-            experiment_name="Kong",
+            experiment_name=experiment_name,
             base_path=base_path,
             batch_size=batch_size,
             factors=factors,
@@ -324,9 +392,15 @@ class Trainer:
             resume_path=resume_path,
             num_workers=num_workers,
             val_steps=val_steps,
+            log_steps=log_steps,
             num_nodes=num_nodes,
             logger_name=logger_name,
             save_dir=save_dir,
+            seed=seed,
+            augment=augment,
+            augment_asset_root=augment_asset_root,
+            augment_manifest_dir=augment_manifest_dir,
+            reverb_level=reverb_level,
         )
         kong_train.main(config)
     
@@ -421,7 +495,9 @@ class Trainer:
         cnn_channel: int = 4, cnn_kernel: int = 5, d: int = 256, pff_dim: int = 512, enc_layer: int = 3, \
         dec_layer: int = 3, enc_head: int = 4, dec_head: int = 4, weight_A: float = 1.0, weight_B: float = 1.0,\
         verbose: int = 1, num_workers: int=4, logger_name: str='csv', num_nodes: int=1, \
-        resume_path:str|None=None, save_dir: str="./save_dir"):
+        resume_path:str|None=None, save_dir: str="./save_dir", augment: bool=False, \
+        augment_asset_root: str|None=None, augment_manifest_dir: str|None=None, \
+        feature_source: str="audio", reverb_level: str="rms"):
         """
             Train hFT-Transformer model with specified configuration.
 
@@ -494,12 +570,30 @@ class Trainer:
                     None, it trains from scratch.
                 save_dir (str):
                     Path to save results, logs and checkpoints.
+                augment (bool):
+                    Apply Edwards et al.'s augmentation to training excerpts on
+                    the fly. Validation is never augmented. Default is False.
+                augment_asset_root (str | None):
+                    Directory holding `room_ir/` and `bg_noise/`. Required when
+                    augment is True.
+                augment_manifest_dir (str | None):
+                    Overrides the packaged asset manifests. Default is None.
+                reverb_level (str):
+                    How the reverb stage sets its output level. "rms" (default)
+                    preserves the excerpt's energy, as Kaldi's wav-reverberate
+                    does by default, removing the loudness shortcut. "peak"
+                    reproduces audiomentations, and therefore Edwards.
+                feature_source (str):
+                    "audio" (default) reads the waveform slab and computes the
+                    log-mel per item; required for augmentation. "legacy_feature"
+                    reads the pre-rewrite npz spectrogram store, reproducing an
+                    unaugmented run against the original files.
 
             Returns
             ---------
                 None
         """
-        
+
         config = self._build_config_from_kwargs(
             project_name="snap2midi",
             experiment_name="HFT",
@@ -535,13 +629,20 @@ class Trainer:
             logger_name=logger_name,
             num_nodes=num_nodes,
             resume_path=resume_path,
-            save_dir=save_dir
+            save_dir=save_dir,
+            augment=augment,
+            augment_asset_root=augment_asset_root,
+            augment_manifest_dir=augment_manifest_dir,
+            feature_source=feature_source,
+            reverb_level=reverb_level
         )
         hft_train.main(config)
 
     def train_transkun(self, base_path: str="./data/transkun/", batch_size: int = 4, epochs: int = 1000000,\
         sample_rate: float = 44100, num_workers: int=4, logger_name: str='csv', num_nodes: int=1, 
-        val_steps: int=495, freq: int=3000, nProcess: int=1, resume_path:str|None=None, save_dir: str="./save_dir"):
+        val_steps: int=495, freq: int=3000, nProcess: int=1, resume_path:str|None=None, save_dir: str="./save_dir", \
+        seed: float|None=None, augment: bool=False, augment_asset_root: str|None=None, \
+        augment_manifest_dir: str|None=None, reverb_level: str="rms"):
         """
             Train the Transkun model.
 
@@ -572,6 +673,24 @@ class Trainer:
                     None, it trains from scratch.
                 save_dir (str):
                     Path to save results, logs and checkpoints.
+                seed (float | None):
+                    Seeds the chunk dithering and the per-excerpt augmentation
+                    draw. Default None keeps the historical behaviour of seeding
+                    from the wall clock, which means neither is reproducible
+                    across runs; pass a fixed value to make both so.
+                augment (bool):
+                    Apply Edwards et al.'s augmentation to training excerpts on
+                    the fly. Validation is never augmented. Default is False.
+                augment_asset_root (str | None):
+                    Directory holding room_ir/ and bg_noise/. Required when
+                    augment is True.
+                augment_manifest_dir (str | None):
+                    Overrides the packaged asset manifests. Default is None.
+                reverb_level (str):
+                    How the reverb stage sets its output level. "rms" preserves
+                    the excerpt's energy, as Kaldi's wav-reverberate does,
+                    removing the loudness shortcut; "peak" reproduces
+                    audiomentations and therefore Edwards. Default is "rms".
 
             Returns
             ---------
@@ -584,7 +703,7 @@ class Trainer:
             base_path=base_path,
             batch_size=batch_size,
             epochs=epochs,
-            seed=time.time(),
+            seed=time.time() if seed is None else seed,
             sample_rate=sample_rate,
             freq=freq,
             num_workers=num_workers,
@@ -593,7 +712,11 @@ class Trainer:
             resume_path=resume_path,
             val_steps=val_steps,
             nProcess=nProcess,
-            save_dir=save_dir
+            save_dir=save_dir,
+            augment=augment,
+            augment_asset_root=augment_asset_root,
+            augment_manifest_dir=augment_manifest_dir,
+            reverb_level=reverb_level
         )
         transkun_train.main(config)
     
@@ -603,7 +726,8 @@ class Trainer:
         learning_rate_decay_steps=10000, clip_gradient_norm=3, \
         pitch_offset: int = 21, num_workers: int=4, num_nodes: int=1, \
         logger_name: str='csv', resume_path:str|None=None, \
-        save_dir: str="./save_dir"):
+        save_dir: str="./save_dir", augment: bool=False, augment_asset_root: str|None=None, \
+        augment_manifest_dir: str|None=None, reverb_level: str="rms"):
         """
             Train HPP with specified configuration.
 
@@ -644,6 +768,20 @@ class Trainer:
                     None, it trains from scratch.
                 save_dir (str):
                     Path to save results, logs and checkpoints.
+                augment (bool):
+                    Apply Edwards et al.'s augmentation to training excerpts on
+                    the fly. Validation is never augmented. Default is False.
+                augment_asset_root (str | None):
+                    Directory holding room_ir/ and bg_noise/. Required when
+                    augment is True.
+                augment_manifest_dir (str | None):
+                    Overrides the packaged asset manifests. Default is None.
+                reverb_level (str):
+                    How the reverb stage sets its output level. "rms" preserves
+                    the excerpt's energy, as Kaldi's wav-reverberate does,
+                    removing the loudness shortcut; "peak" reproduces
+                    audiomentations and therefore Edwards. Default is "rms".
+
                 
             Returns
             --------
@@ -669,7 +807,11 @@ class Trainer:
             num_nodes=num_nodes,
             logger_name=logger_name,
             resume_path=resume_path,
-            save_dir=save_dir
+            save_dir=save_dir,
+            augment=augment,
+            augment_asset_root=augment_asset_root,
+            augment_manifest_dir=augment_manifest_dir,
+            reverb_level=reverb_level
         )
 
         if model_type == "sp":

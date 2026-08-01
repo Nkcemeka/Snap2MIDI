@@ -1,180 +1,115 @@
-test/AachenIR/aula_carolina/air_binaural_aula_carolina_1_1_1_90_3.wav
-test/AachenIR/aula_carolina/air_binaural_aula_carolina_1_1_2_90_3.wav
-test/AachenIR/aula_carolina/air_binaural_aula_carolina_1_1_3_0_3.wav
-test/AachenIR/aula_carolina/air_binaural_aula_carolina_1_1_3_135_3.wav
-test/AachenIR/aula_carolina/air_binaural_aula_carolina_1_1_3_180_3.wav
-test/AachenIR/aula_carolina/air_binaural_aula_carolina_1_1_3_45_3.wav
-test/AachenIR/aula_carolina/air_binaural_aula_carolina_1_1_3_90_3.wav
-test/AachenIR/aula_carolina/air_binaural_aula_carolina_1_1_4_90_3.wav
-test/AachenIR/aula_carolina/air_binaural_aula_carolina_1_1_5_90_3.wav
-test/AachenIR/aula_carolina/air_binaural_aula_carolina_1_1_6_90_3.wav
-test/AachenIR/aula_carolina/air_binaural_aula_carolina_1_1_7_90_3.wav
-test/AachenIR/booth/air_binaural_booth_1_0_1.wav
-test/AachenIR/booth/air_binaural_booth_1_0_2.wav
-test/AachenIR/booth/air_binaural_booth_1_0_3.wav
-test/AachenIR/booth/air_binaural_booth_1_1_1.wav
-test/AachenIR/booth/air_binaural_booth_1_1_2.wav
-test/AachenIR/booth/air_binaural_booth_1_1_3.wav
-test/MIT/h008_Bedroom_35txts.wav
-test/MIT/h027_Classroom_8txts.wav
-test/MIT/h052_Gym_WeightRoom_3txts.wav
-test/MIT/h060_Office_ConferenceRoom_3txts.wav
-test/MIT/h101_Classroom_2txts.wav
-test/MIT/h108_MITCampus_ComputerRoom_1txts.wav
-test/MIT/h109_CoffeeShop_1txts.wav
-test/MIT/h111_Kitchen_1txts.wav
-test/MIT/h112_Bookstore_1txts.wav
-test/MIT/h118_MITCampus_Atrium_1txts.wav
-test/MIT/h154_OfficeKitchen_1txts.wav
-test/MIT/h197_Hallway_MITCampus_1txts.wav
-test/MIT/h202_Diningroom_1txts.wav
-test/MIT/h231_Classroom_1txts.wav
-test/MIT/h248_Classroom_1txts.wav
-test/MIT/h258_Classroom_1txts.wav
-test/MIT/h266_MITCampus_StduentLounge_1txts.wav
-test/MIT/h268_BasementOfSuburbanHome_1txts.wav
-train/AachenIR/lecture/air_binaural_lecture_1_0_1.wav
-train/AachenIR/lecture/air_binaural_lecture_1_0_2.wav
-train/AachenIR/lecture/air_binaural_lecture_1_0_3.wav
-train/AachenIR/lecture/air_binaural_lecture_1_0_4.wav
-train/AachenIR/lecture/air_binaural_lecture_1_0_5.wav
-train/AachenIR/lecture/air_binaural_lecture_1_0_6.wav
-train/AachenIR/lecture/air_binaural_lecture_1_1_1.wav
-train/AachenIR/lecture/air_binaural_lecture_1_1_2.wav
-train/AachenIR/lecture/air_binaural_lecture_1_1_3.wav
-train/AachenIR/lecture/air_binaural_lecture_1_1_4.wav
-train/AachenIR/lecture/air_binaural_lecture_1_1_5.wav
-train/AachenIR/lecture/air_binaural_lecture_1_1_6.wav
-train/AachenIR/meeting/air_binaural_meeting_1_0_1.wav
-train/AachenIR/meeting/air_binaural_meeting_1_0_2.wav
-train/AachenIR/meeting/air_binaural_meeting_1_0_3.wav
-train/AachenIR/meeting/air_binaural_meeting_1_0_4.wav
-train/AachenIR/meeting/air_binaural_meeting_1_0_5.wav
-train/AachenIR/meeting/air_binaural_meeting_1_1_1.wav
-train/AachenIR/meeting/air_binaural_meeting_1_1_2.wav
-train/AachenIR/meeting/air_binaural_meeting_1_1_3.wav
-train/AachenIR/meeting/air_binaural_meeting_1_1_4.wav
-train/AachenIR/meeting/air_binaural_meeting_1_1_5.wav
-train/AachenIR/stairway/air_binaural_stairway_1_1_1_0.wav
-train/AachenIR/stairway/air_binaural_stairway_1_1_1_135.wav
-train/AachenIR/stairway/air_binaural_stairway_1_1_1_180.wav
-train/AachenIR/stairway/air_binaural_stairway_1_1_1_45.wav
-train/AachenIR/stairway/air_binaural_stairway_1_1_1_90.wav
-train/AachenIR/stairway/air_binaural_stairway_1_1_2_0.wav
-train/AachenIR/stairway/air_binaural_stairway_1_1_2_135.wav
-train/AachenIR/stairway/air_binaural_stairway_1_1_2_180.wav
-train/AachenIR/stairway/air_binaural_stairway_1_1_2_45.wav
-train/AachenIR/stairway/air_binaural_stairway_1_1_2_90.wav
-train/AachenIR/stairway/air_binaural_stairway_1_1_3_0.wav
-train/AachenIR/stairway/air_binaural_stairway_1_1_3_135.wav
-train/AachenIR/stairway/air_binaural_stairway_1_1_3_180.wav
-train/AachenIR/stairway/air_binaural_stairway_1_1_3_45.wav
-train/AachenIR/stairway/air_binaural_stairway_1_1_3_90.wav
-train/MIT/h001_Bedroom_65txts.wav
-train/MIT/h002_Bedroom_62txts.wav
-train/MIT/h004_LivingRoom_Large_48txts.wav
-train/MIT/h006_Bedroom_42txts.wav
-train/MIT/h012_Kitchen_22txts.wav
-train/MIT/h015_Bedroom_174txts.wav
-train/MIT/h016_MasterBedroom_15txts.wav
-train/MIT/h018_Kitchen_12txts.wav
-train/MIT/h019_MITCampus_Atrium_1txts.wav
-train/MIT/h020_Livingroom_10txts.wav
-train/MIT/h021_Bedroom_102txts.wav
-train/MIT/h025_Diningroom_8txts.wav
-train/MIT/h029_BabysRoom_8txts.wav
-train/MIT/h032_Bedroom_6txts.wav
-train/MIT/h033_Classroom_6txts.wav
-train/MIT/h034_Classroom_6txts.wav
-train/MIT/h035_Bar_LargeSportsBar_5txts.wav
-train/MIT/h039_Classroom_5txts.wav
-train/MIT/h042_Hallway_ElementarySchool_4txts.wav
-train/MIT/h045_Livingroom_4txts.wav
-train/MIT/h046_SuburbanGarage_4txts.wav
-train/MIT/h047_Hallway_MIT_4txts.wav
-train/MIT/h054_Kitchen_3txts.wav
-train/MIT/h058_Campground_Dininghall_3txts.wav
-train/MIT/h064_Classroom_3txts.wav
-train/MIT/h065_Classroom_3txts.wav
-train/MIT/h066_MITCampus_StudentLounge_2txts.wav
-train/MIT/h073_MITCampus_StudentLounge_2txts.wav
-train/MIT/h075_Hallway_Office_2txts.wav
-train/MIT/h077_MITCampus_StudentLounge_2txts.wav
-train/MIT/h079_Bar_2txts.wav
-train/MIT/h089_MITCampus_StudentLounge_2txts.wav
-train/MIT/h091_Bar_2txts.wav
-train/MIT/h092_Office_ConferenceRoom_2txts.wav
-train/MIT/h094_Campground_CabinLivingroom_2txts.wav
-train/MIT/h095_Campground_Cabin_2txts.wav
-train/MIT/h096_Hotel_Ballroom_2txts.wav
-train/MIT/h098_Bedroom_2txts.wav
-train/MIT/h099_Classroom_2txts.wav
-train/MIT/h102_Stairwell_ElementraySchool_1txts.wav
-train/MIT/h103_Classroom_2txts.wav
-train/MIT/h104_Classroom_2txts.wav
-train/MIT/h105_Classroom_2txts.wav
-train/MIT/h115_MovieTheater_1txts.wav
-train/MIT/h123_WineBar_1txts.wav
-train/MIT/h125_Bar_1txts.wav
-train/MIT/h130_Restaurant_1txs.wav
-train/MIT/h157_ArtGallery_1txts.wav
-train/MIT/h161_MITCampus_Atrium_1txts.wav
-train/MIT/h173_Offixe_1txts.wav
-train/MIT/h174_Bar_1txts.wav
-train/MIT/h176_LivingRoom_1txts.wav
-train/MIT/h178_OfficeFoyer_1txts.wav
-train/MIT/h179_Bar_1txts.wav
-train/MIT/h181_Hallway_MITInfiniteCorridor_1txs.wav
-train/MIT/h185_Hallway_House_1txts.wav
-train/MIT/h191_Kitchen_1txts.wav
-train/MIT/h201_MITCampus_DramaRoom_1txts.wav
-train/MIT/h211_Stairwell_1txts.wav
-train/MIT/h226_Pizzeria_1txts.wav
-train/MIT/h229_Office_Lobby_1txts.wav
-train/MIT/h232_Hallway_MITCampus_1txts.wav
-train/MIT/h237_Classroom_1txs.wav
-train/MIT/h238_Hallway_MITCampus_1txts.wav
-train/MIT/h239_Hallway_MITCampus_1txts.wav
-train/MIT/h240_Classroom_1txts.wav
-train/MIT/h241_Classroom_1txts.wav
-train/MIT/h244_Classroom_1txts.wav
-train/MIT/h245_Classroom_1txts.wav
-train/MIT/h246_Classroom_1txts.wav
-train/MIT/h249_Classroom_1txts.wav
-train/MIT/h251_Hallway_MITCampus_1txts.wav
-train/MIT/h252_Auditorium_1txts.wav
-train/MIT/h256_Stairwell_1txts.wav
-train/MIT/h259_Classroom_1txts.wav
-train/MIT/h260_Classroom_1txts.wav
-train/MIT/h262_Classroom_1txts.wav
-train/MIT/h264_Hallway_MITCampus_1txts.wav
-train/MIT/h265_Classroom_1txts.wav
-train/MIT/h267_MITCampus_Atrium_1txts.wav
-train/MIT/h269_Office_ConferenceRoom_1txts.wav
-train/OPENAIR/saint-lawrence-church-molenbeek-wersbeek-belgium/stereo/ir_church_saint-laurentius_molenbeek_bekkevoort_belgium-channel_L.wav
-train/OPENAIR/saint-lawrence-church-molenbeek-wersbeek-belgium/stereo/ir_church_saint-laurentius_molenbeek_bekkevoort_belgium-channel_R.wav
-train/OPENAIR/spokane-womans-club/stereo/spokane_womans_club_ir-channel_L.wav
-train/OPENAIR/spokane-womans-club/stereo/spokane_womans_club_ir-channel_R.wav
-train/OPENAIR/st-andrews-church/stereo/lyd3_000_ortf_48k-channel_L.wav
-train/OPENAIR/st-andrews-church/stereo/lyd3_000_ortf_48k-channel_R.wav
-train/OPENAIR/st-margarets-church-ncem-5-piece-band-spatial-measurements/stereo/1_c414_l.wav
-train/OPENAIR/st-margarets-church-ncem-5-piece-band-spatial-measurements/stereo/1_nt1_l.wav
-train/OPENAIR/st-margarets-church-ncem-5-piece-band-spatial-measurements/stereo/1_nt1_r.wav
-train/OPENAIR/st-margarets-church-ncem-5-piece-band-spatial-measurements/stereo/2_c414_l.wav
-train/OPENAIR/st-margarets-church-ncem-5-piece-band-spatial-measurements/stereo/2_c414_r.wav
-train/OPENAIR/st-margarets-church-ncem-5-piece-band-spatial-measurements/stereo/2_nt1_l.wav
-train/OPENAIR/st-margarets-church-ncem-5-piece-band-spatial-measurements/stereo/2_nt1_r.wav
-train/OPENAIR/st-margarets-church-ncem-5-piece-band-spatial-measurements/stereo/3_c414_r.wav
-train/OPENAIR/st-margarets-church-ncem-5-piece-band-spatial-measurements/stereo/3_nt1_r.wav
-train/OPENAIR/st-margarets-church-ncem-5-piece-band-spatial-measurements/stereo/4_c414_l.wav
-train/OPENAIR/st-margarets-church-ncem-5-piece-band-spatial-measurements/stereo/4_c414_r.wav
-train/OPENAIR/st-margarets-church-ncem-5-piece-band-spatial-measurements/stereo/4_nt1_l.wav
-train/OPENAIR/st-margarets-church-ncem-5-piece-band-spatial-measurements/stereo/4_nt1_r.wav
-train/OPENAIR/st-margarets-church-ncem-5-piece-band-spatial-measurements/stereo/5_nt1_l.wav
-train/OPENAIR/st-margarets-church-ncem-5-piece-band-spatial-measurements/stereo/5_nt1_r.wav
-train/OPENAIR/st-patricks-church-patrington/stereo/ortf_s1r1-channel_L.wav
-train/OPENAIR/st-patricks-church-patrington/stereo/ortf_s1r1-channel_R.wav
-train/OPENAIR/st-patricks-church-patrington/stereo/ortf_s3r3-channel_L.wav
-train/OPENAIR/st-patricks-church-patrington/stereo/ortf_s3r3-channel_R.wav
-train/OPENAIR/stairway-university-york/stereo/stairwell_ortf-channel_L.wav
-train/OPENAIR/stairway-university-york/stereo/stairwell_ortf-channel_R.wav
+EchoThief/Brutalism/BiomedicalSciences	EchoThief/Brutalism/BiomedicalSciences.wav
+EchoThief/Brutalism/CarpenterCenter	EchoThief/Brutalism/CarpenterCenter.wav
+EchoThief/Brutalism/GalbraithHall	EchoThief/Brutalism/GalbraithHall.wav
+EchoThief/Brutalism/GeiselLibrary	EchoThief/Brutalism/GeiselLibrary.wav
+EchoThief/Brutalism/GraffitiHallway	EchoThief/Brutalism/GraffitiHallway.wav
+EchoThief/Brutalism/HumanitiesSocialSciencesCourtyard	EchoThief/Brutalism/HumanitiesSocialSciencesCourtyard.wav
+EchoThief/Brutalism/LoveLibrary	EchoThief/Brutalism/LoveLibrary.wav
+EchoThief/Brutalism/NaturalSciences	EchoThief/Brutalism/NaturalSciences.wav
+EchoThief/Brutalism/PacificHall	EchoThief/Brutalism/PacificHall.wav
+EchoThief/Brutalism/PepperCanyonHall	EchoThief/Brutalism/PepperCanyonHall.wav
+EchoThief/Brutalism/SanDiegoSupercomputerCenter	EchoThief/Brutalism/SanDiegoSupercomputerCenter.wav
+EchoThief/Miscellaneous/AcademicQuadrangle	EchoThief/Miscellaneous/AcademicQuadrangle.wav
+EchoThief/Miscellaneous/Amaranth	EchoThief/Miscellaneous/Amaranth.wav
+EchoThief/Miscellaneous/BarMonsieurRicard	EchoThief/Miscellaneous/BarMonsieurRicard.wav
+EchoThief/Miscellaneous/CPMC264	EchoThief/Miscellaneous/CPMC264.wav
+EchoThief/Miscellaneous/CastilloDeLosTresReyesDelMorro	EchoThief/Miscellaneous/CastilloDeLosTresReyesDelMorro.wav
+EchoThief/Miscellaneous/CastilloDeLosTresReyesDelMorroArch	EchoThief/Miscellaneous/CastilloDeLosTresReyesDelMorroArch.wav
+EchoThief/Miscellaneous/CastilloDeLosTresReyesDelMorroCourtyard	EchoThief/Miscellaneous/CastilloDeLosTresReyesDelMorroCourtyard.wav
+EchoThief/Miscellaneous/CastilloDeLosTresReyesDelMorroSalasDeExposicion	EchoThief/Miscellaneous/CastilloDeLosTresReyesDelMorroSalasDeExposicion.wav
+EchoThief/Miscellaneous/CedarCreekWinery	EchoThief/Miscellaneous/CedarCreekWinery.wav
+EchoThief/Miscellaneous/ConvocationMall	EchoThief/Miscellaneous/ConvocationMall.wav
+EchoThief/Miscellaneous/FortalezaDeSanCarlosDeLaCabana 	EchoThief/Miscellaneous/FortalezaDeSanCarlosDeLaCabana .wav
+EchoThief/Miscellaneous/FourPointsRoom270	EchoThief/Miscellaneous/FourPointsRoom270.wav
+EchoThief/Miscellaneous/HartwellTavern	EchoThief/Miscellaneous/HartwellTavern.wav
+EchoThief/Miscellaneous/Hawxhurst	EchoThief/Miscellaneous/Hawxhurst.wav
+EchoThief/Miscellaneous/HepnerHall	EchoThief/Miscellaneous/HepnerHall.wav
+EchoThief/Miscellaneous/LittlefieldLobby	EchoThief/Miscellaneous/LittlefieldLobby.wav
+EchoThief/Miscellaneous/MillsArtMuseum	EchoThief/Miscellaneous/MillsArtMuseum.wav
+EchoThief/Miscellaneous/PabellonCulturalDeLaRepublica	EchoThief/Miscellaneous/PabellonCulturalDeLaRepublica.wav
+EchoThief/Miscellaneous/PabstBrewery	EchoThief/Miscellaneous/PabstBrewery.wav
+EchoThief/Miscellaneous/QuadracciPavilion	EchoThief/Miscellaneous/QuadracciPavilion.wav
+EchoThief/Miscellaneous/RedBridge	EchoThief/Miscellaneous/RedBridge.wav
+EchoThief/Miscellaneous/SteinmanFoundationRecordingSuite	EchoThief/Miscellaneous/SteinmanFoundationRecordingSuite.wav
+EchoThief/Miscellaneous/StorageTankNo7	EchoThief/Miscellaneous/StorageTankNo7.wav
+EchoThief/Miscellaneous/TijuanaMall	EchoThief/Miscellaneous/TijuanaMall.wav
+EchoThief/Miscellaneous/WangenheimRareBooksRoom	EchoThief/Miscellaneous/WangenheimRareBooksRoom.wav
+EchoThief/Miscellaneous/WarrenLectureHall2005	EchoThief/Miscellaneous/WarrenLectureHall2005.wav
+EchoThief/Nature/ByronGlacier	EchoThief/Nature/ByronGlacier.wav
+EchoThief/Nature/CliffOfTheDawn	EchoThief/Nature/CliffOfTheDawn.wav
+EchoThief/Nature/DevilsPunchbowl	EchoThief/Nature/DevilsPunchbowl.wav
+EchoThief/Nature/DivorceBeach	EchoThief/Nature/DivorceBeach.wav
+EchoThief/Nature/FatMansMisery	EchoThief/Nature/FatMansMisery.wav
+EchoThief/Nature/FatMansSqueeze	EchoThief/Nature/FatMansSqueeze.wav
+EchoThief/Nature/IslaMujeresCave	EchoThief/Nature/IslaMujeresCave.wav
+EchoThief/Nature/PurgatoryChasm	EchoThief/Nature/PurgatoryChasm.wav
+EchoThief/Nature/StanleyParkCliffs	EchoThief/Nature/StanleyParkCliffs.wav
+EchoThief/Nature/TheSlot	EchoThief/Nature/TheSlot.wav
+EchoThief/Nature/WoodruffLane	EchoThief/Nature/WoodruffLane.wav
+EchoThief/Recreation/Cranbrook Art Museum	EchoThief/Recreation/Cranbrook Art Museum.wav
+EchoThief/Recreation/HaleHolisticYogaStudio	EchoThief/Recreation/HaleHolisticYogaStudio.wav
+EchoThief/Recreation/Natatorium	EchoThief/Recreation/Natatorium.wav
+EchoThief/Recreation/OutbackClimbingCenter	EchoThief/Recreation/OutbackClimbingCenter.wav
+EchoThief/Recreation/RacquetballCourt	EchoThief/Recreation/RacquetballCourt.wav
+EchoThief/Recreation/SewardWaterfrontPark	EchoThief/Recreation/SewardWaterfrontPark.wav
+EchoThief/Recreation/Sleeping Giant Tower	EchoThief/Recreation/Sleeping Giant Tower.wav
+EchoThief/Stairwells/3000CStreetGarageStairwell	EchoThief/Stairwells/3000CStreetGarageStairwell.wav
+EchoThief/Stairwells/CCRMAStairwell	EchoThief/Stairwells/CCRMAStairwell.wav
+EchoThief/Stairwells/CPMCNorthStairwell	EchoThief/Stairwells/CPMCNorthStairwell.wav
+EchoThief/Stairwells/ConventionCenterSteps	EchoThief/Stairwells/ConventionCenterSteps.wav
+EchoThief/Stairwells/ExerciseAndNutritionSciences	EchoThief/Stairwells/ExerciseAndNutritionSciences.wav
+EchoThief/Stairwells/StrathconaStairwellMcGill	EchoThief/Stairwells/StrathconaStairwellMcGill.wav
+EchoThief/Stairwells/TransitCenter	EchoThief/Stairwells/TransitCenter.wav
+EchoThief/Underground/Batcave	EchoThief/Underground/Batcave.wav
+EchoThief/Underground/BatteryBenson	EchoThief/Underground/BatteryBenson.wav
+EchoThief/Underground/BatteryBrannan	EchoThief/Underground/BatteryBrannan.wav
+EchoThief/Underground/BatteryPowell	EchoThief/Underground/BatteryPowell.wav
+EchoThief/Underground/BatteryQuarles	EchoThief/Underground/BatteryQuarles.wav
+EchoThief/Underground/BatteryRandol	EchoThief/Underground/BatteryRandol.wav
+EchoThief/Underground/BatteryTolles	EchoThief/Underground/BatteryTolles.wav
+EchoThief/Underground/CathedralRoom	EchoThief/Underground/CathedralRoom.wav
+EchoThief/Underground/DiscoveryRoom	EchoThief/Underground/DiscoveryRoom.wav
+EchoThief/Underground/DrainageTunnel	EchoThief/Underground/DrainageTunnel.wav
+EchoThief/Underground/FortWordenPillbox	EchoThief/Underground/FortWordenPillbox.wav
+EchoThief/Underground/FortWordenTunnel	EchoThief/Underground/FortWordenTunnel.wav
+EchoThief/Underground/HarborEntranceControlPost	EchoThief/Underground/HarborEntranceControlPost.wav
+EchoThief/Underground/LakeMerrittBART	EchoThief/Underground/LakeMerrittBART.wav
+EchoThief/Underground/LawrenceWelkCave	EchoThief/Underground/LawrenceWelkCave.wav
+EchoThief/Underground/NancyLakeTunnel	EchoThief/Underground/NancyLakeTunnel.wav
+EchoThief/Underground/PortTownsendSkatepark	EchoThief/Underground/PortTownsendSkatepark.wav
+EchoThief/Underground/PortageCreekTunnel	EchoThief/Underground/PortageCreekTunnel.wav
+EchoThief/Underground/Qasgiq	EchoThief/Underground/Qasgiq.wav
+EchoThief/Underground/SaltonSeaDrainagePipe	EchoThief/Underground/SaltonSeaDrainagePipe.wav
+EchoThief/Underground/SquareVictoriaDome	EchoThief/Underground/SquareVictoriaDome.wav
+EchoThief/Underground/TijuanaAqueductTunnel	EchoThief/Underground/TijuanaAqueductTunnel.wav
+EchoThief/Underground/TonyKnowlesCoastalTrailTunnel	EchoThief/Underground/TonyKnowlesCoastalTrailTunnel.wav
+EchoThief/Underground/TunnelToHeaven	EchoThief/Underground/TunnelToHeaven.wav
+EchoThief/Underground/TunnelToHell	EchoThief/Underground/TunnelToHell.wav
+EchoThief/Underpasses/5UnderpassValencia	EchoThief/Underpasses/5UnderpassValencia.wav
+EchoThief/Underpasses/ArroyoEnsenada	EchoThief/Underpasses/ArroyoEnsenada.wav
+EchoThief/Underpasses/Avenue52UnderpassLARiver	EchoThief/Underpasses/Avenue52UnderpassLARiver.wav
+EchoThief/Underpasses/Avenue60UnderpassLARiver	EchoThief/Underpasses/Avenue60UnderpassLARiver.wav
+EchoThief/Underpasses/BoulevardRosemontUnderpass	EchoThief/Underpasses/BoulevardRosemontUnderpass.wav
+EchoThief/Underpasses/CaribooRdUnderGaglardiWay	EchoThief/Underpasses/CaribooRdUnderGaglardiWay.wav
+EchoThief/Underpasses/CleftRidgeArch	EchoThief/Underpasses/CleftRidgeArch.wav
+EchoThief/Underpasses/Commerical&5Underpass	EchoThief/Underpasses/Commerical&5Underpass.wav
+EchoThief/Underpasses/DipwayArch	EchoThief/Underpasses/DipwayArch.wav
+EchoThief/Underpasses/EchoBridge	EchoThief/Underpasses/EchoBridge.wav
+EchoThief/Underpasses/FishCreekTrestleBridge	EchoThief/Underpasses/FishCreekTrestleBridge.wav
+EchoThief/Underpasses/FremontTroll	EchoThief/Underpasses/FremontTroll.wav
+EchoThief/Underpasses/HopkinsDriveUnderpass	EchoThief/Underpasses/HopkinsDriveUnderpass.wav
+EchoThief/Underpasses/JFKUnderpass	EchoThief/Underpasses/JFKUnderpass.wav
+EchoThief/Underpasses/LionsGateBridge	EchoThief/Underpasses/LionsGateBridge.wav
+EchoThief/Underpasses/OldSouthBridge	EchoThief/Underpasses/OldSouthBridge.wav
+EchoThief/Underpasses/RiverMountainsLoopTrailAqueduct	EchoThief/Underpasses/RiverMountainsLoopTrailAqueduct.wav
+EchoThief/Underpasses/StanleyParkCauseway	EchoThief/Underpasses/StanleyParkCauseway.wav
+EchoThief/Underpasses/StanleyParkDriveUnderpass	EchoThief/Underpasses/StanleyParkDriveUnderpass.wav
+EchoThief/Underpasses/SwitzerStUnderEHarborDr	EchoThief/Underpasses/SwitzerStUnderEHarborDr.wav
+EchoThief/Underpasses/TelephoneWash	EchoThief/Underpasses/TelephoneWash.wav
+EchoThief/Underpasses/WalkwayUnderECampusDr	EchoThief/Underpasses/WalkwayUnderECampusDr.wav
+EchoThief/Underpasses/WaterplacePark	EchoThief/Underpasses/WaterplacePark.wav
+EchoThief/Venues/ConradPrebysConcertHallSeatF111	EchoThief/Venues/ConradPrebysConcertHallSeatF111.wav
+EchoThief/Venues/MillsGreekTheater	EchoThief/Venues/MillsGreekTheater.wav
+EchoThief/Venues/NaumburgBandshell	EchoThief/Venues/NaumburgBandshell.wav
+EchoThief/Venues/Space4ArtGallery	EchoThief/Venues/Space4ArtGallery.wav
+EchoThief/Venues/SteinmanHall	EchoThief/Venues/SteinmanHall.wav
