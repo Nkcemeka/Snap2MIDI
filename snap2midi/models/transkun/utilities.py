@@ -242,8 +242,6 @@ def querySingleInterval(start, end, index):
     ends = np.array([end], dtype = np.double)
     queryIds = np.array([0])
     r_id, r_loc = index.all_overlaps_both(starts, ends, queryIds)
-    print(r_id, r_loc)
-
     return r_loc
 
 def prepareIntervalsNoQuantize(notes, targetPitch):

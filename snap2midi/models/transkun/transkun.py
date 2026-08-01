@@ -132,6 +132,7 @@ class ValTranskunMetric(torchmetrics.Metric):
         f1 = (2*precision*recall)/(precision+recall)
 
         result["val/f1"] = f1
+        result["val_f1"] = f1 # for checkpoint purposes
         result["val/precision"] = precision
         result["val/recall"] = recall
         result["val/meanNLL"] = total_logp/total_length

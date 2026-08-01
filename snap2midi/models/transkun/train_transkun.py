@@ -111,7 +111,7 @@ def main(config):
     val_flag = Path(f"{base_path}/val/").exists()
     if val_flag:
         checkpoint_callback = ModelCheckpoint(
-            monitor='val/f1',
+            monitor='val_f1',
             filename='transkun-step={step}-f1={val_f1:.4f}',
             dirpath=config["save_dir"],
             save_top_k=5,
