@@ -720,7 +720,7 @@ class Trainer:
         )
         transkun_train.main(config)
     
-    def train_hpp(self, base_path: str="./data/hpp/", model_type: str="sp", batch_size=4, lr=0.0006, iterations: int=600000,\
+    def train_hpp(self, base_path: str="./data/hpp/", model_type: str="sp", batch_size=4, lr=0.0006, iterations: int=1000000,\
         sequence_length: int=327680, seed: int=42, sample_rate: int=16000, \
         bins_per_semitone: int = 4, hop_length: int=320, learning_rate_decay_rate=0.98, \
         learning_rate_decay_steps=10000, clip_gradient_norm=3, \
@@ -737,11 +737,19 @@ class Trainer:
                     Path to extracted training data
                 model_type (str):
                     Supported types are 'sp', 'base', 'tiny', 'ultra-tiny'.
-                batch_size (int): 
-                    Batch size for training/validation. Default is 8.
-                iterations (int): 
-                    Number of iterations for training. Default is 500000.
-                lr (float): 
+                batch_size (int):
+                    Batch size for training/validation. Default is 4.
+                iterations (int):
+                    Ceiling on Lightning's global_step, not on batches. HPPNet
+                    optimises each subnet separately, so global_step advances
+                    once per subnet per batch: 'sp' trains two subnets and
+                    therefore consumes two steps a batch, while the
+                    single-subnet variants consume one. The default of 1000000
+                    is 500k batches under 'sp', the top of the 200k-500k range
+                    the paper reports; the variants override it to 500000 to
+                    land on the same batch count. Early stopping is what ends
+                    a run, so this is a ceiling rather than a target.
+                lr (float):
                     Learning rate for the optimizer. Default is 0.0006.
                 sample_rate (int):
                     Sample rate. Default is 16000.
@@ -820,27 +828,31 @@ class Trainer:
             config["frame_subnet_heads"]= ['frame', 'offset', 'velocity']
             config["fixed_dilation"] = 24
             config["model_size"] = 128
+        # The variants below train one subnet, so global_step advances once per
+        # batch rather than twice as it does under 'sp'. Halving the ceiling
+        # keeps every variant on the same 500k batches; these overrides shadow
+        # whatever the caller passed for iterations and batch_size.
         elif model_type == "base":
             config["SUBNETS_TO_TRAIN"] = ['onset_subnet']
             config["onset_subnet_heads"] = ['onset', 'frame', 'offset', 'velocity']
             config["frame_subnet_heads"]= []
             config["batch_size"] = 4
             config["model_size"] = 128
-            config["iterations"] = 600000
+            config["iterations"] = 500000
         elif model_type == "tiny":
             config["SUBNETS_TO_TRAIN"] = ['onset_subnet']
             config["onset_subnet_heads"] = ['onset', 'frame', 'offset', 'velocity']
             config["frame_subnet_heads"]= []
             config["batch_size"] = 4
             config["model_size"] = 64
-            config["iterations"] = 600000
+            config["iterations"] = 500000
         elif model_type == "ultra-tiny":
             config["SUBNETS_TO_TRAIN"] = ['onset_subnet']
             config["onset_subnet_heads"] = ['onset', 'frame', 'offset', 'velocity']
             config["frame_subnet_heads"]= []
             config["batch_size"] = 4
             config["model_size"] = 48
-            config["iterations"] = 600000
+            config["iterations"] = 500000
         else:
             raise RuntimeError(f"Mode type: {model_type} not supported!")
         hpp_train.main(config)

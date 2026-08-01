@@ -6,7 +6,7 @@ from torch.utils.data.dataloader import DataLoader
 from snap2midi.utils.train_utils import pl_logger
 from snap2midi.utils.augmentator import Augmentator
 from pathlib import Path
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 
 
 class EpochUpdateCallback(pl.Callback):
@@ -108,17 +108,51 @@ def main(config):
 
     # create checkpoint callback
     base_path = config["base_path"].rstrip('/')
-    checkpoint_callback = ModelCheckpoint(
-        dirpath=config["save_dir"],
-        filename="hpp-step={step}",
-        every_n_train_steps=2000,
-        save_top_k=-1,  # save all checkpoints
-        save_last=True
-    )
+    val_flag = Path(f"{base_path}/val/").exists()
+    callbacks = [EpochUpdateCallback()]
+
+    if val_flag:
+        # Rank on val_loss/all, the sum of the four head losses. val_total_loss
+        # would order runs identically -- for every model_type the subnet sums
+        # re-partition the same heads, so it is exactly 3x val_loss/all -- but
+        # this is the one whose value means something on its own.
+        #
+        # The metric stays out of `filename`: ModelCheckpoint interpolates the
+        # template, and the '/' in the key would be read as a directory
+        # separator. Putting the loss in the name needs a slash-free alias
+        # logged alongside it, the way transkun carries val_f1 next to val/f1.
+        callbacks.append(ModelCheckpoint(
+            dirpath=config["save_dir"],
+            filename="hpp-{step}",
+            monitor="val_loss/all",
+            mode="min",
+            save_top_k=5,
+            save_last=True
+        ))
+        # HPPNet trains for 200k-500k steps and stops early; max_steps alone
+        # only supplies the ceiling. Patience counts validation checks rather
+        # than steps, so at check_val_every_n_epoch=2 these 25 checks span far
+        # more than learning_rate_decay_steps -- a run is not killed just
+        # before a decay that might still have pulled the loss down.
+        callbacks.append(EarlyStopping(
+            monitor="val_loss/all",
+            mode="min",
+            patience=25
+        ))
+    else:
+        # No validation split, so there is nothing to rank against: fall back
+        # to dumping periodically and pick the checkpoint by hand.
+        callbacks.append(ModelCheckpoint(
+            dirpath=config["save_dir"],
+            filename="hpp-{step}",
+            every_n_train_steps=2000,
+            save_top_k=-1,
+            save_last=True
+        ))
 
     # create trainer
     trainer = pl.Trainer(max_steps=config["iterations"], \
-        callbacks=[checkpoint_callback, EpochUpdateCallback()],
+        callbacks=callbacks,
         check_val_every_n_epoch=2,
         num_sanity_val_steps=0,
         num_nodes=config["num_nodes"],
