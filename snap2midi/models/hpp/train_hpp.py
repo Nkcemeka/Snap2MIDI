@@ -111,7 +111,22 @@ def main(config):
     val_flag = Path(f"{base_path}/val/").exists()
     callbacks = [EpochUpdateCallback()]
 
-    if val_flag:
+    if val_flag and config.get("checkpoint_every_n_steps"):
+        # Dump on a fixed stride and keep everything, so the model can be
+        # chosen afterwards on a decoded metric. This is what Wei et al.'s
+        # released train.py does -- model-{i}.pt every 2000 iterations, no
+        # ranking -- and it exists because val_loss/all is the wrong scalar to
+        # rank on: ~70% of it is frame loss, while the reported figure is note
+        # F1, which rides on the onset head at ~10% of the loss. Ranking on it
+        # deletes exactly the candidates a note-F1 sweep needs.
+        callbacks.append(ModelCheckpoint(
+            dirpath=config["save_dir"],
+            filename="hpp-{step}",
+            every_n_train_steps=config["checkpoint_every_n_steps"],
+            save_top_k=-1,
+            save_last=True
+        ))
+    elif val_flag:
         # Rank on val_loss/all, the sum of the four head losses. val_total_loss
         # would order runs identically -- for every model_type the subnet sums
         # re-partition the same heads, so it is exactly 3x val_loss/all -- but
@@ -129,16 +144,6 @@ def main(config):
             save_top_k=5,
             save_last=True
         ))
-        # HPPNet trains for 200k-500k steps and stops early; max_steps alone
-        # only supplies the ceiling. Patience counts validation checks rather
-        # than steps, so at check_val_every_n_epoch=2 these 25 checks span far
-        # more than learning_rate_decay_steps -- a run is not killed just
-        # before a decay that might still have pulled the loss down.
-        callbacks.append(EarlyStopping(
-            monitor="val_loss/all",
-            mode="min",
-            patience=25
-        ))
     else:
         # No validation split, so there is nothing to rank against: fall back
         # to dumping periodically and pick the checkpoint by hand.
@@ -148,6 +153,20 @@ def main(config):
             every_n_train_steps=2000,
             save_top_k=-1,
             save_last=True
+        ))
+
+    if val_flag and config.get("early_stopping", True):
+        # HPPNet trains for 200k-500k steps and stops early; max_steps alone
+        # only supplies the ceiling. Patience counts validation checks rather
+        # than steps, so at check_val_every_n_epoch=2 these 25 checks span
+        # 12050 batches against a 10000-batch decay period -- about one 2% LR
+        # step of runway, which is less headroom than it looks. Late in a run,
+        # where val_loss/all moves less between checks than it does within
+        # them, this stops on noise; that is what early_stopping=False is for.
+        callbacks.append(EarlyStopping(
+            monitor="val_loss/all",
+            mode="min",
+            patience=25
         ))
 
     # create trainer

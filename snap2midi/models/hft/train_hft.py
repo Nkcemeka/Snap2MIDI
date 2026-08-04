@@ -1,4 +1,5 @@
 # Imports
+import warnings
 from pathlib import Path
 from snap2midi.models.hft.hft import *
 from .hft_dataset import HFTDataset
@@ -7,6 +8,7 @@ from torch.utils.data import DataLoader
 from snap2midi.utils.train_utils import pl_logger
 from snap2midi.utils.augmentator import Augmentator
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.plugins.environments import SLURMEnvironment
 
 
 class EpochUpdateCallback(pl.Callback):
@@ -37,6 +39,49 @@ class EpochUpdateCallback(pl.Callback):
                     "With persistent workers the augmentation silently freezes "
                     "at the first epoch's draw.")
         dataset.epoch = trainer.current_epoch
+
+
+class PlateauPerValidation(pl.Callback):
+    """Step ReduceLROnPlateau once per validation instead of once per epoch.
+
+    Sony's loop validates and calls scheduler.step() together, so their MAESTRO
+    run -- which shards the training set four ways -- gives the scheduler 80
+    chances to fire across 20 epochs. Lightning instead steps a scheduler whose
+    configure_optimizers declared interval="epoch" exactly once an epoch, on
+    whatever the most recent validation value was, however often validation
+    actually ran. Twenty checks against ReduceLROnPlateau's default patience of
+    10 means the streak needed to trigger a decay is half the run, so the LR
+    stays at its initial value throughout where the paper's decayed.
+
+    This is a MAESTRO-only correction. Their MAPS run uses n_div_train=1 over
+    50 epochs, which is one validation per epoch -- the same cadence this code
+    already had, which is why the MAPS results needed no such fix.
+
+    Pairs with val_check_interval < 1.0 and does nothing useful without it: at
+    1.0 the frequency below is the epoch length, so the scheduler still steps
+    once an epoch and only the bookkeeping differs.
+
+    The frequency cannot be computed in configure_optimizers, where
+    trainer.num_training_batches is still inf because the training data has not
+    been set up yet. on_train_start is the first hook where it is known.
+    """
+
+    def on_train_start(self, trainer, pl_module):
+        if not trainer.lr_scheduler_configs:
+            raise RuntimeError(
+                "plateau_per_validation is set, but the module configured no "
+                "lr scheduler for it to retime.")
+
+        # An int val_check_interval is already a batch count; a float is a
+        # fraction of the epoch. Reading it wrong would silently retime the
+        # scheduler to something unrelated to when validation runs.
+        interval = trainer.val_check_interval
+        frequency = (interval if isinstance(interval, int)
+                     else int(trainer.num_training_batches * interval))
+
+        config = trainer.lr_scheduler_configs[0]
+        config.interval = "step"
+        config.frequency = max(1, frequency)
 
 
 class HFTDataModule(pl.LightningDataModule):
@@ -105,6 +150,35 @@ class HFTDataModule(pl.LightningDataModule):
             shuffle=False, \
             num_workers=self.config["num_workers"])
 
+def _resolve_resume_path(config) -> str | None:
+    """Where to resume from, or None to start from scratch.
+
+    `"last"` is the value a chained cluster run wants: the first job in the
+    chain finds no checkpoint and starts fresh, every later job picks up the
+    rolling one without anybody editing a filename between submissions. An
+    explicit path still asserts, because asking for a specific checkpoint and
+    silently getting a different one is worse than stopping.
+
+    Returning None is not the same as "no resume" under SLURM: Lightning's
+    checkpoint connector looks for its own `hpc_ckpt_*.ckpt` in
+    default_root_dir when ckpt_path is None and SLURMEnvironment is detected,
+    which is how an auto-requeued job comes back. last.ckpt is the fallback for
+    the deaths that never get to run a signal handler -- node failure, OOM kill.
+    """
+    resume_path = config.get("resume_path")
+
+    if resume_path is None:
+        return None
+
+    if resume_path == "last":
+        last = Path(config["save_dir"]) / "last.ckpt"
+        return str(last) if last.exists() else None
+
+    assert Path(resume_path).exists(), \
+        f"[resume_path]: {resume_path} does not exist."
+    return resume_path
+
+
 def main(config):
     # Create datasets and set seed
     pl.seed_everything(config["seed"], workers=True)
@@ -113,35 +187,103 @@ def main(config):
     # Load/initialize the model
     model = HFT(config)
 
-    # create checkpoint callback
+    save_dir = config["save_dir"]
+
+    # CSUC's /scratch is wiped 7 days after the job that wrote it ends, and a
+    # 20-epoch run is chained across weeks of jobs. Reading the *dataset* from
+    # scratch is right -- it is the low-latency tier and the store is a copy --
+    # but writing the only copy of the checkpoints there loses the run.
+    if "/scratch/" in str(save_dir):
+        warnings.warn(
+            f"save_dir={save_dir} is on scratch, which is purged some days "
+            f"after the job ends. Checkpoints are the one artefact of the run "
+            f"that cannot be regenerated -- point save_dir at project storage "
+            f"(/data/...) instead.",
+            stacklevel=2)
+
+    # Two checkpoint callbacks, because selection and restart want opposite
+    # settings and one callback cannot be both.
     base_path = config["base_path"].rstrip('/')
     val_dir = "feature" if config.get("feature_source") == "legacy_feature" else "audio"
     val_flag = Path(f"{base_path}/{val_dir}/val/").exists()
+
+    # (1) Selection. save_top_k=-1 keeps every epoch. The previous value of 5
+    # deleted 15 of 20 candidates *during* the run, ranked on valid_total_loss
+    # -- a sum of eight terms dominated by a 128-class velocity CE, which is not
+    # the note F1 the paper selects on and not the number being reported. At
+    # 64 MB a checkpoint, keeping all 20 costs 1.3 GB, so the ranking stays a
+    # decision that can be made afterwards, on the right metric.
     if val_flag:
-        checkpoint_callback = ModelCheckpoint(
+        select_ckpt = ModelCheckpoint(
             monitor='valid_total_loss',
             filename='hft-{epoch:02d}-{valid_total_loss:.4f}',
-            dirpath=config["save_dir"],
-            save_top_k=5,
-            mode="min"
+            dirpath=save_dir,
+            save_top_k=-1,
+            mode="min",
+            # Save after validation rather than at train-epoch end, so the
+            # monitored metric exists when the filename is interpolated.
+            save_on_train_epoch_end=False,
         )
     else:
-        checkpoint_callback = ModelCheckpoint(
-            dirpath=config["save_dir"],
+        select_ckpt = ModelCheckpoint(
+            dirpath=save_dir,
+            save_top_k=-1,
         )
+
+    # (2) Restart. Fires on a step count, so it cannot monitor anything: there
+    # is no validation metric at step 40000. monitor=None with save_top_k=1 is
+    # "latest wins" -- a single rolling file rather than one per interval -- and
+    # save_last mirrors it to last.ckpt, which is what _resolve_resume_path
+    # looks for. Only this callback sets save_last; two callbacks writing
+    # last.ckpt would each overwrite the other's.
+    #
+    # The interval defaults here rather than in Trainer.train_hft because it is
+    # a property of surviving a scheduler, not a training hyperparameter, and
+    # nothing about the run changes if it moves. 2000 steps is a rolling *file*,
+    # so disk does not grow; the cost is one 64 MB write every ~10 min at a
+    # plausible step time, which is nothing against losing a job's work. Pass
+    # ckpt_every_n_steps in the config to size it properly -- roughly an eighth
+    # of the steps a job fits, (walltime / step_time) / 8, with step_time from
+    # scripts/hft_throughput_trial.py -- or None to switch it off.
+    callbacks = [select_ckpt, EpochUpdateCallback()]
+    if config.get("plateau_per_validation"):
+        callbacks.append(PlateauPerValidation())
+    every_n_steps = config.get("ckpt_every_n_steps", 2000)
+    if every_n_steps:
+        callbacks.insert(1, ModelCheckpoint(
+            dirpath=save_dir,
+            filename='hft-rolling-{step:08d}',
+            every_n_train_steps=every_n_steps,
+            monitor=None,
+            save_top_k=1,
+            save_last=True,
+        ))
+
+    # Under SLURM, catch the signal the scheduler sends before the walltime kill
+    # (sbatch needs --signal=USR1@<seconds> --requeue for it to arrive), save,
+    # and resubmit. Without this, a job killed mid-epoch loses everything since
+    # the last rolling checkpoint; with it, it loses nothing. detect() keeps
+    # this inert off the cluster.
+    plugins = [SLURMEnvironment(auto_requeue=True)] if SLURMEnvironment.detect() else []
 
     # create trainer
     trainer = pl.Trainer(max_epochs=config["epochs"], \
         deterministic=True,
-        callbacks=[checkpoint_callback, EpochUpdateCallback()],
+        callbacks=callbacks,
+        plugins=plugins,
+        # Lightning writes its auto-requeue checkpoints to default_root_dir.
+        # Left at the default it would be the working directory, i.e. not
+        # necessarily the storage tier save_dir was chosen to be on.
+        default_root_dir=save_dir,
         num_sanity_val_steps=0,
         check_val_every_n_epoch=1,
+        # How often validation runs, and therefore how many checkpoint
+        # candidates the run leaves behind. It does not change the LR
+        # scheduler's cadence -- that is pinned to "epoch" in
+        # HFT.configure_optimizers; see Trainer.train_hft's docstring. 1.0
+        # keeps the historical once-an-epoch behaviour.
+        val_check_interval=config.get("val_check_interval", 1.0),
         num_nodes=config["num_nodes"],
         logger=pl_logger(config["logger_name"], project_name=config["experiment_name"]))
-    
-    if config["resume_path"] is None:
-        trainer.fit(model, dm)
-    else:
-        assert Path(config["resume_path"]).exists(), \
-            f"[resume_path]: {config["resume_path"]} does not exist."
-        trainer.fit(model, dm, ckpt_path=config["resume_path"])
+
+    trainer.fit(model, dm, ckpt_path=_resolve_resume_path(config))

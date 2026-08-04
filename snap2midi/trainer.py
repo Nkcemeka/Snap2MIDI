@@ -490,7 +490,9 @@ class Trainer:
         kong_train_pedals.main(config)
 
     def train_hft(self, base_path: str="./data/hft/", batch_size: int = 4, n_div_train: int=1, n_div_val: int=1, margin_b: int = 32, margin_f: int = 32, n_bins: int = 256, n_slice: int=16, \
-        num_frame: int = 128, epochs: int = 50, frame_rate: int = 100, num_velocity: int = 128, num_note: int = 88, \
+        num_frame: int = 128, epochs: int = 50, val_check_interval: float = 1.0, \
+        plateau_per_validation: bool = False, \
+        frame_rate: int = 100, num_velocity: int = 128, num_note: int = 88, \
         lr: float = 1e-4, dropout: float = 0.1, clip_gradient_norm: float = 1.0,seed: int = 1234, \
         cnn_channel: int = 4, cnn_kernel: int = 5, d: int = 256, pff_dim: int = 512, enc_layer: int = 3, \
         dec_layer: int = 3, enc_head: int = 4, dec_head: int = 4, weight_A: float = 1.0, weight_B: float = 1.0,\
@@ -521,9 +523,43 @@ class Trainer:
                     Slice dataset into n_slice parts; used for indexing. Default is 16.
                 num_frame (int): 
                     Number of frames in the input. Default is 128.
-                epochs (int): 
+                epochs (int):
                     Number of epochs for training. Default is 50.
-                frame_rate (int): 
+                val_check_interval (float):
+                    How often to validate, as a fraction of an epoch. 1.0
+                    (default) is once per epoch; 0.25 is four times.
+
+                    Sony's MAESTRO run shards the training set four ways and
+                    validates after each shard, so a 20-epoch run validates 80
+                    times. 0.25 reproduces that. Checkpointing follows
+                    validation, so it also decides how many candidates the run
+                    leaves to select from afterwards: 80 rather than 20, which
+                    is what the original had.
+
+                    It does NOT change how often the learning rate scheduler
+                    fires, which is the other half of that cadence and is not
+                    settable from here. HFT.configure_optimizers declares the
+                    ReduceLROnPlateau with interval="epoch", and Lightning only
+                    steps a scheduler whose declared interval matches the
+                    update it is doing -- so the scheduler steps once per epoch
+                    on the latest validation value however often validation
+                    ran. Measured: at 0.25 over two epochs, 10 checkpoints and
+                    1 scheduler step. Set plateau_per_validation to correct
+                    that half too.
+                plateau_per_validation (bool):
+                    Retime the ReduceLROnPlateau to step once per validation,
+                    as Sony's loop does, rather than once per epoch. Default
+                    False, which is the historical behaviour.
+
+                    Only meaningful together with val_check_interval < 1.0, and
+                    only needed for MAESTRO: Sony's MAPS run validates once an
+                    epoch, so this code already matched it there. Their MAESTRO
+                    run shards four ways and so steps the scheduler 80 times
+                    over 20 epochs against a default patience of 10; stepping
+                    20 times instead leaves the learning rate effectively
+                    constant for the whole run. See PlateauPerValidation in
+                    models/hft/train_hft.py.
+                frame_rate (int):
                     Frame rate for the model. Default is 100.
                 num_velocity (int): 
                     Number of velocity levels. Default is 128.
@@ -609,6 +645,8 @@ class Trainer:
             num_frame=num_frame,
             n_slice=n_slice,
             epochs=epochs,
+            val_check_interval=val_check_interval,
+            plateau_per_validation=plateau_per_validation,
             frame_rate=frame_rate,
             lr=lr,
             dropout=dropout,
@@ -727,7 +765,8 @@ class Trainer:
         pitch_offset: int = 21, num_workers: int=4, num_nodes: int=1, \
         logger_name: str='csv', resume_path:str|None=None, \
         save_dir: str="./save_dir", augment: bool=False, augment_asset_root: str|None=None, \
-        augment_manifest_dir: str|None=None, reverb_level: str="rms"):
+        augment_manifest_dir: str|None=None, reverb_level: str="rms", \
+        checkpoint_every_n_steps: int|None=None, early_stopping: bool=True):
         """
             Train HPP with specified configuration.
 
@@ -789,12 +828,23 @@ class Trainer:
                     the excerpt's energy, as Kaldi's wav-reverberate does,
                     removing the loudness shortcut; "peak" reproduces
                     audiomentations and therefore Edwards. Default is "rms".
+                checkpoint_every_n_steps (int | None):
+                    Dump a checkpoint every this many global steps and keep all
+                    of them, instead of ranking on val_loss/all and keeping the
+                    best five. None keeps the ranked behaviour. Use this when
+                    the model is to be picked afterwards on a decoded metric:
+                    val_loss/all is ~70% frame loss, so ranking on it throws
+                    away the candidates a note-F1 selection would want to see.
+                early_stopping (bool):
+                    Stop once val_loss/all has not improved for 25 validation
+                    checks. Default is True. False trains to a fixed budget,
+                    which is what the reference implementation does.
 
-                
+
             Returns
             --------
                 None
-        """    
+        """
         config = self._build_config_from_kwargs(
             project_name="snap2midi",
             experiment_name=f"HPPNet_{model_type}",
@@ -819,7 +869,9 @@ class Trainer:
             augment=augment,
             augment_asset_root=augment_asset_root,
             augment_manifest_dir=augment_manifest_dir,
-            reverb_level=reverb_level
+            reverb_level=reverb_level,
+            checkpoint_every_n_steps=checkpoint_every_n_steps,
+            early_stopping=early_stopping
         )
 
         if model_type == "sp":
