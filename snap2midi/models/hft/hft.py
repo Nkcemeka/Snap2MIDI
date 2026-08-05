@@ -131,6 +131,11 @@ class HFT(pl.LightningModule):
 
         # total loss
         loss = self.config["weight_A"] * loss_1st + self.config["weight_B"] * loss_2nd
+        # on_step=True matters here in a way it does not for validation. One
+        # MAESTRO epoch is ~22.6 h on an H100, so with on_epoch alone these are
+        # written once per *completed* epoch -- and no job in a 12 h chain ever
+        # completes one, so the training curve is empty for the whole run.
+        # on_epoch stays, so the per-epoch aggregate is still recorded.
         self.log_dict({
             'train_onset_loss_1st': loss_onset_1st.item(),
             'train_onset_loss_2nd': loss_onset_2nd.item(),
@@ -141,7 +146,7 @@ class HFT(pl.LightningModule):
             'train_velocity_loss_1st': loss_velocity_1st.item(),
             'train_velocity_loss_2nd': loss_velocity_2nd.item(),
             'train_total_loss': loss.item()
-        }, logger=True, on_step=False, on_epoch=True)
+        }, logger=True, on_step=True, on_epoch=True)
         return loss
 
     def validation_step(self, val_batch, batch_idx):

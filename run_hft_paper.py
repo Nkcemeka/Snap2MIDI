@@ -32,6 +32,10 @@ s2m.trainer.Trainer().train_hft(
     base_path="/data/upf105/resh000979/hft_maestro",
     save_dir="/data/upf105/resh000979/save_dir/hft_paper",
     logger_name="tensorboard",
+    # Fixed, not the default version_N. This run is a chain of ~38 walltimes and
+    # every resumed job would otherwise open its own version_N, which
+    # tensorboard shows as a separate run -- one curve in 38 pieces.
+    logger_version="hft_paper",
     num_workers=16,
 
     batch_size=8,        # train_hft defaults to 4

@@ -496,7 +496,8 @@ class Trainer:
         lr: float = 1e-4, dropout: float = 0.1, clip_gradient_norm: float = 1.0,seed: int = 1234, \
         cnn_channel: int = 4, cnn_kernel: int = 5, d: int = 256, pff_dim: int = 512, enc_layer: int = 3, \
         dec_layer: int = 3, enc_head: int = 4, dec_head: int = 4, weight_A: float = 1.0, weight_B: float = 1.0,\
-        verbose: int = 1, num_workers: int=4, logger_name: str='csv', num_nodes: int=1, \
+        verbose: int = 1, num_workers: int=4, logger_name: str='csv', \
+        logger_version: str|None=None, num_nodes: int=1, \
         resume_path:str|None=None, save_dir: str="./save_dir", augment: bool=False, \
         augment_asset_root: str|None=None, augment_manifest_dir: str|None=None, \
         feature_source: str="audio", reverb_level: str="rms"):
@@ -599,10 +600,16 @@ class Trainer:
                     Number of workers. Defualt is 4.
                 logger_name (str):
                     Logger to use in pytorch_lightning. Default is `csv`
+                logger_version (str | None):
+                    Fixed subdirectory for the logger to write into, under
+                    `./logs/HFT/`. Default None allocates a fresh `version_N`
+                    per process. Set it to a constant for a run chained across
+                    several walltimes, so every resumed job appends to one
+                    directory instead of leaving one fragment each.
                 num_nodes (int):
                     Number of accelerator nodes to use for distributed training. Default is 1.
-                resume_path (str | None): 
-                    Whether to resume training from a checkpoint. Default is None. If 
+                resume_path (str | None):
+                    Whether to resume training from a checkpoint. Default is None. If
                     None, it trains from scratch.
                 save_dir (str):
                     Path to save results, logs and checkpoints.
@@ -665,6 +672,7 @@ class Trainer:
             verbose=verbose,
             num_workers=num_workers,
             logger_name=logger_name,
+            logger_version=logger_version,
             num_nodes=num_nodes,
             resume_path=resume_path,
             save_dir=save_dir,

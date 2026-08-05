@@ -7,7 +7,7 @@ import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 from snap2midi.utils.train_utils import pl_logger
 from snap2midi.utils.augmentator import Augmentator
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 from pytorch_lightning.plugins.environments import SLURMEnvironment
 
 
@@ -248,6 +248,11 @@ def main(config):
     callbacks = [select_ckpt, EpochUpdateCallback()]
     if config.get("plateau_per_validation"):
         callbacks.append(PlateauPerValidation())
+    # Lightning logs no learning rate unless this callback asks it to. The whole
+    # point of PlateauPerValidation above is to make ReduceLROnPlateau fire on
+    # the paper's cadence rather than once an epoch -- without an LR series
+    # there is no way to confirm from the logs that it ever fired.
+    callbacks.append(LearningRateMonitor(logging_interval="step"))
     every_n_steps = config.get("ckpt_every_n_steps", 2000)
     if every_n_steps:
         callbacks.insert(1, ModelCheckpoint(
@@ -284,6 +289,7 @@ def main(config):
         # keeps the historical once-an-epoch behaviour.
         val_check_interval=config.get("val_check_interval", 1.0),
         num_nodes=config["num_nodes"],
-        logger=pl_logger(config["logger_name"], project_name=config["experiment_name"]))
+        logger=pl_logger(config["logger_name"], project_name=config["experiment_name"],
+                         version=config.get("logger_version")))
 
     trainer.fit(model, dm, ckpt_path=_resolve_resume_path(config))
