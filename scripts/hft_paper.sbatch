@@ -1,27 +1,29 @@
 #!/bin/bash
 #
-# Run hFT until the first validation completes, to measure the real per-epoch
-# cost on this hardware. With val_check_interval=0.25 that happens at training
-# step 70,164 of 280,659 -- between ~3.3 h (if the H100 is 3x an A100) and
-# ~10.9 h (if it is no faster). 12 h covers the pessimistic end.
+# The full 20-epoch hFT run on MAESTRO. Measured on this hardware, not guessed:
+# the 12 h trial (job 3100103) gave 3.9 it/s training and 14.7 it/s validation on
+# an H100 PCIe, so
 #
-# What to read off it:
-#   training it/s   from the progress bar
-#   validation it/s from the progress bar during the validation pass
-#   hours/epoch = (280660 / train_it_s + 4 * 34273 / val_it_s) / 3600
+#   hours/epoch = (280659 / 3.9 + 4 * 34273 / 14.7) / 3600 = 22.6 h
+#   20 epochs   = 452 h = 19 days
 #
-# The first validation is done the moment a file appears in save_dir named
-#   hft-epoch=00-valid_total_loss=*.ckpt
-# At that point scancel the job -- everything after it is just more of the same,
-# and nothing is wasted: the rolling checkpoint means the real run resumes from
-# wherever this one stopped.
+# res_gpu caps a job at 7 days, so that is 3 jobs. They are NOT requeued (see the
+# block below) -- they are submitted up front as a dependency chain, each picking
+# up from last.ckpt:
+#
+#   J1=$(sbatch --parsable scripts/hft_paper.sbatch)
+#   J2=$(sbatch --parsable --dependency=afterany:$J1 scripts/hft_paper.sbatch)
+#   J3=$(sbatch --parsable --dependency=afterany:$J2 scripts/hft_paper.sbatch)
+#
+# afterany, not afterok: a walltime kill exits TIMEOUT/FAILED, so afterok would
+# never fire and the chain would stall silently with no error anywhere.
 #
 #SBATCH --job-name=train_hft
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=32
-#SBATCH --time=12:00:00
+#SBATCH --time=7-00:00:00
 #SBATCH --output=/home/resh000979/Snap2MIDI/logs/hft_%j.out
 #SBATCH --error=/home/resh000979/Snap2MIDI/logs/hft_%j.err
 #SBATCH --partition=res_gpu
@@ -32,17 +34,30 @@
 #   mkdir -p /home/resh000979/Snap2MIDI/logs
 #
 # ---------------------------------------------------------------------------
-# FOR THE FULL 20-EPOCH RUN, uncomment these three and set EPOCHS=20.
+# LEAVE THESE THREE COMMENTED OUT. Tested 2026-08-05 (jobs 3101512, 3101523) and
+# they do not work here.
 #
-# One epoch is longer than any walltime here, so the full run gets killed
-# mid-epoch and has to survive it: --signal fires SIGUSR1 five minutes before
-# the kill, which Lightning catches to save and resubmit; --requeue permits the
-# resubmission; --open-mode stops it truncating the log.
+# The idea was that --signal fires SIGUSR1 five minutes before the walltime kill,
+# Lightning catches it, saves at the exact current step and resubmits itself, and
+# --requeue permits that. What actually happens is that the handler dies:
 #
-# They are OFF for the measurement run above on purpose. With them on, the job
-# does not stop when the walltime expires -- it requeues and keeps training, so
-# a run meant to end after the first validation would quietly become the full
-# 20 epochs.
+#   OSError: [Errno 18] Invalid cross-device link:
+#     '/scratch/upf105/.../tmpXXXX' -> '/data/upf105/.../hpc_ckpt_1.ckpt'
+#
+# Lightning writes that checkpoint atomically -- temp file, then rename -- and
+# Slurm puts TMPDIR on /scratch while save_dir is on /data. rename() across
+# filesystems is EXDEV. Exporting TMPDIR onto /data (done below) does not rescue
+# it either: the dataloader workers receive SIGUSR1 too, run the same handler,
+# and hit `CUDA error: initialization error` because a worker has no CUDA
+# context. The job then dies on `DataLoader worker exited unexpectedly`.
+#
+# Worse than not requeueing, a failed handler leaves a truncated hpc_ckpt_*.ckpt
+# in save_dir, which is exactly where Lightning looks on the next start.
+#
+# So: no requeue. The dependency chain in the header does the same job, using the
+# resume path that is actually tested, and the only cost is the work done since
+# the last rolling checkpoint -- bounded by ckpt_every_n_steps=5000 in
+# run_hft_paper.py to ~21 min per handoff, ~42 min across the whole run.
 #
 ##SBATCH --signal=USR1@300
 ##SBATCH --requeue
@@ -78,9 +93,19 @@ cd /home/resh000979/Snap2MIDI
 # belt-and-braces; the main process is GPU-bound and needs no more than this.
 export OMP_NUM_THREADS=4
 
-# srun rather than a bare `python`, and only for the sake of --signal above:
-# sbatch signals job steps but explicitly NOT the batch shell, and a command run
-# directly in the script is part of the batch shell. Without srun the SIGUSR1
-# would never reach Python. Harmless while --signal is commented out; leaving it
-# here means enabling the full run is only about uncommenting.
+# Slurm sets TMPDIR to a per-job directory on /scratch, which is a different
+# filesystem from the /data holding save_dir. Anything that saves atomically --
+# temp file, then rename -- then fails with EXDEV, because rename() cannot cross
+# filesystems. That is what killed the requeue handler above. Nothing in the
+# current path depends on it, but the trap is latent for any future atomic write
+# into save_dir, so keep the temp directory on the same filesystem as the target.
+export TMPDIR=/data/upf105/resh000979/tmp
+mkdir -p "$TMPDIR"
+
+# srun rather than a bare `python`. It was originally here so SIGUSR1 could reach
+# Python -- sbatch signals job steps but explicitly NOT the batch shell, and a
+# command run directly in the script is part of the batch shell. That path is
+# abandoned (see above), but srun stays: it is what the GPU check above runs
+# under, and keeping both consistent means the training sees exactly the
+# environment the check validated.
 srun python /home/resh000979/Snap2MIDI/run_hft_paper.py

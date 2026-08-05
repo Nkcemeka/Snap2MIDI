@@ -26,7 +26,7 @@ import snap2midi as s2m
 # it, and costs a large multiple of throughput on an H100.
 torch.set_float32_matmul_precision("high")
 
-EPOCHS = 1
+EPOCHS = 20
 
 s2m.trainer.Trainer().train_hft(
     base_path="/data/upf105/resh000979/hft_maestro",
@@ -60,4 +60,14 @@ s2m.trainer.Trainer().train_hft(
     # same script works for every job in the chain. One epoch outlasts any
     # walltime here, so there will be a chain.
     resume_path="last",
+
+    # This is the only thing standing between a walltime kill and lost work.
+    # Requeueing does not work on this cluster (see scripts/hft_paper.sbatch), so
+    # each of the 3 jobs is killed abruptly at 7 days and the next resumes from
+    # last.ckpt -- losing whatever came after the last rolling save. At the
+    # measured 3.9 it/s, 5000 steps is ~21 min, so the whole 19-day run gives up
+    # ~42 min across its two handoffs. The default 2000 would halve that again
+    # but writes 66 MB every 8 min; 5000 is the point where the insurance costs
+    # ~0.15% of throughput.
+    ckpt_every_n_steps=5000,
 )

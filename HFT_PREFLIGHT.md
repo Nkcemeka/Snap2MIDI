@@ -8,12 +8,56 @@ The trial proved the model trains: all eight loss terms fell between step 70,164
 and 140,329, and the 2nd stage beat the 1st on every head. It proved nothing
 about whether a *chain* of 38 jobs works, and that is where the money is.
 
-Companion to `CHECKPOINT_VALIDATION.md`, whose three rules apply here unchanged.
-Rule 2 in particular: hFT's `select_ckpt` monitors `valid_total_loss`, which at
-step 140,329 was 55% frames and 25% velocity, with **onset only ~5%** — the same
-"ranks on nearly the opposite of what is reported" problem found in HPP and Kong.
-`save_top_k=-1` means selection can be deferred, so this is not a launch blocker,
-but the eval tooling has to exist before the run ends.
+Companion to `CHECKPOINT_VALIDATION.md`, with one correction to it. Sony's
+training code selects on **validation loss**, not note F1:
+
+    if best_loss_valid > epoch_loss_valid:
+        best_loss_valid = epoch_loss_valid
+        best_epoch = epoch; best_div = div
+
+(`training/m_training.py`, github.com/sony/hFT-Transformer). So monitoring
+`valid_total_loss` is paper-faithful, and the comment at `train_hft.py:212`
+claiming otherwise is wrong. Ranking the candidates on note F1 instead is better
+statistics — at step 140,329 the loss was 55% frames, 25% velocity and only ~5%
+onset — but it is a declared **deviation**, not a correction. Say so in the
+writeup.
+
+The released MAESTRO model is `model_016_003.pkl` = epoch 16, division 3 of
+20 × 4. So the authors' own best validation loss was ~85% of the way through,
+which is the only evidence anywhere that 20 epochs is enough and 16 is roughly
+where it stops helping. `EXE-TRAINING-MAESTRO.sh` hardcodes `-epoch 20` with no
+justification given.
+
+## Status 2026-08-05
+
+| | result |
+|---|---|
+| A2 walltime | **PASS** — `res_gpu` is 7 days, `upf105_b`→`res_b` has no MaxWall override |
+| A3 job limits | **PASS** — `res_b` allows 100 jobs |
+| A4 disk | **PASS** — 1.1 PB free, no enforced quota |
+| B1 `last-v1.ckpt` trap | **PASS** — did not fire; `last.ckpt` rewritten (+64 B of LR-monitor state) |
+| B2 resume | **PASS** — 148,000 → 154,000, 4.0 it/s, matches the trial's 3.9 |
+| B3 requeue | **DROPPED** — broken here, see below; replaced by a dependency chain |
+| B4 LR logged | **PASS** — `lr-Adam` present at 1e-4 |
+| B5 epoch counter | **PASS** — `epoch=0` preserved across resume |
+| C1 eval round trip | **PASS** — 0.880 note F1 (no offset) over 177 test pieces at 4× coverage |
+| C3 logging | **PASS** — one `logs/HFT/hft_paper`, `train_*_step` at 140 pts |
+| C4 `version=` keyword | **PASS** — verified against Lightning 2.6.5 |
+| D1 splits | **BLOCKED** — no test split on the cluster; see below |
+
+Two things C1 exposed that are not on the original checklist:
+
+- **There is no test split on Pirineus.** `audio/` holds `train` and `val` only,
+  both single collated `.npy` slabs, and `evaluate.py:24` globs `*.npz`. Nothing
+  on that machine is evaluable. Raw MAESTRO v3 does exist at
+  `/data/upf105/resh000973/maestrov3_44100` (same group), so extraction is
+  possible — ~13 GB of test npz, ~226 GB peak per `extract_maestro_hft.py:22`.
+  Training is unaffected; **reporting is not**. Start this before day 19.
+- **Mid-epoch resume is not data-exact.** Lightning warns the dataloader is not
+  resumable. With `shuffle=True` (`train_hft.py:140`) the effect is a fresh
+  permutation rather than skipped data, so it is statistically harmless across
+  2 handoffs — but `deterministic=True` no longer implies a bit-identical rerun.
+  Record it in the writeup the way HPP's three interruptions are recorded.
 
 ---
 
@@ -105,16 +149,30 @@ was killed.
 
       Then check **no `last-v1.ckpt` appeared**. If one did, B1 fired.
 
-- [ ] **B3. Requeue on SIGUSR1.** Never once exercised — the trial had
-      `--signal`, `--requeue` and `--open-mode` commented out on purpose.
-      Submit with `--time=00:20:00` and all three enabled. A requeued job shows
-      **multiple rows** under one job ID:
+- [x] **B3. Requeue on SIGUSR1 — DROPPED, does not work here.** Tested twice
+      (jobs 3101512, 3101523), both died at the 15-minute signal with exit 1
+      rather than requeueing. Two independent causes, stacked:
 
-      sacct -j <jobid> --format=JobID,State,Elapsed,Start,End,ExitCode
+      OSError: [Errno 18] Invalid cross-device link:
+        '/scratch/upf105/.../tmpXXXX' -> '/data/upf105/.../hpc_ckpt_1.ckpt'
 
-      If you see a single row ending `CANCELLED ... DUE TO TIME LIMIT`, the
-      signal never reached Python and each job in the chain silently discards
-      everything since its last rolling checkpoint.
+      Lightning saves that checkpoint atomically (temp file, then rename); Slurm
+      puts `TMPDIR` on `/scratch` while `save_dir` is on `/data`, and `rename()`
+      across filesystems is `EXDEV`. Exporting `TMPDIR` onto `/data` does not
+      rescue it: the dataloader workers also receive SIGUSR1, run the same
+      handler, and hit `CUDA error: initialization error` because a worker has no
+      CUDA context — killing the job on `DataLoader worker exited unexpectedly`.
+
+      Note the failure is **worse than not requeueing**: it leaves a truncated
+      `hpc_ckpt_*.ckpt` (18.8 MB of 66 MB) in `save_dir`, which is precisely
+      where Lightning looks on the next start.
+
+      Replaced by a `--dependency=afterany` chain (see the sbatch header), which
+      uses the resume path B2 already validated. Cost: the work since the last
+      rolling checkpoint, bounded by `ckpt_every_n_steps=5000` to ~21 min per
+      handoff, ~42 min across the run. Fixing requeue properly would need a
+      `worker_init_fn` making workers ignore SIGUSR1 — not worth a DataModule
+      change days before a 19-day run.
 
 - [ ] **B4. LR scheduler state survives resume.** `ReduceLROnPlateau` carries
       `best` and `num_bad_epochs`. If those reset every job, the plateau counter
@@ -225,20 +283,40 @@ Cheap enough to confirm rather than assume.
 
 ## Changes to make before submitting
 
-1. `run_hft_paper.py:30` — `EPOCHS = 20`
-2. `scripts/hft_paper.sbatch` — uncomment `--signal=USR1@300`, `--requeue`,
-   `--open-mode=append`
-3. `scripts/hft_paper.sbatch` — raise `--time` to the Gate A2 maximum
-4. **`ckpt_every_n_steps`: 2000 → ~20000.** The sizing rule at
-   `train_hft.py:245` is `(walltime / step_time) / 8`; at the measured 3.9 it/s
-   a 12 h job is ~168k steps, so 2000 is 10× tighter than intended. It is
-   currently writing 66 MB every ~8.5 min — ~85 writes per job — and that
-   overhead is *inside* the measured 3.9 it/s.
-5. `resume_path` — see B1. Explicit checkpoint for the first job, `"last"`
-   thereafter.
+All done as of 2026-08-05, commit following this document:
+
+1. `run_hft_paper.py` — `EPOCHS = 20`
+2. `scripts/hft_paper.sbatch` — `--time=7-00:00:00`
+3. `scripts/hft_paper.sbatch` — `--signal` / `--requeue` / `--open-mode` stay
+   **commented out**, permanently, per B3
+4. `scripts/hft_paper.sbatch` — `export TMPDIR` onto `/data`. Not needed by the
+   current path, but `/scratch` vs `/data` is a latent `EXDEV` trap for any
+   future atomic write into `save_dir`
+5. `run_hft_paper.py` — `ckpt_every_n_steps=5000`, plus the passthrough it needs
+   in `Trainer.train_hft`. Note this **tightens** the default rather than
+   loosening it: the sizing rule at `train_hft.py:245` assumes a signal-based
+   clean shutdown, which does not exist here, so the rolling checkpoint is now
+   the only thing standing between a walltime kill and lost work
+6. `resume_path` stays `"last"` — B1 showed the trap does not fire
 
 ## Go / no-go
 
-Do not submit the chain until **A1, A2, A4, B1, B2, B3, C1, C4** have passed.
-Those eight are the ones where failure costs days rather than minutes. The rest
-can run alongside the first job.
+Gates cleared: **A2, A3, A4, B1, B2, B4, B5, C1, C3, C4.** B3 dropped as
+unavailable. Remaining before launch: **D2** and **D3**, the data and
+augmentation verifiers.
+
+Not blocking the launch, but blocking the *result*: **C2** (no
+`scripts/eval_hft_paper.py` exists, so 80 checkpoints would arrive with no way
+to rank them on note F1) and the **missing test split**. Both need to be done
+before the run ends; neither needs to be done before it starts.
+
+## Launch
+
+    J1=$(sbatch --parsable scripts/hft_paper.sbatch)
+    J2=$(sbatch --parsable --dependency=afterany:$J1 scripts/hft_paper.sbatch)
+    J3=$(sbatch --parsable --dependency=afterany:$J2 scripts/hft_paper.sbatch)
+
+Before submitting, clear the test artefacts from `save_dir`:
+`hpc_ckpt_1.ckpt.CORRUPT` and `last.ckpt.backup`. Neither is matched by
+Lightning's `hpc_ckpt_*.ckpt` glob, so both are inert — but a directory holding
+a file named `.CORRUPT` at launch invites confusion three weeks later.

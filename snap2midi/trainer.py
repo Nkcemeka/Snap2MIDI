@@ -498,6 +498,7 @@ class Trainer:
         dec_layer: int = 3, enc_head: int = 4, dec_head: int = 4, weight_A: float = 1.0, weight_B: float = 1.0,\
         verbose: int = 1, num_workers: int=4, logger_name: str='csv', \
         logger_version: str|None=None, num_nodes: int=1, \
+        ckpt_every_n_steps: int|None=2000, \
         resume_path:str|None=None, save_dir: str="./save_dir", augment: bool=False, \
         augment_asset_root: str|None=None, augment_manifest_dir: str|None=None, \
         feature_source: str="audio", reverb_level: str="rms"):
@@ -608,6 +609,11 @@ class Trainer:
                     directory instead of leaving one fragment each.
                 num_nodes (int):
                     Number of accelerator nodes to use for distributed training. Default is 1.
+                ckpt_every_n_steps (int | None):
+                    How often to write the rolling restart checkpoint, in
+                    optimizer steps. Default 2000. None switches it off. This is
+                    what a job killed at its walltime falls back to, so it caps
+                    the work lost at each handoff of a chained run.
                 resume_path (str | None):
                     Whether to resume training from a checkpoint. Default is None. If
                     None, it trains from scratch.
@@ -674,6 +680,7 @@ class Trainer:
             logger_name=logger_name,
             logger_version=logger_version,
             num_nodes=num_nodes,
+            ckpt_every_n_steps=ckpt_every_n_steps,
             resume_path=resume_path,
             save_dir=save_dir,
             augment=augment,
