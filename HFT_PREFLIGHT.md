@@ -43,7 +43,9 @@ justification given.
 | C1 eval round trip | **PASS** — 0.880 note F1 (no offset) over 177 test pieces at 4× coverage |
 | C3 logging | **PASS** — one `logs/HFT/hft_paper`, `train_*_step` at 140 pts |
 | C4 `version=` keyword | **PASS** — verified against Lightning 2.6.5 |
-| D1 splits | **BLOCKED** — no test split on the cluster; see below |
+| D1 splits | **N/A** — no test split on the cluster; train frames = 159.7 h vs MAESTRO v3's 159.2 h, stride exactly 16.00, so the store is sound |
+| D2 dataset equivalence | **N/A** — it diffs a legacy-format store; this one was written by the current extractor |
+| D3 augmentation | **PASS** — 7 passed, 1 skipped by design. `epoch-rollover: 3 epochs through a worker-backed loader all differ`. The one FAIL is `trains`, a local GPU OOM (a Kong run held 30.8 of 32.6 GB), not an augmentation defect — and the cluster has trained 12 h with `augment=True` to 0.880 note F1 |
 
 Two things C1 exposed that are not on the original checklist:
 
@@ -262,18 +264,24 @@ Cheap enough to confirm rather than assume.
       for s in train val test; do echo -n "$s: "; \
         ls /data/upf105/resh000979/hft_maestro/audio/$s | wc -l; done
 
-- [ ] **D2. Dataset/slab integrity on the MAESTRO base path** (the verifiers
-      default to MAPS):
+- [x] **D2. Dataset/slab integrity — N/A.** `verify_hft_dataset_equivalence.py`
+      diffs a *legacy-format* store against the current one; this store was
+      written by the current extractor, so there is nothing to compare against
+      and the script says so. Substitute evidence: train idx = 35,924,381 frames
+      = 159.7 h at 62.5 fps against MAESTRO v3's published 159.2 h train split,
+      with the excerpt stride falling out at exactly 16.00 frames.
 
-      python scripts/verify_hft_dataset_equivalence.py \
-        --base-path /data/upf105/resh000979/hft_maestro --split train
-
-- [ ] **D3. Augmentation does what Edwards specifies, and `reverb_level="rms"`
-      is in force.** This is the run's one deliberate deviation from the paper —
-      if the reverb path peak-normalises instead, the **velocity targets are
-      corrupted**, which is worse than a leaked shortcut.
-
-      python scripts/verify_augmentation.py hft
+- [x] **D3. Augmentation — PASS.** `python scripts/verify_augmentation.py hft`,
+      run on the workstation (the store path is hardcoded to `data/hft_maps` and
+      the logic under test is store-independent): **7 passed, 1 skipped, 1
+      failed.** The pass that matters is `epoch-rollover: 3 epochs through a
+      worker-backed loader all differ` — the check that catches augmentation
+      freezing into a fixed pre-corrupted dataset, the failure
+      `EpochUpdateCallback` warns about. `coverage` skips by design. The FAIL is
+      `trains`, dying at `torch.cuda.set_device` because a concurrent Kong run
+      held 30.8 of the 32.6 GB on the local GPU — an environment failure, and
+      one the cluster has already answered by training 12 h with `augment=True`
+      to 0.880 note F1.
 
 - [ ] **D4. Validation is never augmented.** A validation set that drifts with
       the augmentation seed makes every checkpoint comparison meaningless, and
@@ -301,22 +309,86 @@ All done as of 2026-08-05, commit following this document:
 
 ## Go / no-go
 
-Gates cleared: **A2, A3, A4, B1, B2, B4, B5, C1, C3, C4.** B3 dropped as
-unavailable. Remaining before launch: **D2** and **D3**, the data and
-augmentation verifiers.
+**All launch gates are cleared:** A2, A3, A4, B1, B2, B4, B5, C1, C3, C4, D3.
+B3 dropped as unavailable, D1 and D2 not applicable. Nothing else blocks
+submission.
 
-Not blocking the launch, but blocking the *result*: **C2** (no
-`scripts/eval_hft_paper.py` exists, so 80 checkpoints would arrive with no way
-to rank them on note F1) and the **missing test split**. Both need to be done
-before the run ends; neither needs to be done before it starts.
+Everything remaining blocks the *result*, not the run, and can be done while the
+chain trains.
 
-## Launch
+---
 
-    J1=$(sbatch --parsable scripts/hft_paper.sbatch)
-    J2=$(sbatch --parsable --dependency=afterany:$J1 scripts/hft_paper.sbatch)
-    J3=$(sbatch --parsable --dependency=afterany:$J2 scripts/hft_paper.sbatch)
+# Remaining work
 
-Before submitting, clear the test artefacts from `save_dir`:
-`hpc_ckpt_1.ckpt.CORRUPT` and `last.ckpt.backup`. Neither is matched by
-Lightning's `hpc_ckpt_*.ckpt` glob, so both are inert — but a directory holding
-a file named `.CORRUPT` at launch invites confusion three weeks later.
+## Before launching — minutes
+
+- [ ] **L1. Clear the test artefacts** from `save_dir`. Both are inert
+      (Lightning's glob is `hpc_ckpt_*.ckpt` and neither matches), but a file
+      named `.CORRUPT` sitting in the results directory invites confusion in
+      three weeks.
+
+      rm -f /data/upf105/resh000979/save_dir/hft_paper/hpc_ckpt_1.ckpt.CORRUPT \
+            /data/upf105/resh000979/save_dir/hft_paper/last.ckpt.backup
+
+- [ ] **L2. Confirm the cluster checkout.** `git log --oneline -1` = `ebf3e2d`,
+      and `git diff scripts/hft_paper.sbatch` shows exactly one line — the
+      hardcoded `/prod/precompiled/conda` path. That diff is uncommitted, so it
+      is lost on any `git checkout --` of that file and must be re-applied after
+      every pull. Committing it would end the recurrence.
+
+- [ ] **L3. Submit the chain.**
+
+      J1=$(sbatch --parsable scripts/hft_paper.sbatch)
+      J2=$(sbatch --parsable --dependency=afterany:$J1 scripts/hft_paper.sbatch)
+      J3=$(sbatch --parsable --dependency=afterany:$J2 scripts/hft_paper.sbatch)
+
+- [ ] **L4. Check once, ~5 minutes in**, that J1 resumed from **156,000** and
+      did not start fresh:
+
+      grep -iE "restor|resum" logs/hft_<J1>.err | head
+
+## While it runs — blocks the result
+
+- [ ] **R1. Transfer the test split.** 177 npz, 14 GB, already extracted on the
+      workstation by this same extractor. Not a re-derivation: the 0.880 number
+      came from the cluster's checkpoint scored against these exact files.
+
+      rsync -ah --partial --info=progress2 --exclude='*.npy' \
+        data/hft_maestro/audio/test/ \
+        pirineus:/data/upf105/resh000979/hft_maestro/audio/test/
+
+      `--exclude='*.npy'` drops the 4.4 GB collated slab, which is a training
+      artefact `evaluate.py:24` ignores. Verify 177 files and ~14 G after.
+
+- [ ] **R2. Re-extract val with the per-track npz kept.** The blocker nobody
+      knew about:
+
+          train: 0 npz     val: 0 npz     test: 177 npz
+
+      `hft_mode.py:341` deletes the per-track npz for train and val by design,
+      keeping them only for test. So **val is unevaluable everywhere — on the
+      cluster and on the workstation.** Ranking the 80 candidates on val note F1
+      is currently impossible, and rule 1 forbids ranking them on test.
+
+      Raw MAESTRO v3 is at `~/Documents/maestro-v3.0.0` locally, so this is
+      fixable. It needs the deletion condition made configurable rather than
+      simply flipped — keeping train npz would add ~95 GB to the store for no
+      reason. A 40-piece subset is enough, matching what
+      `CHECKPOINT_VALIDATION.md:45` does for HPP: ~4.4 min per checkpoint at the
+      measured 6.4 s/piece, so ~6 h for all 80.
+
+- [ ] **R3. Write `scripts/eval_hft_paper.py`.** Port `scripts/eval_hpp_paper.py`
+      including its per-piece collection, so rule 3's confidence intervals are
+      available. Without it the 80 checkpoints arrive with no ranking mechanism
+      and the fallback is `valid_total_loss` by default rather than by choice.
+
+## One decision, deferrable
+
+Sony select on **validation loss** (`m_training.py`), which is already logged
+4× per epoch. Doing nothing is therefore the paper-faithful option and costs no
+extra work. Ranking on val note F1 is the better statistics — the loss is 55%
+frames, 25% velocity, ~5% onset — but it requires R2 and R3.
+
+Both are defensible. They are declared differently in the writeup: one as
+reproduction, the other as a stated deviation. `save_top_k=-1` keeps every
+candidate, so this stays open until the run ends.
