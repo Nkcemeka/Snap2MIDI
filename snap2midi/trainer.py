@@ -498,6 +498,8 @@ class Trainer:
         dec_layer: int = 3, enc_head: int = 4, dec_head: int = 4, weight_A: float = 1.0, weight_B: float = 1.0,\
         verbose: int = 1, num_workers: int=4, logger_name: str='csv', \
         logger_version: str|None=None, num_nodes: int=1, \
+        devices: int|str="auto", strategy: str="auto", max_steps: int=-1, \
+        fast_attention: bool=False, compile_model: bool=False, \
         ckpt_every_n_steps: int|None=2000, \
         resume_path:str|None=None, save_dir: str="./save_dir", augment: bool=False, \
         augment_asset_root: str|None=None, augment_manifest_dir: str|None=None, \
@@ -609,6 +611,45 @@ class Trainer:
                     directory instead of leaving one fragment each.
                 num_nodes (int):
                     Number of accelerator nodes to use for distributed training. Default is 1.
+                devices (int | str):
+                    GPUs per node. Default "auto" takes every visible one.
+
+                    batch_size is PER DEVICE. Two devices at batch_size=4
+                    reproduce one device at batch_size=8 exactly -- all eight
+                    loss terms reduce with mean() over the same element count
+                    per rank, and DDP averages the gradients, so
+                    mean(mean(A), mean(B)) = mean(A + B). Two devices at
+                    batch_size=8 instead doubles the effective batch and halves
+                    the optimizer steps per epoch, which is a hyperparameter
+                    change and not a free speedup.
+                strategy (str):
+                    Distributed strategy. Default "auto" resolves to "ddp" once
+                    more than one device is in play.
+                max_steps (int):
+                    Stop after this many optimizer steps. Default -1 is no
+                    limit. For a timing trial, so the run ends at a known step
+                    count rather than a wall clock.
+                fast_attention (bool):
+                    Compute attention with scaled_dot_product_attention rather
+                    than an explicit softmax. Default False. Identical
+                    function, but it never materialises the
+                    (batch*n_frame, heads, n_bin, n_bin) weight matrix -- which
+                    at batch 8 is 1.07 GB per layer, kept twice for the
+                    backward. Measured ~1.3x throughput and a third of the peak
+                    memory. It is not bit-identical: summation order differs.
+                    On a trained checkpoint that moves the gradient less than
+                    disabling TF32 does, and note F1 by 3e-5 over 10 MAESTRO
+                    pieces -- see scripts/hft_variant_ab.py, which measures both
+                    against those controls.
+
+                    The attention weights returned alongside the output become a
+                    zero-width placeholder, since nothing reads them. Anything
+                    wanting the paper's attention maps needs the explicit path.
+                compile_model (bool):
+                    torch.compile the encoder and decoder. Default False.
+                    Measured ~1.5x. Costs a few minutes of compilation at every
+                    process start, and recompiles whenever an input shape
+                    changes -- notably the short last batch of an epoch.
                 ckpt_every_n_steps (int | None):
                     How often to write the rolling restart checkpoint, in
                     optimizer steps. Default 2000. None switches it off. This is
@@ -680,6 +721,11 @@ class Trainer:
             logger_name=logger_name,
             logger_version=logger_version,
             num_nodes=num_nodes,
+            devices=devices,
+            strategy=strategy,
+            max_steps=max_steps,
+            fast_attention=fast_attention,
+            compile_model=compile_model,
             ckpt_every_n_steps=ckpt_every_n_steps,
             resume_path=resume_path,
             save_dir=save_dir,

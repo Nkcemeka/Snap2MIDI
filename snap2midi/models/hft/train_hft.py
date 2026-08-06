@@ -8,7 +8,6 @@ from torch.utils.data import DataLoader
 from snap2midi.utils.train_utils import pl_logger
 from snap2midi.utils.augmentator import Augmentator
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
-from pytorch_lightning.plugins.environments import SLURMEnvironment
 
 
 class EpochUpdateCallback(pl.Callback):
@@ -264,18 +263,49 @@ def main(config):
             save_last=True,
         ))
 
-    # Under SLURM, catch the signal the scheduler sends before the walltime kill
-    # (sbatch needs --signal=USR1@<seconds> --requeue for it to arrive), save,
-    # and resubmit. Without this, a job killed mid-epoch loses everything since
-    # the last rolling checkpoint; with it, it loses nothing. detect() keeps
-    # this inert off the cluster.
-    plugins = [SLURMEnvironment(auto_requeue=True)] if SLURMEnvironment.detect() else []
+    # Fusing the encoder and decoder kernels. `.compile()` rather than
+    # `torch.compile(module)`: the latter returns a wrapper, which renames every
+    # key in the state_dict to `_orig_mod.*` and so writes checkpoints that no
+    # uncompiled model -- including evaluate_hft -- can load, and refuses to
+    # resume from any checkpoint written without it. Module.compile() patches
+    # the call in place and leaves the state_dict untouched, so compiled and
+    # uncompiled checkpoints stay interchangeable.
+    #
+    # It hooks __call__, not forward(), which works here only because HFT.forward
+    # reaches its submodules as self.hft_encoder(...) rather than
+    # self.hft_encoder.forward(...). Compiling HFT itself would be silently
+    # skipped for exactly that reason.
+    if config.get("compile_model"):
+        model.hft_encoder.compile()
+        model.hft_decoder.compile()
+
+    # No cluster-environment plugin. Passing one overrides Lightning's own
+    # detection order, which puts TorchElastic *ahead* of SLURM precisely
+    # because torchrun is a normal way to launch inside a SLURM allocation
+    # (lightning_fabric/connector.py). Pinning SLURMEnvironment here made
+    # Lightning read world size from SLURM_NTASKS while torchrun had already
+    # started N processes, and the job hung.
+    #
+    # Nothing is lost on the single-task path: SLURMEnvironment is still what
+    # detection picks there, and auto_requeue defaults to True, which is what
+    # was being asked for explicitly. (Requeue does not work on this cluster
+    # anyway -- see scripts/hft_paper.sbatch -- so the chain does not rely on
+    # it.)
 
     # create trainer
     trainer = pl.Trainer(max_epochs=config["epochs"], \
         deterministic=True,
         callbacks=callbacks,
-        plugins=plugins,
+        # Per *device*. Two ranks at batch 4 produce exactly the gradient one
+        # rank at batch 8 produces: every loss term reduces with mean(), each
+        # rank holds the same element count, and DDP averages across ranks --
+        # so mean(mean(A), mean(B)) = mean(A + B). Effective batch and step
+        # count are unchanged, which is why this costs no fidelity.
+        devices=config.get("devices", "auto"),
+        strategy=config.get("strategy", "auto"),
+        # -1 is Lightning's "no limit". Set it for a timing trial so the run
+        # stops at a known step count instead of a wall clock.
+        max_steps=config.get("max_steps", -1),
         # Lightning writes its auto-requeue checkpoints to default_root_dir.
         # Left at the default it would be the working directory, i.e. not
         # necessarily the storage tier save_dir was chosen to be on.

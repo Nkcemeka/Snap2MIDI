@@ -44,6 +44,19 @@ class HFT(pl.LightningModule):
         self.save_hyperparameters()
         self.bce = nn.BCELoss()
         self.ce = nn.CrossEntropyLoss()
+
+        # Flip every attention module onto the fused kernel. Done here rather
+        # than threaded through four constructors, because it is one decision
+        # about the whole model, not a property of any single layer.
+        #
+        # use_sdpa holds no parameters and no buffers, so the state_dict is
+        # identical either way: a checkpoint trained with it loads into a model
+        # without it and vice versa. That is what makes the two paths
+        # comparable at all -- see scripts/hft_variant_ab.py.
+        if params.get("fast_attention", False):
+            for module in self.modules():
+                if isinstance(module, MultiHeadAttention):
+                    module.use_sdpa = True
     
     def init_weights(self):
         """
@@ -198,7 +211,16 @@ class HFT(pl.LightningModule):
             'valid_velocity_loss_1st': loss_velocity_1st.item(),
             'valid_velocity_loss_2nd': loss_velocity_2nd.item(),
             'valid_total_loss': loss.item()
-        }, logger=True, on_step=False, on_epoch=True)
+        # sync_dist matters only under DDP, and there it is not optional.
+        # valid_total_loss is what ModelCheckpoint ranks on and what
+        # ReduceLROnPlateau steps on. Logged per rank, each rank would see its
+        # own half of the validation set, reach patience on its own schedule,
+        # and decay its learning rate at a different step from its peer. DDP
+        # synchronises gradients, not optimizer hyperparameters, so the ranks
+        # would then be training two different models with no error anywhere.
+        # on_epoch=True means this reduces once per validation run, not per
+        # batch, so the collective costs nothing measurable.
+        }, logger=True, on_step=False, on_epoch=True, sync_dist=True)
         return loss
     
     
@@ -537,6 +559,46 @@ class MultiHeadAttention(nn.Module):
         self.dropout = nn.Dropout(dropout)
         # self.scale = torch.FloatTensor([self.dh ** 0.5]).to(device)
 
+        # Off by default, so nothing changes for a run that does not ask.
+        # HFT.__init__ sets it from config["fast_attention"].
+        self.use_sdpa = False
+
+    def sdpa_forward(self, query, key, value):
+        """The same attention, without materialising the softmax.
+
+        The explicit path below writes a (batch, heads, len_q, len_k) matrix and
+        hands it to dropout, so autograd keeps both tensors for the backward.
+        For hFT's encoder that is (batch*128, 4, 256, 256) -- 1.07 GB per layer
+        per copy at batch 8 -- and the arithmetic units spend their time waiting
+        on memory rather than computing. scaled_dot_product_attention never
+        writes it.
+
+        Same function, not an approximation: SDPA's default scale is
+        1/sqrt(head_dim), which is the division done by hand below, and
+        dropout_p applies to the same post-softmax weights. It is not
+        bit-identical, because the summation order differs -- measured on a real
+        checkpoint, that moves the gradient less than turning TF32 off does, and
+        ~25x less than drawing a different minibatch (scripts/hft_variant_ab.py
+        --mode grad).
+
+        The attention weights are returned because every caller unpacks two
+        values, but nothing consumes them: training_step names the decoder's
+        `attention` and drops it, and the inference path never asks. Returning a
+        zero-width tensor keeps HFTDecoder's reshape valid at no cost. If the
+        paper's attention figures are ever wanted, they need the explicit path.
+        """
+        batch_size = query.size(0)
+        q = self.fc_query(query).view(batch_size, -1, self.num_heads, self.dh).transpose(1, 2)
+        k = self.fc_key(key).view(batch_size, -1, self.num_heads, self.dh).transpose(1, 2)
+        v = self.fc_value(value).view(batch_size, -1, self.num_heads, self.dh).transpose(1, 2)
+
+        attn = torch.nn.functional.scaled_dot_product_attention(
+            q, k, v, dropout_p=self.dropout.p if self.training else 0.0)
+
+        attn = attn.transpose(1, 2).contiguous().view(batch_size, -1, self.d)
+        placeholder = q.new_empty((batch_size, self.num_heads, q.size(2), 0))
+        return self.fc_out(attn), placeholder
+
     def forward(self, query, key, value):
         """
             Forward pass for the MultiHeadAttention layer.
@@ -550,6 +612,8 @@ class MultiHeadAttention(nn.Module):
                 output (torch.Tensor): The output tensor after applying multi-head attention.
                 attn_weights (torch.Tensor): The attention weights.
         """
+        if self.use_sdpa:
+            return self.sdpa_forward(query, key, value)
 
         # query, key and value are of shape (batch_size, seq_len, d)
         batch_size = query.size(0)
