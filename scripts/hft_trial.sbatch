@@ -66,7 +66,23 @@ export WANDB_MODE=offline
 
 # Both GPUs, checked before anything expensive. pl.Trainer(devices=2) with one
 # visible GPU fails late and confusingly; this fails immediately and says why.
-srun --ntasks=1 python -c "
+#
+# No srun, unlike hft_paper.sbatch. Wrapping this in srun killed job 3104746
+# before it started:
+#
+#   srun: fatal: cpus_per_task set by two different environment variables
+#         SLURM_CPUS_PER_TASK=64 != SLURM_TRES_PER_TASK=cpu:32
+#
+# The allocation has 64 CPUs (32 cores x 2 threads) while the request is
+# recorded as cpu:32, and current Slurm refuses to launch a step when those
+# disagree. Nothing to do with GPUs or with the training.
+#
+# srun was never right here anyway. It is in hft_paper.sbatch so the check runs
+# in the same environment as the `srun python` that follows it -- but the
+# training below is torchrun, launched from this batch shell, so this shell is
+# the environment to validate. Adding srun tested a different one and was the
+# file's only step launch.
+python -c "
 import torch
 n = torch.cuda.device_count()
 assert n >= 2, f'need 2 GPUs, torch sees {n}'
