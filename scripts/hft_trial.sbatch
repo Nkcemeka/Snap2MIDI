@@ -49,7 +49,18 @@ set -x
 module purge
 module load conda
 
-source $(conda info --base)/etc/profile.d/conda.sh
+# Hardcoded, and it has to be. `conda info --base` does not resolve in this
+# batch environment -- `module load conda` does not leave the executable
+# somewhere a non-interactive shell finds it, so the substitution comes back
+# empty and this sources /etc/profile.d/conda.sh, which is not conda. The
+# activate on the next line then fails and the job dies before training.
+#
+# This lived as an uncommitted local edit on the cluster for a while, which
+# meant re-applying it after every pull and losing it to any `git checkout --`
+# of this file (HFT_PREFLIGHT.md L2). Everything else here is already
+# Pirineus-specific -- /home/resh000979, /data/upf105 -- so pinning one more
+# absolute path costs nothing and ends the recurrence.
+source /prod/precompiled/conda/etc/profile.d/conda.sh
 conda activate snap2midi
 export WANDB_MODE=offline
 
