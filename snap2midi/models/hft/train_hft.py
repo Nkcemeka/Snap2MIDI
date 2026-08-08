@@ -206,12 +206,31 @@ def main(config):
     val_dir = "feature" if config.get("feature_source") == "legacy_feature" else "audio"
     val_flag = Path(f"{base_path}/{val_dir}/val/").exists()
 
-    # (1) Selection. save_top_k=-1 keeps every epoch. The previous value of 5
-    # deleted 15 of 20 candidates *during* the run, ranked on valid_total_loss
-    # -- a sum of eight terms dominated by a 128-class velocity CE, which is not
-    # the note F1 the paper selects on and not the number being reported. At
-    # 64 MB a checkpoint, keeping all 20 costs 1.3 GB, so the ranking stays a
-    # decision that can be made afterwards, on the right metric.
+    # (1) Selection. save_top_k=-1 keeps every candidate. The previous value of
+    # 5 deleted 15 of 20 *during* the run, which is the thing to avoid: it
+    # spends the ranking decision while the run is still going.
+    #
+    # monitor='valid_total_loss' is paper-faithful. Sony select on validation
+    # loss and nothing else -- `training/m_training.py` in
+    # github.com/sony/hFT-Transformer keeps the division with the lowest
+    # `epoch_loss_valid` (`if best_loss_valid > epoch_loss_valid: best_epoch =
+    # epoch; best_div = div`), with no F1 and no mir_eval anywhere in that
+    # comparison, and their released MAESTRO model is `model_016_003.pkl` =
+    # epoch 16, division 3. An earlier version of this comment claimed the
+    # paper selects on note F1; it does not.
+    #
+    # Ranking the kept candidates on decoded note F1 afterwards is better
+    # statistics -- the loss is a sum of eight terms dominated by a 128-class
+    # velocity CE, and at step 140,329 it was 55% frames, 25% velocity and only
+    # ~5% onset, so it is nearly uncorrelated with the number being reported.
+    # But that is a declared *deviation* from the paper rather than a
+    # correction, and it has to be described as one in any writeup. Keeping
+    # every candidate is what leaves both rules available.
+    #
+    # Disk: one checkpoint per validation, not per epoch. With
+    # val_check_interval=0.25 that is 4 per epoch, so a 20-epoch run leaves ~80
+    # files at ~64 MB, i.e. ~5 GB rather than the 1.3 GB a per-epoch reading
+    # suggests. Size the target filesystem for that.
     if val_flag:
         select_ckpt = ModelCheckpoint(
             monitor='valid_total_loss',
