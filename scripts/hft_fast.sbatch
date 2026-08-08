@@ -12,14 +12,22 @@
 #   mkdir -p /home/resh000979/Snap2MIDI/logs
 #   J1=$(sbatch --parsable scripts/hft_fast.sbatch)
 #   J2=$(sbatch --parsable --dependency=afterany:$J1 scripts/hft_fast.sbatch)
+#
+# Two, and by a wide margin: two jobs are 14 days of walltime against 7.5 days
+# of work, so the measured rate would have to be wrong by nearly 2x before a
+# third was needed to finish training. A third insures against something else
+# entirely -- a job dying early and wasting its slot, where a node failure at
+# hour 3 costs a whole link of the chain rather than three hours.
+#
+# That insurance is deliberately not bought up front, because it can be bought
+# later. A job can be appended while the chain is still alive:
+#
 #   J3=$(sbatch --parsable --dependency=afterany:$J2 scripts/hft_fast.sbatch)
 #
-# Three, not two, for 7.5 days of work. The third costs nothing if it is not
-# needed: it starts, Lightning loads last.ckpt, sees max_epochs=20 already
-# reached, and exits in a couple of minutes. Two would be exactly enough only if
-# the 7.5 days estimate is not low -- and a node slower than the trial's, or a
-# slow first-epoch compile, eats that margin with no way to add a job to the end
-# of a chain that has already drained.
+# Only a chain that has already drained cannot be extended. So submit two, watch
+# the first handoff, and append a third then if anything has been lost. A spare
+# that turns out to be unnecessary is harmless either way -- it loads last.ckpt,
+# sees max_epochs=20 already reached, and exits in a couple of minutes.
 #
 # afterany, not afterok: a walltime kill exits TIMEOUT/FAILED, so afterok would
 # never fire and the chain would stall silently with no error anywhere.
