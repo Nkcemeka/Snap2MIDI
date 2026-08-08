@@ -311,10 +311,10 @@ def evaluate(config: dict):
 
     # Find average of frame and note metrics
     for key in frame_metrics:
-        frame_metrics[key] = round(np.mean(frame_metrics[key]).item(), 2)
+        frame_metrics[key] = round(np.mean(frame_metrics[key]).item(), 4)
 
     for key in note_metrics:
-        note_metrics[key] = round(np.mean(note_metrics[key]).item(), 2)
+        note_metrics[key] = round(np.mean(note_metrics[key]).item(), 4)
 
     print("Frame metrics are: ")
     pprint.pprint(frame_metrics)

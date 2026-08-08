@@ -158,4 +158,19 @@ def main(config):
         assert Path(config["resume_path"]).exists(), \
             f"[resume_path]: {config["resume_path"]} does not exist."
         trainer.fit(model, dm, ckpt_path=config["resume_path"])
+
+    # Save the endpoint unconditionally. ModelCheckpoint writes only at a
+    # validation, and then only if that loss lands in the top five, so the final
+    # model otherwise survives by coincidence. It did not for kong_paper_aug:
+    # val_check_interval counts batches *within* an epoch and resets at the
+    # boundary, so once an epoch began off the global grid (188,868) the
+    # validations fell at 193,868 and 198,868, never on 200,000 -- and the last
+    # one scored 0.7027, outside the top five, and was discarded. The run
+    # trained 6,132 iterations past its last saved state and exited with them
+    # unrecorded. Picking iterations as a multiple of val_steps, which is what
+    # run_kong_experiment.py relies on, only holds for runs short enough to stay
+    # inside one epoch.
+    endpoint = Path(config["save_dir"]) / f"kong-endpoint-step={trainer.global_step}.ckpt"
+    trainer.save_checkpoint(endpoint)
+    print(f"saved endpoint checkpoint: {endpoint}")
     

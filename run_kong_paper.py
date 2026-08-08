@@ -35,8 +35,16 @@ natural companion -- another ~30 hours on the same GPU.
 
 Usage:
     python run_kong_paper.py
+    python run_kong_paper.py --resume save_dir/kong_paper_aug/last.ckpt
     bash scripts/kong_status.sh          # progress, losses, checkpoints
+
+--resume continues an interrupted or truncated run from a checkpoint's own
+optimizer moments, LR schedule and step counter, so the schedule stays
+continuous across the join. Every other setting below is unchanged, which is
+the point: a resumed tail is only the same run if it is the same run.
 """
+
+import argparse
 
 import snap2midi as s2m
 
@@ -45,7 +53,13 @@ ASSETS = "/home/simone-chieppa/Desktop/mtg_ir_datasets"
 
 
 def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--resume", default=None,
+                    help="Checkpoint to continue from. Omit to start fresh.")
+    args = ap.parse_args()
+
     s2m.trainer.Trainer().train_kong(
+        resume_path=args.resume,
         base_path=MAESTRO,
         # --- Kong et al. §IV-C, verbatim ---
         batch_size=12,
