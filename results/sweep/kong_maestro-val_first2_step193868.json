@@ -1,0 +1,77 @@
+{
+ "checkpoint": "save_dir/kong_paper_aug/kong-step=step=193868-loss=valid_total_loss=0.7016.ckpt",
+ "test_path": "data/kong_maestro/val",
+ "thresholds": {
+  "onset_threshold": 0.3,
+  "offset_threshold": 0.3,
+  "frame_threshold": 0.3
+ },
+ "pieces": [
+  "MIDI-UNPROCESSED_01-03_R1_2014_MID--AUDIO_01_R1_2014_wav--5",
+  "MIDI-UNPROCESSED_01-03_R1_2014_MID--AUDIO_02_R1_2014_wav--1"
+ ],
+ "summary": {
+  "note_no_offset_precision": 0.9926293789501337,
+  "note_no_offset_recall": 0.9926785897116408,
+  "note_no_offset_f1": 0.9926539351811049,
+  "note_precision": 0.7638451702130947,
+  "note_recall": 0.7638886474143877,
+  "note_f1": 0.763866870853876,
+  "note_vel_precision": 0.7599141594424613,
+  "note_vel_recall": 0.7599574425338982,
+  "note_vel_f1": 0.7599357632229384,
+  "frame_precision": 0.870816206904843,
+  "frame_recall": 0.884401022937689,
+  "frame_f1": 0.8775086886458778
+ },
+ "scores": {
+  "note_no_offset_precision": [
+   0.9921383647798742,
+   0.9931203931203931
+  ],
+  "note_no_offset_recall": [
+   0.9917485265225933,
+   0.9936086529006883
+  ],
+  "note_no_offset_f1": [
+   0.9919434073491845,
+   0.9933644630130253
+  ],
+  "note_precision": [
+   0.7507861635220126,
+   0.7769041769041769
+  ],
+  "note_recall": [
+   0.75049115913556,
+   0.7772861356932154
+  ],
+  "note_f1": [
+   0.7506386323442719,
+   0.77709510936348
+  ],
+  "note_vel_precision": [
+   0.7468553459119497,
+   0.772972972972973
+  ],
+  "note_vel_recall": [
+   0.7465618860510805,
+   0.7733529990167158
+  ],
+  "note_vel_f1": [
+   0.7467085871487523,
+   0.7731629392971247
+  ],
+  "frame_precision": [
+   0.86191459198647,
+   0.8797178218232159
+  ],
+  "frame_recall": [
+   0.8883543676461793,
+   0.8804476782291987
+  ],
+  "frame_f1": [
+   0.8749347785838116,
+   0.8800825987079439
+  ]
+ }
+}

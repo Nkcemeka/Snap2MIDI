@@ -1,0 +1,22 @@
+{
+ "note": "Selection state of the val_loss/all-ranked phase, captured before the continuation run overwrites last.ckpt. These five are the only checkpoints that survived save_top_k=5; everything before batch 116162 was deleted.",
+ "epoch": 559,
+ "global_step": 269920,
+ "best_model_path": "/home/simone-chieppa/Desktop/Snap2MIDI/save_dir/hpp_augmented/hpp-step=247748.ckpt",
+ "best_model_score": 0.03587280958890915,
+ "best_k_models": {
+  "/home/simone-chieppa/Desktop/Snap2MIDI/save_dir/hpp_augmented/hpp-step=232324.ckpt": 0.03598644211888313,
+  "/home/simone-chieppa/Desktop/Snap2MIDI/save_dir/hpp_augmented/hpp-step=243892.ckpt": 0.03600520268082619,
+  "/home/simone-chieppa/Desktop/Snap2MIDI/save_dir/hpp_augmented/hpp-step=247748.ckpt": 0.03587280958890915,
+  "/home/simone-chieppa/Desktop/Snap2MIDI/save_dir/hpp_augmented/hpp-step=260280.ckpt": 0.03601796180009842,
+  "/home/simone-chieppa/Desktop/Snap2MIDI/save_dir/hpp_augmented/hpp-step=269920.ckpt": 0.036008384078741074
+ },
+ "early_stopping": {
+  "wait_count": 23,
+  "stopped_epoch": 0,
+  "best_score": 0.03587280958890915,
+  "patience": 25,
+  "stopping_reason": 0,
+  "stopping_reason_message": null
+ }
+}
