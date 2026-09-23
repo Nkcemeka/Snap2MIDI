@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Supplementary results</title>
+<title>A Systematic Evaluation of Piano to Guitar Transfer Learning in Automatic Music Transcription</title>
 <style>
 :root{--bg:#fbfaf7;--fg:#1d1c1a;--mute:#6b6862;--rule:#d9d5cc;--soft:#f1eee7;--accent:#8a3b12;--f1:#1d1c1a}
 @media (prefers-color-scheme:dark){:root{--bg:#171614;--fg:#e9e6df;--mute:#a19c92;--rule:#3a3732;--soft:#22201d;--accent:#e2925f;--f1:#fff}}
@@ -51,27 +51,13 @@ footer{margin-top:4rem;color:var(--mute);font-size:.9rem}
 @media print{.tabs .panel{display:block!important}.tabbar{display:none}}
 </style></head><body><main>
 <header>
-<h1>Supplementary results</h1>
-<p class="sub">Every table of the paper with precision, recall and F1 under all four transcription
-metrics, and the adaptation results at the original decision thresholds.</p>
-<nav><a href="#reading">Reading the tables</a><a href="#t1">Table 1</a><a href="#t2">Table 2</a>
-<a href="#t3">Table 3</a><a href="#s1">Table S1</a></nav>
+<h1>A Systematic Evaluation of Piano to Guitar Transfer Learning in Automatic Music Transcription</h1>
+<p class="sub">Supplementary material: every table of the paper with precision, recall and F1 under all
+transcription metrics, the adaptation results at the original decision thresholds, and the learning-rate
+control for LoRA (all).</p>
+<nav><a href="#t1">Table 1</a><a href="#t2">Table 2</a>
+<a href="#t3">Table 3</a><a href="#s1">Table S1</a><a href="#s2">Table S2</a></nav>
 </header>
-
-<h2 id="reading">Reading the tables</h2>
-<p>Six piano transcription models (OAF, OAFv2, HPP, Kong, TK, hFT) are scored with
-<code>mir_eval</code>. Every number is a mean over pieces, in percent; <em>n</em> is the number of
-pieces behind a row. The paper reports the onset metric; the tabs above each table switch to the others.</p>
-<ul>
-<li><strong>Offsets on guitar.</strong> A plucked string decays without a damping event, so a guitar
-note's offset is a convention of the annotator, and the guitar sets use different conventions.
-The onset + offset numbers on guitar are given for completeness and should be read with that in mind.</li>
-<li><strong>Velocity.</strong> The guitar sets carry no meaningful velocity annotation, so the velocity
-metric is reported on the piano sets only.</li>
-<li><strong>Frame.</strong> Frame scores come from each model's own evaluation code, which does not
-build the frame-level estimate in the same way for every model (from the frame output directly, or
-from the decoded notes). Compare frame numbers down a column, not across models.</li>
-</ul>
 
 <h2 id="t1"><span class="num">Table 1</span>In-domain robustness</h2>
 <p class="caption">Piano test sets. Rows below the MAESTRO reference change the acoustics, then the music.
@@ -439,6 +425,13 @@ velocity gate removed in every row, so its zero-shot row differs from Table 2, w
 </tbody></table></div>
 </section>
 </div>
+
+<h2 id="s2"><span class="num">Table S2</span>LoRA (all) at the full fine-tuning rate</h2>
+<p class="caption">The learning-rate control: LoRA (all) trained at ten times the full fine-tuning rate, the
+study setting (&times;10), and at the full fine-tuning rate (&times;1), selected the same way on GAPS
+validation. Onset F1 on GAPS validation, the selection criterion, and calibrated onset F1 on the three
+guitar sets next to calibration only.</p>
+<table class="wide"><thead><tr><th></th><th colspan="2">GAPS val</th><th colspan="3">GAPS test</th><th colspan="3">GuitarSet</th><th colspan="3">GOAT DI</th></tr><tr><th></th><th>&times;10</th><th>&times;1</th><th>cal. only</th><th>&times;10</th><th>&times;1</th><th>cal. only</th><th>&times;10</th><th>&times;1</th><th>cal. only</th><th>&times;10</th><th>&times;1</th></tr></thead><tbody><tr><td class="lead set">OAF</td><td>87.8</td><td>87.0</td><td>77.0</td><td>89.1</td><td>88.6</td><td>74.4</td><td>83.0</td><td>82.2</td><td>56.8</td><td>71.7</td><td>68.2</td></tr><tr><td class="lead set">OAFv2</td><td>89.4</td><td>88.2</td><td>78.5</td><td>90.3</td><td>89.5</td><td>76.4</td><td>80.2</td><td>78.5</td><td>59.7</td><td>58.4</td><td>66.1</td></tr><tr><td class="lead set">HPP</td><td>91.4</td><td>91.2</td><td>73.9</td><td>93.1</td><td>92.7</td><td>67.0</td><td>87.7</td><td>87.7</td><td>60.9</td><td>72.3</td><td>71.8</td></tr><tr><td class="lead set">Kong</td><td>90.9</td><td>90.4</td><td>81.7</td><td>92.9</td><td>92.8</td><td>79.8</td><td>81.5</td><td>85.8</td><td>61.5</td><td>60.4</td><td>75.5</td></tr><tr><td class="lead set">TK</td><td>90.8</td><td>88.5</td><td>81.5</td><td>93.3</td><td>91.7</td><td>79.9</td><td>81.5</td><td>81.7</td><td>66.6</td><td>66.4</td><td>67.0</td></tr><tr><td class="lead set">hFT</td><td>91.6</td><td>91.3</td><td>84.9</td><td>93.0</td><td>93.7</td><td>81.1</td><td>71.8</td><td>81.8</td><td>61.6</td><td>29.3</td><td>45.1</td></tr></tbody></table>
 
 <footer>Generated by <code>scripts/supp_page.py</code> from the per-piece result files.</footer>
 </main></body></html>
