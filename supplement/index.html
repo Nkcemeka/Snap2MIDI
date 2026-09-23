@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>A Systematic Evaluation of Piano to Guitar Transfer Learning in Automatic Music Transcription</title>
+<style>
+:root{--bg:#fbfaf7;--fg:#1d1c1a;--mute:#6b6862;--rule:#d9d5cc;--soft:#f1eee7;--accent:#8a3b12;--f1:#1d1c1a}
+@media (prefers-color-scheme:dark){:root{--bg:#171614;--fg:#e9e6df;--mute:#a19c92;--rule:#3a3732;--soft:#22201d;--accent:#e2925f;--f1:#fff}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 Charter,"Bitstream Charter","Iowan Old Style",Georgia,serif}
+main{max-width:1180px;margin:0 auto;padding:48px 20px 96px}
+header p,section>p,.note,li{max-width:70ch}
+h1{font-size:2rem;line-height:1.2;margin:0 0 .4rem;text-wrap:balance}
+h2{font-size:1.25rem;margin:3.2rem 0 .3rem;padding-top:1rem;border-top:1px solid var(--rule)}
+h2 .num{color:var(--accent);margin-right:.5em;font-variant-numeric:tabular-nums}
+.sub{color:var(--mute);margin:0}
+a{color:var(--accent)}
+nav{margin:1.6rem 0 0;font:14px/1.9 system-ui,sans-serif}
+nav a{margin-right:1.2em;white-space:nowrap}
+.caption{color:var(--mute);font-size:.95rem;margin:.2rem 0 1rem}
+.metric{font-size:.92rem;color:var(--mute);margin:.7rem 0 .6rem}
+.metric strong{color:var(--fg)}
+.tabbar{display:flex;flex-wrap:wrap;gap:6px;font:13px system-ui,sans-serif}
+.tabbar input{position:absolute;opacity:0;pointer-events:none}
+.tabbar span{display:block;padding:5px 12px;border:1px solid var(--rule);border-radius:999px;cursor:pointer;color:var(--mute)}
+.tabbar input:checked+span{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.tabbar input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+@supports selector(:has(a)){
+ .tabs:has(.tabbar input:checked) .panel{display:none}
+ .tabs:has(input[value=note_no_offset]:checked) .panel[data-metric=note_no_offset],
+ .tabs:has(input[value=note]:checked) .panel[data-metric=note],
+ .tabs:has(input[value=note_vel]:checked) .panel[data-metric=note_vel],
+ .tabs:has(input[value=frame]:checked) .panel[data-metric=frame]{display:block}}
+@supports not selector(:has(a)){.tabbar{display:none}}
+.scroll{overflow-x:auto;border-block:1.5px solid var(--fg)}
+table{border-collapse:collapse;width:100%;font:13px/1.3 system-ui,sans-serif;font-variant-numeric:tabular-nums}
+th,td{padding:5px 7px;text-align:right;white-space:nowrap}
+thead th{font-weight:600;color:var(--mute);border-bottom:1px solid var(--rule)}
+thead th.grp{color:var(--fg);text-align:center;border-bottom:1px solid var(--rule)}
+.lead{text-align:left;position:sticky;left:0;background:var(--bg)}
+td.set{font-weight:600}
+td.n,th.n{color:var(--mute);font-size:12px}
+td.g,th.g{border-left:1px solid var(--rule);padding-left:12px}
+td.f1{font-weight:700;color:var(--f1)}
+td.na{text-align:center;color:var(--mute);border-left:1px solid var(--rule)}
+tr.sep td{border-top:1px solid var(--rule)}
+tr.block td{text-align:left;font-style:italic;color:var(--mute);border-top:1px solid var(--rule);padding-top:8px}
+tbody tr:hover td{background:var(--soft)}
+table.plain td,table.plain th{text-align:center}
+table.plain .lead{text-align:left}
+footer{margin-top:4rem;color:var(--mute);font-size:.9rem}
+@media print{.tabs .panel{display:block!important}.tabbar{display:none}}
+</style></head><body><main>
+<header>
+<h1>A Systematic Evaluation of Piano to Guitar Transfer Learning in Automatic Music Transcription</h1>
+<p class="sub">Supplementary material: every table of the paper with precision, recall and F1 under all
+transcription metrics, the adaptation results at the original decision thresholds, and the learning-rate
+control for LoRA (all).</p>
+<nav><a href="#t1">Table 1</a><a href="#t2">Table 2</a>
+<a href="#t3">Table 3</a><a href="#s1">Table S1</a><a href="#s2">Table S2</a></nav>
+</header>
+
+<h2 id="t1"><span class="num">Table 1</span>In-domain robustness</h2>
+<p class="caption">Piano test sets. Rows below the MAESTRO reference change the sound, then the music.
+Each model is decoded at its original threshold.</p>
+<div class="tabs" id="tab1">
+<div class="tabbar" role="tablist">
+<label><input type="radio" name="tab1" value="note_no_offset" checked><span>Onset</span></label>
+<label><input type="radio" name="tab1" value="note"><span>Onset + offset</span></label>
+<label><input type="radio" name="tab1" value="note_vel"><span>Onset + offset + velocity</span></label>
+<label><input type="radio" name="tab1" value="frame"><span>Frame</span></label>
+</div>
+<section class="panel" data-metric="note_no_offset"><p class="metric"><strong>Onset.</strong> Onset within 50 ms and correct pitch. The metric of the paper.</p>
+<div class="scroll"><table>
+<thead><tr>
+<th rowspan="2" class="lead">test set</th>
+<th rowspan="2" class="n">n</th>
+<th colspan="3" class="grp">OAF</th>
+<th colspan="3" class="grp">OAFv2</th>
+<th colspan="3" class="grp">HPP</th>
+<th colspan="3" class="grp">Kong</th>
+<th colspan="3" class="grp">TK</th>
+<th colspan="3" class="grp">hFT</th>
+</tr><tr><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th></tr></thead><tbody>
+<tr><td class="lead">MAESTRO test</td><td class="n">177</td><td class="g">99.4</td><td>86.9</td><td class="f1">92.6</td><td class="g">99.3</td><td>89.5</td><td class="f1">94.0</td><td class="g">98.5</td><td>96.2</td><td class="f1">97.3</td><td class="g">98.0</td><td>95.4</td><td class="f1">96.7</td><td class="g">99.5</td><td>97.3</td><td class="f1">98.4</td><td class="g">99.8</td><td>95.1</td><td class="f1">97.4</td></tr>
+<tr class="block"><td colspan="20">sound changes</td></tr>
+<tr><td class="lead">Studio MAESTRO</td><td class="n">177</td><td class="g">99.0</td><td>86.0</td><td class="f1">91.9</td><td class="g">98.7</td><td>86.8</td><td class="f1">92.3</td><td class="g">98.5</td><td>96.8</td><td class="f1">97.6</td><td class="g">97.1</td><td>95.8</td><td class="f1">96.5</td><td class="g">98.5</td><td>97.0</td><td class="f1">97.7</td><td class="g">99.5</td><td>95.3</td><td class="f1">97.3</td></tr>
+<tr><td class="lead">MDS re-recorded</td><td class="n">20</td><td class="g">98.1</td><td>80.7</td><td class="f1">88.4</td><td class="g">97.3</td><td>80.4</td><td class="f1">88.0</td><td class="g">98.0</td><td>95.3</td><td class="f1">96.6</td><td class="g">97.2</td><td>94.5</td><td class="f1">95.8</td><td class="g">98.2</td><td>96.3</td><td class="f1">97.2</td><td class="g">99.4</td><td>93.6</td><td class="f1">96.4</td></tr>
+<tr><td class="lead">SMD</td><td class="n">50</td><td class="g">99.1</td><td>87.3</td><td class="f1">92.7</td><td class="g">98.9</td><td>89.2</td><td class="f1">93.7</td><td class="g">98.8</td><td>97.3</td><td class="f1">98.0</td><td class="g">97.5</td><td>96.3</td><td class="f1">96.9</td><td class="g">99.0</td><td>97.9</td><td class="f1">98.4</td><td class="g">99.8</td><td>96.1</td><td class="f1">97.8</td></tr>
+<tr><td class="lead">MAPS Disklavier</td><td class="n">60</td><td class="g">89.1</td><td>77.7</td><td class="f1">82.9</td><td class="g">89.4</td><td>78.9</td><td class="f1">83.8</td><td class="g">90.3</td><td>88.5</td><td class="f1">89.3</td><td class="g">85.3</td><td>88.6</td><td class="f1">86.9</td><td class="g">88.5</td><td>88.4</td><td class="f1">88.4</td><td class="g">89.4</td><td>88.0</td><td class="f1">88.6</td></tr>
+<tr class="block"><td colspan="20">music changes</td></tr>
+<tr><td class="lead">MDS genre</td><td class="n">100</td><td class="g">96.8</td><td>84.4</td><td class="f1">89.9</td><td class="g">96.8</td><td>86.4</td><td class="f1">91.1</td><td class="g">96.7</td><td>93.3</td><td class="f1">94.8</td><td class="g">94.6</td><td>92.6</td><td class="f1">93.3</td><td class="g">96.9</td><td>93.6</td><td class="f1">95.0</td><td class="g">98.1</td><td>92.6</td><td class="f1">95.1</td></tr>
+<tr><td class="lead">MDS random notes</td><td class="n">72</td><td class="g">94.8</td><td>55.2</td><td class="f1">68.7</td><td class="g">93.3</td><td>55.7</td><td class="f1">68.7</td><td class="g">95.0</td><td>79.2</td><td class="f1">85.9</td><td class="g">82.1</td><td>71.0</td><td class="f1">75.6</td><td class="g">90.1</td><td>72.4</td><td class="f1">79.6</td><td class="g">94.5</td><td>74.8</td><td class="f1">82.9</td></tr>
+</tbody></table></div>
+</section>
+<section class="panel" data-metric="note"><p class="metric"><strong>Onset + offset.</strong> As onset, and the offset within 50 ms or 20% of the note&#x27;s duration, whichever is larger.</p>
+<div class="scroll"><table>
+<thead><tr>
+<th rowspan="2" class="lead">test set</th>
+<th rowspan="2" class="n">n</th>
+<th colspan="3" class="grp">OAF</th>
+<th colspan="3" class="grp">OAFv2</th>
+<th colspan="3" class="grp">HPP</th>
+<th colspan="3" class="grp">Kong</th>
+<th colspan="3" class="grp">TK</th>
+<th colspan="3" class="grp">hFT</th>
+</tr><tr><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th></tr></thead><tbody>
+<tr><td class="lead">MAESTRO test</td><td class="n">177</td><td class="g">80.5</td><td>70.6</td><td class="f1">75.1</td><td class="g">86.2</td><td>77.9</td><td class="f1">81.7</td><td class="g">88.0</td><td>85.9</td><td class="f1">86.9</td><td class="g">82.7</td><td>80.5</td><td class="f1">81.6</td><td class="g">94.5</td><td>92.5</td><td class="f1">93.5</td><td class="g">92.8</td><td>88.5</td><td class="f1">90.5</td></tr>
+<tr class="block"><td colspan="20">sound changes</td></tr>
+<tr><td class="lead">Studio MAESTRO</td><td class="n">177</td><td class="g">77.3</td><td>67.4</td><td class="f1">71.9</td><td class="g">81.7</td><td>72.0</td><td class="f1">76.5</td><td class="g">84.6</td><td>83.2</td><td class="f1">83.9</td><td class="g">80.2</td><td>79.2</td><td class="f1">79.7</td><td class="g">87.5</td><td>86.2</td><td class="f1">86.8</td><td class="g">87.7</td><td>84.1</td><td class="f1">85.8</td></tr>
+<tr><td class="lead">MDS re-recorded</td><td class="n">20</td><td class="g">59.8</td><td>49.7</td><td class="f1">54.2</td><td class="g">66.9</td><td>55.7</td><td class="f1">60.7</td><td class="g">72.6</td><td>70.6</td><td class="f1">71.6</td><td class="g">71.9</td><td>70.1</td><td class="f1">71.0</td><td class="g">76.3</td><td>74.9</td><td class="f1">75.6</td><td class="g">75.5</td><td>71.3</td><td class="f1">73.3</td></tr>
+<tr><td class="lead">SMD</td><td class="n">50</td><td class="g">80.0</td><td>70.7</td><td class="f1">74.9</td><td class="g">83.4</td><td>75.3</td><td class="f1">79.1</td><td class="g">85.7</td><td>84.4</td><td class="f1">85.1</td><td class="g">80.3</td><td>79.3</td><td class="f1">79.8</td><td class="g">91.0</td><td>90.0</td><td class="f1">90.5</td><td class="g">90.8</td><td>87.5</td><td class="f1">89.1</td></tr>
+<tr><td class="lead">MAPS Disklavier</td><td class="n">60</td><td class="g">58.6</td><td>51.3</td><td class="f1">54.6</td><td class="g">64.3</td><td>56.9</td><td class="f1">60.3</td><td class="g">71.3</td><td>69.9</td><td class="f1">70.5</td><td class="g">61.0</td><td>63.4</td><td class="f1">62.1</td><td class="g">68.9</td><td>68.9</td><td class="f1">68.9</td><td class="g">67.5</td><td>66.5</td><td class="f1">67.0</td></tr>
+<tr class="block"><td colspan="20">music changes</td></tr>
+<tr><td class="lead">MDS genre</td><td class="n">100</td><td class="g">63.7</td><td>55.9</td><td class="f1">59.4</td><td class="g">72.8</td><td>65.3</td><td class="f1">68.7</td><td class="g">80.3</td><td>78.0</td><td class="f1">79.0</td><td class="g">75.1</td><td>73.8</td><td class="f1">74.3</td><td class="g">83.5</td><td>81.0</td><td class="f1">82.1</td><td class="g">83.0</td><td>78.7</td><td class="f1">80.7</td></tr>
+<tr><td class="lead">MDS random notes</td><td class="n">72</td><td class="g">24.6</td><td>16.0</td><td class="f1">19.1</td><td class="g">29.4</td><td>19.0</td><td class="f1">22.7</td><td class="g">42.3</td><td>36.0</td><td class="f1">38.7</td><td class="g">23.7</td><td>21.0</td><td class="f1">22.2</td><td class="g">32.7</td><td>27.4</td><td class="f1">29.6</td><td class="g">41.5</td><td>34.2</td><td class="f1">37.2</td></tr>
+</tbody></table></div>
+</section>
+<section class="panel" data-metric="note_vel"><p class="metric"><strong>Onset + offset + velocity.</strong> As onset + offset, and the velocity within 0.1 of the reference after the usual linear rescaling.</p>
+<div class="scroll"><table>
+<thead><tr>
+<th rowspan="2" class="lead">test set</th>
+<th rowspan="2" class="n">n</th>
+<th colspan="3" class="grp">OAF</th>
+<th colspan="3" class="grp">OAFv2</th>
+<th colspan="3" class="grp">HPP</th>
+<th colspan="3" class="grp">Kong</th>
+<th colspan="3" class="grp">TK</th>
+<th colspan="3" class="grp">hFT</th>
+</tr><tr><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th></tr></thead><tbody>
+<tr><td class="lead">MAESTRO test</td><td class="n">177</td><td class="g">77.2</td><td>67.8</td><td class="f1">72.1</td><td class="g">84.5</td><td>76.4</td><td class="f1">80.2</td><td class="g">86.3</td><td>84.3</td><td class="f1">85.3</td><td class="g">80.9</td><td>78.8</td><td class="f1">79.8</td><td class="g">94.0</td><td>92.0</td><td class="f1">93.0</td><td class="g">91.4</td><td>87.2</td><td class="f1">89.2</td></tr>
+<tr class="block"><td colspan="20">sound changes</td></tr>
+<tr><td class="lead">Studio MAESTRO</td><td class="n">177</td><td class="g">67.8</td><td>59.2</td><td class="f1">63.1</td><td class="g">75.9</td><td>67.1</td><td class="f1">71.2</td><td class="g">80.4</td><td>79.1</td><td class="f1">79.7</td><td class="g">73.4</td><td>72.5</td><td class="f1">72.9</td><td class="g">79.2</td><td>78.1</td><td class="f1">78.6</td><td class="g">79.1</td><td>75.8</td><td class="f1">77.3</td></tr>
+<tr><td class="lead">MDS re-recorded</td><td class="n">20</td><td class="g">54.1</td><td>44.9</td><td class="f1">49.0</td><td class="g">62.6</td><td>52.2</td><td class="f1">56.9</td><td class="g">68.7</td><td>66.8</td><td class="f1">67.7</td><td class="g">65.5</td><td>63.7</td><td class="f1">64.6</td><td class="g">71.4</td><td>70.2</td><td class="f1">70.8</td><td class="g">68.1</td><td>64.3</td><td class="f1">66.1</td></tr>
+<tr><td class="lead">SMD</td><td class="n">50</td><td class="g">71.7</td><td>63.4</td><td class="f1">67.2</td><td class="g">79.9</td><td>72.2</td><td class="f1">75.8</td><td class="g">82.6</td><td>81.4</td><td class="f1">82.0</td><td class="g">75.0</td><td>74.1</td><td class="f1">74.5</td><td class="g">85.1</td><td>84.2</td><td class="f1">84.6</td><td class="g">83.5</td><td>80.4</td><td class="f1">81.9</td></tr>
+<tr><td class="lead">MAPS Disklavier</td><td class="n">60</td><td class="g">47.6</td><td>41.7</td><td class="f1">44.4</td><td class="g">59.6</td><td>52.8</td><td class="f1">55.9</td><td class="g">66.4</td><td>65.2</td><td class="f1">65.8</td><td class="g">47.1</td><td>49.0</td><td class="f1">48.0</td><td class="g">53.0</td><td>53.0</td><td class="f1">53.0</td><td class="g">52.0</td><td>51.3</td><td class="f1">51.6</td></tr>
+<tr class="block"><td colspan="20">music changes</td></tr>
+<tr><td class="lead">MDS genre</td><td class="n">100</td><td class="g">50.9</td><td>44.7</td><td class="f1">47.5</td><td class="g">61.6</td><td>55.3</td><td class="f1">58.2</td><td class="g">68.4</td><td>66.5</td><td class="f1">67.3</td><td class="g">52.3</td><td>51.4</td><td class="f1">51.8</td><td class="g">59.6</td><td>58.0</td><td class="f1">58.7</td><td class="g">56.3</td><td>53.5</td><td class="f1">54.8</td></tr>
+<tr><td class="lead">MDS random notes</td><td class="n">72</td><td class="g">20.1</td><td>13.4</td><td class="f1">15.9</td><td class="g">24.3</td><td>16.1</td><td class="f1">19.1</td><td class="g">36.6</td><td>31.6</td><td class="f1">33.8</td><td class="g">12.1</td><td>10.3</td><td class="f1">11.0</td><td class="g">18.5</td><td>14.8</td><td class="f1">16.3</td><td class="g">22.1</td><td>17.4</td><td class="f1">19.3</td></tr>
+</tbody></table></div>
+</section>
+<section class="panel" data-metric="frame"><p class="metric"><strong>Frame.</strong> Frame-wise pitch activity.</p>
+<div class="scroll"><table>
+<thead><tr>
+<th rowspan="2" class="lead">test set</th>
+<th rowspan="2" class="n">n</th>
+<th colspan="3" class="grp">OAF</th>
+<th colspan="3" class="grp">OAFv2</th>
+<th colspan="3" class="grp">HPP</th>
+<th colspan="3" class="grp">Kong</th>
+<th colspan="3" class="grp">TK</th>
+<th colspan="3" class="grp">hFT</th>
+</tr><tr><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th></tr></thead><tbody>
+<tr><td class="lead">MAESTRO test</td><td class="n">177</td><td class="g">95.4</td><td>78.0</td><td class="f1">85.7</td><td class="g">94.4</td><td>83.7</td><td class="f1">88.6</td><td class="g">92.6</td><td>92.4</td><td class="f1">92.4</td><td class="g">87.6</td><td>90.8</td><td class="f1">89.1</td><td class="g">95.5</td><td>95.0</td><td class="f1">95.2</td><td class="g">95.0</td><td>91.2</td><td class="f1">93.0</td></tr>
+<tr class="block"><td colspan="20">sound changes</td></tr>
+<tr><td class="lead">Studio MAESTRO</td><td class="n">177</td><td class="g">95.0</td><td>73.6</td><td class="f1">82.8</td><td class="g">92.3</td><td>79.1</td><td class="f1">85.0</td><td class="g">88.9</td><td>91.0</td><td class="f1">89.8</td><td class="g">85.3</td><td>89.8</td><td class="f1">87.3</td><td class="g">90.9</td><td>90.6</td><td class="f1">90.5</td><td class="g">93.2</td><td>86.9</td><td class="f1">89.8</td></tr>
+<tr><td class="lead">MDS re-recorded</td><td class="n">20</td><td class="g">95.6</td><td>60.4</td><td class="f1">73.4</td><td class="g">94.6</td><td>65.3</td><td class="f1">76.7</td><td class="g">93.1</td><td>80.6</td><td class="f1">85.9</td><td class="g">89.9</td><td>80.6</td><td class="f1">84.7</td><td class="g">94.8</td><td>79.9</td><td class="f1">86.3</td><td class="g">95.3</td><td>75.5</td><td class="f1">83.7</td></tr>
+<tr><td class="lead">SMD</td><td class="n">50</td><td class="g">94.4</td><td>78.2</td><td class="f1">85.3</td><td class="g">91.4</td><td>84.7</td><td class="f1">87.8</td><td class="g">89.4</td><td>94.3</td><td class="f1">91.7</td><td class="g">85.6</td><td>91.6</td><td class="f1">88.3</td><td class="g">92.2</td><td>95.1</td><td class="f1">93.6</td><td class="g">93.3</td><td>92.0</td><td class="f1">92.5</td></tr>
+<tr><td class="lead">MAPS Disklavier</td><td class="n">60</td><td class="g">95.9</td><td>65.0</td><td class="f1">77.3</td><td class="g">94.6</td><td>70.6</td><td class="f1">80.7</td><td class="g">91.6</td><td>84.5</td><td class="f1">87.8</td><td class="g">86.4</td><td>83.3</td><td class="f1">84.7</td><td class="g">91.1</td><td>82.9</td><td class="f1">86.7</td><td class="g">92.1</td><td>78.5</td><td class="f1">84.6</td></tr>
+<tr class="block"><td colspan="20">music changes</td></tr>
+<tr><td class="lead">MDS genre</td><td class="n">100</td><td class="g">97.5</td><td>68.8</td><td class="f1">80.2</td><td class="g">95.9</td><td>77.0</td><td class="f1">85.0</td><td class="g">93.4</td><td>91.6</td><td class="f1">92.3</td><td class="g">92.0</td><td>88.9</td><td class="f1">90.3</td><td class="g">95.2</td><td>91.1</td><td class="f1">93.0</td><td class="g">96.9</td><td>86.4</td><td class="f1">91.2</td></tr>
+<tr><td class="lead">MDS random notes</td><td class="n">72</td><td class="g">94.6</td><td>26.1</td><td class="f1">39.2</td><td class="g">85.7</td><td>31.9</td><td class="f1">44.8</td><td class="g">86.1</td><td>54.7</td><td class="f1">65.9</td><td class="g">57.2</td><td>49.9</td><td class="f1">51.9</td><td class="g">65.7</td><td>57.7</td><td class="f1">59.4</td><td class="g">88.2</td><td>49.7</td><td class="f1">62.2</td></tr>
+</tbody></table></div>
+</section>
+</div>
+
+<h2 id="t2"><span class="num">Table 2</span>Zero-shot transfer to guitar</h2>
+<p class="caption">The pretrained piano models on 30 GAPS test tracks, 360 GuitarSet excerpts and 170 GOAT
+direct-input performances, each model at its original decision threshold (hFT with its velocity gate).</p>
+<div class="tabs" id="tab2">
+<div class="tabbar" role="tablist">
+<label><input type="radio" name="tab2" value="note_no_offset" checked><span>Onset</span></label>
+<label><input type="radio" name="tab2" value="note"><span>Onset + offset</span></label>
+<label><input type="radio" name="tab2" value="frame"><span>Frame</span></label>
+</div>
+<section class="panel" data-metric="note_no_offset"><p class="metric"><strong>Onset.</strong> Onset within 50 ms and correct pitch. The metric of the paper.</p>
+<div class="scroll"><table>
+<thead><tr>
+<th rowspan="2" class="lead">model</th>
+<th colspan="3" class="grp">GAPS test</th>
+<th colspan="3" class="grp">GuitarSet</th>
+<th colspan="3" class="grp">GOAT DI</th>
+</tr><tr><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th></tr></thead><tbody>
+<tr><td class="lead">OAF</td><td class="g">76.5</td><td>79.5</td><td class="f1">77.2</td><td class="g">75.3</td><td>75.8</td><td class="f1">74.4</td><td class="g">56.5</td><td>62.1</td><td class="f1">57.6</td></tr>
+<tr><td class="lead">OAFv2</td><td class="g">75.7</td><td>82.4</td><td class="f1">78.6</td><td class="g">74.1</td><td>80.6</td><td class="f1">76.5</td><td class="g">58.6</td><td>64.5</td><td class="f1">60.0</td></tr>
+<tr><td class="lead">HPP</td><td class="g">53.5</td><td>92.9</td><td class="f1">67.5</td><td class="g">50.7</td><td>90.4</td><td class="f1">63.7</td><td class="g">50.6</td><td>75.4</td><td class="f1">58.7</td></tr>
+<tr><td class="lead">Kong</td><td class="g">58.6</td><td>92.8</td><td class="f1">71.4</td><td class="g">62.5</td><td>89.3</td><td class="f1">72.9</td><td class="g">47.4</td><td>73.2</td><td class="f1">55.7</td></tr>
+<tr><td class="lead">TK</td><td class="g">68.0</td><td>92.9</td><td class="f1">78.1</td><td class="g">73.0</td><td>87.5</td><td class="f1">78.9</td><td class="g">60.5</td><td>74.3</td><td class="f1">65.6</td></tr>
+<tr><td class="lead">hFT</td><td class="g">78.0</td><td>91.2</td><td class="f1">83.8</td><td class="g">79.2</td><td>84.7</td><td class="f1">81.0</td><td class="g">56.7</td><td>72.6</td><td class="f1">61.6</td></tr>
+</tbody></table></div>
+</section>
+<section class="panel" data-metric="note"><p class="metric"><strong>Onset + offset.</strong> As onset, and the offset within 50 ms or 20% of the note&#x27;s duration, whichever is larger.</p>
+<div class="scroll"><table>
+<thead><tr>
+<th rowspan="2" class="lead">model</th>
+<th colspan="3" class="grp">GAPS test</th>
+<th colspan="3" class="grp">GuitarSet</th>
+<th colspan="3" class="grp">GOAT DI</th>
+</tr><tr><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th></tr></thead><tbody>
+<tr><td class="lead">OAF</td><td class="g">24.0</td><td>25.0</td><td class="f1">24.3</td><td class="g">31.0</td><td>31.6</td><td class="f1">30.9</td><td class="g">25.3</td><td>27.1</td><td class="f1">25.6</td></tr>
+<tr><td class="lead">OAFv2</td><td class="g">26.3</td><td>28.4</td><td class="f1">27.3</td><td class="g">29.8</td><td>32.0</td><td class="f1">30.6</td><td class="g">25.8</td><td>28.0</td><td class="f1">26.3</td></tr>
+<tr><td class="lead">HPP</td><td class="g">19.4</td><td>33.6</td><td class="f1">24.5</td><td class="g">21.3</td><td>39.6</td><td class="f1">27.2</td><td class="g">25.0</td><td>36.1</td><td class="f1">28.9</td></tr>
+<tr><td class="lead">Kong</td><td class="g">21.4</td><td>33.6</td><td class="f1">26.0</td><td class="g">31.7</td><td>45.1</td><td class="f1">36.9</td><td class="g">26.1</td><td>39.5</td><td class="f1">30.6</td></tr>
+<tr><td class="lead">TK</td><td class="g">22.5</td><td>30.4</td><td class="f1">25.7</td><td class="g">29.0</td><td>34.9</td><td class="f1">31.4</td><td class="g">27.8</td><td>33.4</td><td class="f1">29.9</td></tr>
+<tr><td class="lead">hFT</td><td class="g">26.9</td><td>31.3</td><td class="f1">28.8</td><td class="g">38.3</td><td>40.7</td><td class="f1">39.0</td><td class="g">27.3</td><td>34.1</td><td class="f1">29.5</td></tr>
+</tbody></table></div>
+</section>
+<section class="panel" data-metric="frame"><p class="metric"><strong>Frame.</strong> Frame-wise pitch activity.</p>
+<div class="scroll"><table>
+<thead><tr>
+<th rowspan="2" class="lead">model</th>
+<th colspan="3" class="grp">GAPS test</th>
+<th colspan="3" class="grp">GuitarSet</th>
+<th colspan="3" class="grp">GOAT DI</th>
+</tr><tr><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th></tr></thead><tbody>
+<tr><td class="lead">OAF</td><td class="g">76.2</td><td>55.1</td><td class="f1">62.6</td><td class="g">83.8</td><td>62.3</td><td class="f1">70.8</td><td class="g">74.0</td><td>63.7</td><td class="f1">66.9</td></tr>
+<tr><td class="lead">OAFv2</td><td class="g">71.8</td><td>61.7</td><td class="f1">65.4</td><td class="g">82.2</td><td>60.8</td><td class="f1">69.3</td><td class="g">73.1</td><td>61.9</td><td class="f1">65.1</td></tr>
+<tr><td class="lead">HPP</td><td class="g">56.2</td><td>71.0</td><td class="f1">61.9</td><td class="g">65.8</td><td>71.7</td><td class="f1">67.9</td><td class="g">66.6</td><td>71.7</td><td class="f1">67.5</td></tr>
+<tr><td class="lead">Kong</td><td class="g">60.7</td><td>75.2</td><td class="f1">66.4</td><td class="g">72.6</td><td>76.6</td><td class="f1">73.9</td><td class="g">59.5</td><td>76.7</td><td class="f1">65.6</td></tr>
+<tr><td class="lead">TK</td><td class="g">58.1</td><td>64.2</td><td class="f1">59.8</td><td class="g">74.4</td><td>59.4</td><td class="f1">65.0</td><td class="g">65.7</td><td>62.7</td><td class="f1">61.2</td></tr>
+<tr><td class="lead">hFT</td><td class="g">67.3</td><td>64.8</td><td class="f1">65.3</td><td class="g">82.9</td><td>64.0</td><td class="f1">71.6</td><td class="g">67.0</td><td>63.3</td><td class="f1">63.1</td></tr>
+</tbody></table></div>
+</section>
+</div>
+
+<h2 id="t3"><span class="num">Table 3</span>Adaptation on GAPS, calibrated</h2>
+<p class="caption">Checkpoint and decision threshold chosen together on the 27 GAPS validation tracks.
+<em>Calibration only</em> is the pretrained model with only its threshold re-chosen.
+hFT is decoded with its velocity gate removed in every row.</p>
+<div class="tabs" id="tab3">
+<div class="tabbar" role="tablist">
+<label><input type="radio" name="tab3" value="note_no_offset" checked><span>Onset</span></label>
+<label><input type="radio" name="tab3" value="note"><span>Onset + offset</span></label>
+<label><input type="radio" name="tab3" value="frame"><span>Frame</span></label>
+</div>
+<section class="panel" data-metric="note_no_offset"><p class="metric"><strong>Onset.</strong> Onset within 50 ms and correct pitch. The metric of the paper.</p>
+<div class="scroll"><table>
+<thead><tr>
+<th rowspan="2" class="lead">test set</th>
+<th rowspan="2" class="lead">arm</th>
+<th rowspan="2" class="n">n</th>
+<th colspan="3" class="grp">OAF</th>
+<th colspan="3" class="grp">OAFv2</th>
+<th colspan="3" class="grp">HPP</th>
+<th colspan="3" class="grp">Kong</th>
+<th colspan="3" class="grp">TK</th>
+<th colspan="3" class="grp">hFT</th>
+</tr><tr><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th></tr></thead><tbody>
+<tr class="sep"><td class="lead set">GAPS test</td><td class="lead">calibration only</td><td class="n">30</td><td class="g">73.1</td><td>82.8</td><td class="f1">77.0</td><td class="g">74.2</td><td>84.1</td><td class="f1">78.5</td><td class="g">63.2</td><td>90.0</td><td class="f1">73.9</td><td class="g">76.9</td><td>88.2</td><td class="f1">81.7</td><td class="g">74.8</td><td>90.7</td><td class="f1">81.5</td><td class="g">80.6</td><td>90.2</td><td class="f1">84.9</td></tr>
+<tr><td class="lead set"></td><td class="lead">full</td><td class="n">30</td><td class="g">91.4</td><td>87.2</td><td class="f1">89.1</td><td class="g">91.1</td><td>89.6</td><td class="f1">90.2</td><td class="g">93.3</td><td>93.0</td><td class="f1">93.1</td><td class="g">93.5</td><td>93.0</td><td class="f1">93.3</td><td class="g">94.3</td><td>92.5</td><td class="f1">93.4</td><td class="g">93.5</td><td>93.6</td><td class="f1">93.5</td></tr>
+<tr><td class="lead set"></td><td class="lead">probe</td><td class="n">30</td><td class="g">86.5</td><td>86.2</td><td class="f1">86.2</td><td class="g">87.2</td><td>87.6</td><td class="f1">87.4</td><td class="g">82.8</td><td>89.1</td><td class="f1">85.7</td><td class="g">84.2</td><td>88.0</td><td class="f1">85.9</td><td class="g">82.5</td><td>85.2</td><td class="f1">83.6</td><td class="g">88.9</td><td>90.6</td><td class="f1">89.6</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (all)</td><td class="n">30</td><td class="g">89.6</td><td>88.7</td><td class="f1">89.1</td><td class="g">90.6</td><td>90.0</td><td class="f1">90.3</td><td class="g">93.7</td><td>92.6</td><td class="f1">93.1</td><td class="g">93.0</td><td>92.8</td><td class="f1">92.9</td><td class="g">94.2</td><td>92.5</td><td class="f1">93.3</td><td class="g">93.0</td><td>93.0</td><td class="f1">93.0</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (temporal)</td><td class="n">30</td><td class="g">87.1</td><td>87.9</td><td class="f1">87.5</td><td class="g">89.0</td><td>87.4</td><td class="f1">88.1</td><td class="g">92.7</td><td>91.3</td><td class="f1">92.0</td><td class="g">92.3</td><td>92.2</td><td class="f1">92.2</td><td class="g">93.8</td><td>89.9</td><td class="f1">91.8</td><td class="g">92.9</td><td>92.4</td><td class="f1">92.7</td></tr>
+<tr class="sep"><td class="lead set">GuitarSet</td><td class="lead">calibration only</td><td class="n">360</td><td class="g">71.5</td><td>79.7</td><td class="f1">74.4</td><td class="g">72.5</td><td>82.2</td><td class="f1">76.4</td><td class="g">60.4</td><td>81.0</td><td class="f1">67.0</td><td class="g">81.0</td><td>80.0</td><td class="f1">79.8</td><td class="g">80.0</td><td>81.7</td><td class="f1">79.9</td><td class="g">82.1</td><td>81.9</td><td class="f1">81.1</td></tr>
+<tr><td class="lead set"></td><td class="lead">full</td><td class="n">360</td><td class="g">88.0</td><td>80.8</td><td class="f1">83.7</td><td class="g">86.2</td><td>74.7</td><td class="f1">79.3</td><td class="g">85.6</td><td>79.8</td><td class="f1">81.9</td><td class="g">88.9</td><td>83.7</td><td class="f1">85.7</td><td class="g">91.5</td><td>72.5</td><td class="f1">80.3</td><td class="g">87.6</td><td>68.4</td><td class="f1">73.8</td></tr>
+<tr><td class="lead set"></td><td class="lead">probe</td><td class="n">360</td><td class="g">79.5</td><td>83.3</td><td class="f1">80.6</td><td class="g">80.5</td><td>85.2</td><td class="f1">82.3</td><td class="g">81.1</td><td>79.5</td><td class="f1">78.8</td><td class="g">86.5</td><td>79.7</td><td class="f1">82.2</td><td class="g">82.8</td><td>76.9</td><td class="f1">78.9</td><td class="g">90.6</td><td>78.8</td><td class="f1">83.4</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (all)</td><td class="n">360</td><td class="g">84.7</td><td>82.1</td><td class="f1">83.0</td><td class="g">83.9</td><td>77.4</td><td class="f1">80.2</td><td class="g">90.9</td><td>85.5</td><td class="f1">87.7</td><td class="g">88.8</td><td>77.7</td><td class="f1">81.5</td><td class="g">91.8</td><td>74.2</td><td class="f1">81.5</td><td class="g">89.3</td><td>65.1</td><td class="f1">71.8</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (temporal)</td><td class="n">360</td><td class="g">75.3</td><td>71.2</td><td class="f1">72.6</td><td class="g">81.3</td><td>64.3</td><td class="f1">70.9</td><td class="g">90.1</td><td>82.3</td><td class="f1">85.4</td><td class="g">89.0</td><td>79.5</td><td class="f1">83.3</td><td class="g">91.7</td><td>68.8</td><td class="f1">77.7</td><td class="g">92.0</td><td>80.1</td><td class="f1">85.0</td></tr>
+<tr class="sep"><td class="lead set">GOAT DI</td><td class="lead">calibration only</td><td class="n">170</td><td class="g">53.2</td><td>64.5</td><td class="f1">56.8</td><td class="g">57.2</td><td>65.6</td><td class="f1">59.7</td><td class="g">59.6</td><td>66.8</td><td class="f1">60.9</td><td class="g">60.0</td><td>67.4</td><td class="f1">61.5</td><td class="g">65.2</td><td>70.4</td><td class="f1">66.6</td><td class="g">59.8</td><td>68.2</td><td class="f1">61.6</td></tr>
+<tr><td class="lead set"></td><td class="lead">full</td><td class="n">170</td><td class="g">79.4</td><td>68.6</td><td class="f1">72.6</td><td class="g">79.0</td><td>66.9</td><td class="f1">71.7</td><td class="g">73.9</td><td>71.7</td><td class="f1">71.1</td><td class="g">78.4</td><td>69.8</td><td class="f1">73.1</td><td class="g">78.3</td><td>58.2</td><td class="f1">65.7</td><td class="g">64.4</td><td>23.9</td><td class="f1">30.8</td></tr>
+<tr><td class="lead set"></td><td class="lead">probe</td><td class="n">170</td><td class="g">61.9</td><td>67.4</td><td class="f1">63.0</td><td class="g">64.9</td><td>68.6</td><td class="f1">65.1</td><td class="g">70.4</td><td>69.8</td><td class="f1">68.5</td><td class="g">68.7</td><td>67.6</td><td class="f1">65.9</td><td class="g">69.3</td><td>64.0</td><td class="f1">65.6</td><td class="g">72.2</td><td>70.4</td><td class="f1">69.7</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (all)</td><td class="n">170</td><td class="g">77.6</td><td>68.3</td><td class="f1">71.7</td><td class="g">69.0</td><td>53.6</td><td class="f1">58.4</td><td class="g">74.8</td><td>72.3</td><td class="f1">72.3</td><td class="g">76.8</td><td>52.4</td><td class="f1">60.4</td><td class="g">79.7</td><td>58.9</td><td class="f1">66.4</td><td class="g">61.8</td><td>22.7</td><td class="f1">29.3</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (temporal)</td><td class="n">170</td><td class="g">63.9</td><td>57.8</td><td class="f1">59.6</td><td class="g">73.5</td><td>51.9</td><td class="f1">59.8</td><td class="g">74.5</td><td>69.3</td><td class="f1">70.2</td><td class="g">77.2</td><td>57.5</td><td class="f1">64.4</td><td class="g">71.9</td><td>52.4</td><td class="f1">58.9</td><td class="g">82.3</td><td>67.8</td><td class="f1">72.9</td></tr>
+</tbody></table></div>
+</section>
+<section class="panel" data-metric="note"><p class="metric"><strong>Onset + offset.</strong> As onset, and the offset within 50 ms or 20% of the note&#x27;s duration, whichever is larger.</p>
+<div class="scroll"><table>
+<thead><tr>
+<th rowspan="2" class="lead">test set</th>
+<th rowspan="2" class="lead">arm</th>
+<th rowspan="2" class="n">n</th>
+<th colspan="3" class="grp">OAF</th>
+<th colspan="3" class="grp">OAFv2</th>
+<th colspan="3" class="grp">HPP</th>
+<th colspan="3" class="grp">Kong</th>
+<th colspan="3" class="grp">TK</th>
+<th colspan="3" class="grp">hFT</th>
+</tr><tr><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th></tr></thead><tbody>
+<tr class="sep"><td class="lead set">GAPS test</td><td class="lead">calibration only</td><td class="n">30</td><td class="g">23.8</td><td>26.9</td><td class="f1">25.1</td><td class="g">26.0</td><td>29.2</td><td class="f1">27.4</td><td class="g">18.7</td><td>26.6</td><td class="f1">21.9</td><td class="g">27.0</td><td>30.8</td><td class="f1">28.6</td><td class="g">25.0</td><td>30.1</td><td class="f1">27.1</td><td class="g">26.6</td><td>29.7</td><td class="f1">28.0</td></tr>
+<tr><td class="lead set"></td><td class="lead">full</td><td class="n">30</td><td class="g">55.7</td><td>53.4</td><td class="f1">54.4</td><td class="g">59.2</td><td>58.4</td><td class="f1">58.7</td><td class="g">62.3</td><td>62.1</td><td class="f1">62.2</td><td class="g">67.5</td><td>67.2</td><td class="f1">67.3</td><td class="g">69.4</td><td>68.1</td><td class="f1">68.8</td><td class="g">69.5</td><td>69.5</td><td class="f1">69.5</td></tr>
+<tr><td class="lead set"></td><td class="lead">probe</td><td class="n">30</td><td class="g">38.1</td><td>37.9</td><td class="f1">37.9</td><td class="g">46.8</td><td>47.1</td><td class="f1">46.9</td><td class="g">35.1</td><td>37.7</td><td class="f1">36.3</td><td class="g">34.4</td><td>36.0</td><td class="f1">35.1</td><td class="g">35.2</td><td>36.4</td><td class="f1">35.7</td><td class="g">40.2</td><td>40.8</td><td class="f1">40.4</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (all)</td><td class="n">30</td><td class="g">54.6</td><td>54.2</td><td class="f1">54.4</td><td class="g">59.5</td><td>59.1</td><td class="f1">59.3</td><td class="g">61.3</td><td>60.7</td><td class="f1">61.0</td><td class="g">66.0</td><td>66.0</td><td class="f1">66.0</td><td class="g">69.5</td><td>68.3</td><td class="f1">68.9</td><td class="g">69.7</td><td>69.7</td><td class="f1">69.7</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (temporal)</td><td class="n">30</td><td class="g">47.2</td><td>47.7</td><td class="f1">47.5</td><td class="g">56.9</td><td>56.0</td><td class="f1">56.4</td><td class="g">57.3</td><td>56.5</td><td class="f1">56.9</td><td class="g">65.0</td><td>65.0</td><td class="f1">65.0</td><td class="g">66.2</td><td>63.5</td><td class="f1">64.8</td><td class="g">65.0</td><td>64.7</td><td class="f1">64.8</td></tr>
+<tr class="sep"><td class="lead set">GuitarSet</td><td class="lead">calibration only</td><td class="n">360</td><td class="g">31.7</td><td>35.5</td><td class="f1">33.1</td><td class="g">29.9</td><td>33.5</td><td class="f1">31.3</td><td class="g">19.7</td><td>27.1</td><td class="f1">22.2</td><td class="g">37.7</td><td>37.8</td><td class="f1">37.4</td><td class="g">33.0</td><td>34.0</td><td class="f1">33.2</td><td class="g">37.1</td><td>37.1</td><td class="f1">36.7</td></tr>
+<tr><td class="lead set"></td><td class="lead">full</td><td class="n">360</td><td class="g">47.8</td><td>44.3</td><td class="f1">45.7</td><td class="g">40.2</td><td>34.9</td><td class="f1">37.0</td><td class="g">39.5</td><td>37.9</td><td class="f1">38.5</td><td class="g">46.2</td><td>43.9</td><td class="f1">44.8</td><td class="g">43.5</td><td>35.2</td><td class="f1">38.7</td><td class="g">43.4</td><td>34.3</td><td class="f1">37.0</td></tr>
+<tr><td class="lead set"></td><td class="lead">probe</td><td class="n">360</td><td class="g">55.4</td><td>58.4</td><td class="f1">56.4</td><td class="g">40.8</td><td>43.7</td><td class="f1">42.0</td><td class="g">45.7</td><td>45.6</td><td class="f1">44.8</td><td class="g">58.4</td><td>54.8</td><td class="f1">56.1</td><td class="g">39.5</td><td>37.5</td><td class="f1">38.1</td><td class="g">63.7</td><td>56.3</td><td class="f1">59.2</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (all)</td><td class="n">360</td><td class="g">44.0</td><td>42.5</td><td class="f1">43.1</td><td class="g">39.7</td><td>37.0</td><td class="f1">38.2</td><td class="g">41.8</td><td>40.0</td><td class="f1">40.7</td><td class="g">41.8</td><td>37.1</td><td class="f1">38.8</td><td class="g">43.6</td><td>36.0</td><td class="f1">39.2</td><td class="g">43.6</td><td>32.0</td><td class="f1">35.4</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (temporal)</td><td class="n">360</td><td class="g">40.4</td><td>38.8</td><td class="f1">39.4</td><td class="g">35.5</td><td>28.1</td><td class="f1">31.0</td><td class="g">46.5</td><td>43.9</td><td class="f1">44.9</td><td class="g">43.2</td><td>39.0</td><td class="f1">40.7</td><td class="g">41.2</td><td>32.4</td><td class="f1">36.0</td><td class="g">46.9</td><td>42.0</td><td class="f1">44.0</td></tr>
+<tr class="sep"><td class="lead set">GOAT DI</td><td class="lead">calibration only</td><td class="n">170</td><td class="g">25.5</td><td>30.0</td><td class="f1">26.9</td><td class="g">25.8</td><td>29.0</td><td class="f1">26.7</td><td class="g">21.5</td><td>24.2</td><td class="f1">22.1</td><td class="g">29.4</td><td>32.5</td><td class="f1">30.1</td><td class="g">30.2</td><td>32.2</td><td class="f1">30.7</td><td class="g">25.8</td><td>28.8</td><td class="f1">26.4</td></tr>
+<tr><td class="lead set"></td><td class="lead">full</td><td class="n">170</td><td class="g">51.1</td><td>45.0</td><td class="f1">47.4</td><td class="g">47.3</td><td>40.6</td><td class="f1">43.3</td><td class="g">48.4</td><td>46.7</td><td class="f1">46.8</td><td class="g">52.0</td><td>46.4</td><td class="f1">48.6</td><td class="g">53.3</td><td>40.6</td><td class="f1">45.4</td><td class="g">38.9</td><td>15.7</td><td class="f1">19.9</td></tr>
+<tr><td class="lead set"></td><td class="lead">probe</td><td class="n">170</td><td class="g">37.5</td><td>39.8</td><td class="f1">38.0</td><td class="g">39.1</td><td>39.9</td><td class="f1">38.9</td><td class="g">37.2</td><td>36.1</td><td class="f1">36.0</td><td class="g">40.9</td><td>38.9</td><td class="f1">38.9</td><td class="g">35.1</td><td>32.7</td><td class="f1">33.5</td><td class="g">39.5</td><td>38.2</td><td class="f1">38.0</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (all)</td><td class="n">170</td><td class="g">47.8</td><td>43.3</td><td class="f1">45.0</td><td class="g">39.9</td><td>32.0</td><td class="f1">34.6</td><td class="g">48.8</td><td>46.9</td><td class="f1">47.2</td><td class="g">42.8</td><td>30.3</td><td class="f1">34.6</td><td class="g">53.7</td><td>40.6</td><td class="f1">45.4</td><td class="g">32.8</td><td>14.0</td><td class="f1">17.5</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (temporal)</td><td class="n">170</td><td class="g">37.3</td><td>34.0</td><td class="f1">35.1</td><td class="g">42.4</td><td>30.7</td><td class="f1">35.0</td><td class="g">48.8</td><td>44.8</td><td class="f1">45.9</td><td class="g">48.0</td><td>35.7</td><td class="f1">40.2</td><td class="g">44.1</td><td>33.4</td><td class="f1">37.0</td><td class="g">56.6</td><td>47.2</td><td class="f1">50.6</td></tr>
+</tbody></table></div>
+</section>
+<section class="panel" data-metric="frame"><p class="metric"><strong>Frame.</strong> Frame-wise pitch activity.</p>
+<div class="scroll"><table>
+<thead><tr>
+<th rowspan="2" class="lead">test set</th>
+<th rowspan="2" class="lead">arm</th>
+<th rowspan="2" class="n">n</th>
+<th colspan="3" class="grp">OAF</th>
+<th colspan="3" class="grp">OAFv2</th>
+<th colspan="3" class="grp">HPP</th>
+<th colspan="3" class="grp">Kong</th>
+<th colspan="3" class="grp">TK</th>
+<th colspan="3" class="grp">hFT</th>
+</tr><tr><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th></tr></thead><tbody>
+<tr class="sep"><td class="lead set">GAPS test</td><td class="lead">calibration only</td><td class="n">30</td><td class="g">74.2</td><td>59.7</td><td class="f1">64.9</td><td class="g">70.6</td><td>63.7</td><td class="f1">66.1</td><td class="g">64.2</td><td>58.6</td><td class="f1">60.3</td><td class="g">71.2</td><td>64.3</td><td class="f1">66.7</td><td class="g">60.9</td><td>63.2</td><td class="f1">60.8</td><td class="g">70.1</td><td>60.0</td><td class="f1">63.9</td></tr>
+<tr><td class="lead set"></td><td class="lead">full</td><td class="n">30</td><td class="g">85.9</td><td>68.2</td><td class="f1">75.7</td><td class="g">78.4</td><td>79.1</td><td class="f1">78.3</td><td class="g">78.3</td><td>83.3</td><td class="f1">80.5</td><td class="g">80.7</td><td>83.6</td><td class="f1">81.9</td><td class="g">80.5</td><td>79.6</td><td class="f1">79.8</td><td class="g">82.4</td><td>82.6</td><td class="f1">82.3</td></tr>
+<tr><td class="lead set"></td><td class="lead">probe</td><td class="n">30</td><td class="g">78.6</td><td>69.3</td><td class="f1">73.1</td><td class="g">71.8</td><td>80.0</td><td class="f1">75.3</td><td class="g">77.4</td><td>66.5</td><td class="f1">71.0</td><td class="g">76.2</td><td>68.9</td><td class="f1">71.7</td><td class="g">56.3</td><td>72.0</td><td class="f1">62.8</td><td class="g">77.2</td><td>66.1</td><td class="f1">70.7</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (all)</td><td class="n">30</td><td class="g">82.9</td><td>73.5</td><td class="f1">77.6</td><td class="g">78.1</td><td>81.5</td><td class="f1">79.5</td><td class="g">81.2</td><td>81.2</td><td class="f1">80.9</td><td class="g">79.1</td><td>83.7</td><td class="f1">81.1</td><td class="g">80.4</td><td>80.3</td><td class="f1">80.1</td><td class="g">83.4</td><td>82.0</td><td class="f1">82.5</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (temporal)</td><td class="n">30</td><td class="g">82.1</td><td>70.5</td><td class="f1">75.5</td><td class="g">75.9</td><td>81.3</td><td class="f1">78.2</td><td class="g">81.0</td><td>77.3</td><td class="f1">78.8</td><td class="g">79.2</td><td>82.7</td><td class="f1">80.6</td><td class="g">78.3</td><td>78.2</td><td class="f1">78.0</td><td class="g">83.7</td><td>77.1</td><td class="f1">79.9</td></tr>
+<tr class="sep"><td class="lead set">GuitarSet</td><td class="lead">calibration only</td><td class="n">360</td><td class="g">81.8</td><td>67.0</td><td class="f1">73.1</td><td class="g">81.6</td><td>63.0</td><td class="f1">70.5</td><td class="g">72.0</td><td>51.9</td><td class="f1">58.9</td><td class="g">80.3</td><td>66.3</td><td class="f1">72.0</td><td class="g">77.6</td><td>57.3</td><td class="f1">64.6</td><td class="g">84.7</td><td>60.4</td><td class="f1">69.9</td></tr>
+<tr><td class="lead set"></td><td class="lead">full</td><td class="n">360</td><td class="g">76.6</td><td>81.6</td><td class="f1">77.8</td><td class="g">70.4</td><td>78.5</td><td class="f1">72.7</td><td class="g">70.4</td><td>79.2</td><td class="f1">73.1</td><td class="g">77.1</td><td>81.8</td><td class="f1">78.2</td><td class="g">67.2</td><td>77.1</td><td class="f1">70.6</td><td class="g">72.2</td><td>64.6</td><td class="f1">63.8</td></tr>
+<tr><td class="lead set"></td><td class="lead">probe</td><td class="n">360</td><td class="g">83.9</td><td>82.7</td><td class="f1">82.9</td><td class="g">68.9</td><td>87.7</td><td class="f1">76.4</td><td class="g">78.2</td><td>76.0</td><td class="f1">75.8</td><td class="g">83.7</td><td>76.4</td><td class="f1">79.3</td><td class="g">59.6</td><td>75.8</td><td class="f1">65.8</td><td class="g">87.9</td><td>69.6</td><td class="f1">76.8</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (all)</td><td class="n">360</td><td class="g">72.9</td><td>83.7</td><td class="f1">76.7</td><td class="g">68.1</td><td>82.6</td><td class="f1">73.6</td><td class="g">70.7</td><td>85.4</td><td class="f1">76.3</td><td class="g">73.9</td><td>80.1</td><td class="f1">75.2</td><td class="g">67.4</td><td>78.4</td><td class="f1">71.3</td><td class="g">73.1</td><td>61.1</td><td class="f1">61.3</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (temporal)</td><td class="n">360</td><td class="g">75.1</td><td>84.1</td><td class="f1">78.5</td><td class="g">68.8</td><td>74.4</td><td class="f1">69.8</td><td class="g">75.7</td><td>81.5</td><td class="f1">77.6</td><td class="g">72.2</td><td>82.5</td><td class="f1">75.8</td><td class="g">67.5</td><td>75.2</td><td class="f1">69.9</td><td class="g">76.7</td><td>79.0</td><td class="f1">76.6</td></tr>
+<tr class="sep"><td class="lead set">GOAT DI</td><td class="lead">calibration only</td><td class="n">170</td><td class="g">72.3</td><td>68.2</td><td class="f1">68.8</td><td class="g">72.4</td><td>63.9</td><td class="f1">66.1</td><td class="g">71.2</td><td>54.5</td><td class="f1">59.4</td><td class="g">66.6</td><td>69.2</td><td class="f1">66.4</td><td class="g">68.0</td><td>61.3</td><td class="f1">61.3</td><td class="g">69.9</td><td>58.5</td><td class="f1">61.5</td></tr>
+<tr><td class="lead set"></td><td class="lead">full</td><td class="n">170</td><td class="g">81.2</td><td>68.2</td><td class="f1">73.0</td><td class="g">73.8</td><td>72.9</td><td class="f1">72.0</td><td class="g">74.2</td><td>76.4</td><td class="f1">74.4</td><td class="g">79.1</td><td>77.7</td><td class="f1">77.7</td><td class="g">69.0</td><td>70.9</td><td class="f1">68.8</td><td class="g">71.4</td><td>22.2</td><td class="f1">29.5</td></tr>
+<tr><td class="lead set"></td><td class="lead">probe</td><td class="n">170</td><td class="g">77.3</td><td>74.9</td><td class="f1">75.1</td><td class="g">69.2</td><td>81.4</td><td class="f1">73.9</td><td class="g">73.0</td><td>68.7</td><td class="f1">69.2</td><td class="g">73.3</td><td>74.0</td><td class="f1">72.4</td><td class="g">59.8</td><td>64.4</td><td class="f1">60.1</td><td class="g">75.4</td><td>62.1</td><td class="f1">65.8</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (all)</td><td class="n">170</td><td class="g">78.3</td><td>70.2</td><td class="f1">72.7</td><td class="g">71.1</td><td>65.6</td><td class="f1">65.9</td><td class="g">74.0</td><td>79.6</td><td class="f1">76.0</td><td class="g">78.6</td><td>64.8</td><td class="f1">69.3</td><td class="g">71.0</td><td>70.7</td><td class="f1">69.6</td><td class="g">67.7</td><td>20.1</td><td class="f1">26.5</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (temporal)</td><td class="n">170</td><td class="g">77.2</td><td>73.4</td><td class="f1">74.3</td><td class="g">72.9</td><td>62.8</td><td class="f1">66.2</td><td class="g">77.0</td><td>74.6</td><td class="f1">75.0</td><td class="g">75.5</td><td>74.4</td><td class="f1">74.1</td><td class="g">63.5</td><td>67.2</td><td class="f1">63.1</td><td class="g">81.2</td><td>70.8</td><td class="f1">74.5</td></tr>
+</tbody></table></div>
+</section>
+</div>
+
+<h2 id="s1"><span class="num">Table S1</span>Adaptation on GAPS, original thresholds</h2>
+<p class="caption">The cells of Table 3 decoded at each model's original decision constant instead, with the
+checkpoint selected at that constant. <em>Zero-shot</em> is the pretrained model. hFT is decoded with its
+velocity gate removed in every row, so its zero-shot row differs from Table 2, where the gate is on.</p>
+<div class="tabs" id="tabs1">
+<div class="tabbar" role="tablist">
+<label><input type="radio" name="tabs1" value="note_no_offset" checked><span>Onset</span></label>
+<label><input type="radio" name="tabs1" value="note"><span>Onset + offset</span></label>
+<label><input type="radio" name="tabs1" value="frame"><span>Frame</span></label>
+</div>
+<section class="panel" data-metric="note_no_offset"><p class="metric"><strong>Onset.</strong> Onset within 50 ms and correct pitch. The metric of the paper.</p>
+<div class="scroll"><table>
+<thead><tr>
+<th rowspan="2" class="lead">test set</th>
+<th rowspan="2" class="lead">arm</th>
+<th rowspan="2" class="n">n</th>
+<th colspan="3" class="grp">OAF</th>
+<th colspan="3" class="grp">OAFv2</th>
+<th colspan="3" class="grp">HPP</th>
+<th colspan="3" class="grp">Kong</th>
+<th colspan="3" class="grp">TK</th>
+<th colspan="3" class="grp">hFT</th>
+</tr><tr><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th></tr></thead><tbody>
+<tr class="sep"><td class="lead set">GAPS test</td><td class="lead">zero-shot</td><td class="n">30</td><td class="g">76.5</td><td>79.5</td><td class="f1">77.2</td><td class="g">75.7</td><td>82.4</td><td class="f1">78.6</td><td class="g">53.5</td><td>92.9</td><td class="f1">67.5</td><td class="g">58.6</td><td>92.8</td><td class="f1">71.4</td><td class="g">68.0</td><td>92.9</td><td class="f1">78.1</td><td class="g">69.5</td><td>92.8</td><td class="f1">79.2</td></tr>
+<tr><td class="lead set"></td><td class="lead">full</td><td class="n">30</td><td class="g">93.7</td><td>77.8</td><td class="f1">84.2</td><td class="g">93.7</td><td>82.5</td><td class="f1">87.1</td><td class="g">94.1</td><td>92.7</td><td class="f1">93.4</td><td class="g">93.1</td><td>93.4</td><td class="f1">93.2</td><td class="g">95.5</td><td>89.6</td><td class="f1">92.4</td><td class="g">94.0</td><td>92.5</td><td class="f1">93.2</td></tr>
+<tr><td class="lead set"></td><td class="lead">probe</td><td class="n">30</td><td class="g">93.6</td><td>71.3</td><td class="f1">80.4</td><td class="g">93.9</td><td>71.9</td><td class="f1">81.1</td><td class="g">84.6</td><td>88.1</td><td class="f1">86.1</td><td class="g">79.5</td><td>90.4</td><td class="f1">84.5</td><td class="g">73.1</td><td>90.4</td><td class="f1">80.4</td><td class="g">88.9</td><td>90.6</td><td class="f1">89.6</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (all)</td><td class="n">30</td><td class="g">92.5</td><td>85.1</td><td class="f1">88.5</td><td class="g">93.3</td><td>85.5</td><td class="f1">89.1</td><td class="g">93.7</td><td>92.6</td><td class="f1">93.1</td><td class="g">93.0</td><td>92.8</td><td class="f1">92.9</td><td class="g">95.5</td><td>90.0</td><td class="f1">92.7</td><td class="g">93.9</td><td>92.4</td><td class="f1">93.1</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (temporal)</td><td class="n">30</td><td class="g">92.6</td><td>83.1</td><td class="f1">87.5</td><td class="g">92.7</td><td>83.5</td><td class="f1">87.7</td><td class="g">93.2</td><td>91.0</td><td class="f1">92.1</td><td class="g">91.5</td><td>92.6</td><td class="f1">92.1</td><td class="g">94.8</td><td>86.2</td><td class="f1">90.2</td><td class="g">92.9</td><td>92.4</td><td class="f1">92.7</td></tr>
+<tr class="sep"><td class="lead set">GuitarSet</td><td class="lead">zero-shot</td><td class="n">360</td><td class="g">75.3</td><td>75.8</td><td class="f1">74.4</td><td class="g">74.1</td><td>80.6</td><td class="f1">76.5</td><td class="g">50.7</td><td>90.4</td><td class="f1">63.7</td><td class="g">62.5</td><td>89.3</td><td class="f1">72.9</td><td class="g">73.0</td><td>87.5</td><td class="f1">78.9</td><td class="g">71.2</td><td>89.2</td><td class="f1">78.6</td></tr>
+<tr><td class="lead set"></td><td class="lead">full</td><td class="n">360</td><td class="g">93.1</td><td>67.9</td><td class="f1">77.0</td><td class="g">91.5</td><td>54.0</td><td class="f1">65.3</td><td class="g">88.4</td><td>74.0</td><td class="f1">78.9</td><td class="g">87.7</td><td>85.2</td><td class="f1">86.1</td><td class="g">93.7</td><td>59.5</td><td class="f1">71.6</td><td class="g">88.1</td><td>63.2</td><td class="f1">70.0</td></tr>
+<tr><td class="lead set"></td><td class="lead">probe</td><td class="n">360</td><td class="g">92.1</td><td>68.9</td><td class="f1">77.2</td><td class="g">92.4</td><td>70.9</td><td class="f1">79.0</td><td class="g">82.9</td><td>77.5</td><td class="f1">78.4</td><td class="g">82.3</td><td>83.7</td><td class="f1">82.5</td><td class="g">75.8</td><td>85.6</td><td class="f1">79.8</td><td class="g">90.6</td><td>78.8</td><td class="f1">83.4</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (all)</td><td class="n">360</td><td class="g">91.4</td><td>73.5</td><td class="f1">80.6</td><td class="g">90.7</td><td>63.6</td><td class="f1">73.7</td><td class="g">90.9</td><td>85.5</td><td class="f1">87.7</td><td class="g">88.8</td><td>77.7</td><td class="f1">81.5</td><td class="g">94.1</td><td>61.7</td><td class="f1">73.4</td><td class="g">90.3</td><td>57.6</td><td class="f1">66.3</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (temporal)</td><td class="n">360</td><td class="g">89.2</td><td>55.8</td><td class="f1">66.0</td><td class="g">86.1</td><td>45.5</td><td class="f1">56.4</td><td class="g">91.0</td><td>81.0</td><td class="f1">85.0</td><td class="g">87.6</td><td>81.4</td><td class="f1">83.9</td><td class="g">93.9</td><td>62.9</td><td class="f1">74.2</td><td class="g">92.0</td><td>80.1</td><td class="f1">85.0</td></tr>
+<tr class="sep"><td class="lead set">GOAT DI</td><td class="lead">zero-shot</td><td class="n">170</td><td class="g">56.5</td><td>62.1</td><td class="f1">57.6</td><td class="g">58.6</td><td>64.5</td><td class="f1">60.0</td><td class="g">50.6</td><td>75.4</td><td class="f1">58.7</td><td class="g">47.4</td><td>73.2</td><td class="f1">55.7</td><td class="g">60.5</td><td>74.3</td><td class="f1">65.6</td><td class="g">51.5</td><td>75.0</td><td class="f1">59.0</td></tr>
+<tr><td class="lead set"></td><td class="lead">full</td><td class="n">170</td><td class="g">83.8</td><td>54.4</td><td class="f1">63.6</td><td class="g">83.9</td><td>48.8</td><td class="f1">59.4</td><td class="g">76.2</td><td>68.3</td><td class="f1">69.9</td><td class="g">77.5</td><td>71.4</td><td class="f1">73.7</td><td class="g">79.8</td><td>46.2</td><td class="f1">56.8</td><td class="g">68.7</td><td>24.2</td><td class="f1">31.6</td></tr>
+<tr><td class="lead set"></td><td class="lead">probe</td><td class="n">170</td><td class="g">75.6</td><td>56.0</td><td class="f1">62.7</td><td class="g">76.4</td><td>57.2</td><td class="f1">63.8</td><td class="g">71.8</td><td>68.2</td><td class="f1">68.4</td><td class="g">65.6</td><td>70.9</td><td class="f1">66.1</td><td class="g">63.3</td><td>72.9</td><td class="f1">66.7</td><td class="g">72.2</td><td>70.4</td><td class="f1">69.7</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (all)</td><td class="n">170</td><td class="g">81.3</td><td>54.9</td><td class="f1">63.3</td><td class="g">75.3</td><td>39.8</td><td class="f1">48.3</td><td class="g">74.8</td><td>72.3</td><td class="f1">72.3</td><td class="g">76.8</td><td>52.4</td><td class="f1">60.4</td><td class="g">81.3</td><td>47.0</td><td class="f1">57.7</td><td class="g">58.9</td><td>17.1</td><td class="f1">23.2</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (temporal)</td><td class="n">170</td><td class="g">76.3</td><td>42.1</td><td class="f1">51.0</td><td class="g">74.8</td><td>23.8</td><td class="f1">33.5</td><td class="g">75.7</td><td>68.6</td><td class="f1">70.3</td><td class="g">76.1</td><td>61.2</td><td class="f1">66.5</td><td class="g">76.1</td><td>47.7</td><td class="f1">56.7</td><td class="g">82.3</td><td>67.8</td><td class="f1">72.9</td></tr>
+</tbody></table></div>
+</section>
+<section class="panel" data-metric="note"><p class="metric"><strong>Onset + offset.</strong> As onset, and the offset within 50 ms or 20% of the note&#x27;s duration, whichever is larger.</p>
+<div class="scroll"><table>
+<thead><tr>
+<th rowspan="2" class="lead">test set</th>
+<th rowspan="2" class="lead">arm</th>
+<th rowspan="2" class="n">n</th>
+<th colspan="3" class="grp">OAF</th>
+<th colspan="3" class="grp">OAFv2</th>
+<th colspan="3" class="grp">HPP</th>
+<th colspan="3" class="grp">Kong</th>
+<th colspan="3" class="grp">TK</th>
+<th colspan="3" class="grp">hFT</th>
+</tr><tr><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th></tr></thead><tbody>
+<tr class="sep"><td class="lead set">GAPS test</td><td class="lead">zero-shot</td><td class="n">30</td><td class="g">24.0</td><td>25.0</td><td class="f1">24.3</td><td class="g">26.3</td><td>28.4</td><td class="f1">27.3</td><td class="g">19.4</td><td>33.6</td><td class="f1">24.5</td><td class="g">21.4</td><td>33.6</td><td class="f1">26.0</td><td class="g">22.5</td><td>30.4</td><td class="f1">25.7</td><td class="g">23.9</td><td>31.7</td><td class="f1">27.2</td></tr>
+<tr><td class="lead set"></td><td class="lead">full</td><td class="n">30</td><td class="g">56.9</td><td>47.7</td><td class="f1">51.4</td><td class="g">62.9</td><td>56.1</td><td class="f1">59.0</td><td class="g">64.1</td><td>63.2</td><td class="f1">63.7</td><td class="g">66.9</td><td>67.2</td><td class="f1">67.0</td><td class="g">69.8</td><td>65.6</td><td class="f1">67.6</td><td class="g">69.8</td><td>68.7</td><td class="f1">69.2</td></tr>
+<tr><td class="lead set"></td><td class="lead">probe</td><td class="n">30</td><td class="g">36.4</td><td>28.0</td><td class="f1">31.4</td><td class="g">55.4</td><td>42.6</td><td class="f1">48.0</td><td class="g">34.7</td><td>36.1</td><td class="f1">35.3</td><td class="g">33.3</td><td>37.8</td><td class="f1">35.4</td><td class="g">20.8</td><td>25.3</td><td class="f1">22.7</td><td class="g">40.2</td><td>40.8</td><td class="f1">40.4</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (all)</td><td class="n">30</td><td class="g">56.9</td><td>52.6</td><td class="f1">54.6</td><td class="g">63.6</td><td>58.4</td><td class="f1">60.9</td><td class="g">61.3</td><td>60.7</td><td class="f1">61.0</td><td class="g">66.0</td><td>66.0</td><td class="f1">66.0</td><td class="g">70.0</td><td>66.1</td><td class="f1">67.9</td><td class="g">69.9</td><td>68.8</td><td class="f1">69.3</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (temporal)</td><td class="n">30</td><td class="g">54.0</td><td>48.7</td><td class="f1">51.2</td><td class="g">62.4</td><td>56.2</td><td class="f1">59.1</td><td class="g">58.0</td><td>56.7</td><td class="f1">57.3</td><td class="g">64.2</td><td>65.0</td><td class="f1">64.6</td><td class="g">65.0</td><td>59.2</td><td class="f1">61.9</td><td class="g">65.0</td><td>64.7</td><td class="f1">64.8</td></tr>
+<tr class="sep"><td class="lead set">GuitarSet</td><td class="lead">zero-shot</td><td class="n">360</td><td class="g">31.0</td><td>31.6</td><td class="f1">30.9</td><td class="g">29.8</td><td>32.0</td><td class="f1">30.6</td><td class="g">21.3</td><td>39.6</td><td class="f1">27.2</td><td class="g">31.7</td><td>45.1</td><td class="f1">36.9</td><td class="g">29.0</td><td>34.9</td><td class="f1">31.4</td><td class="g">34.1</td><td>42.5</td><td class="f1">37.5</td></tr>
+<tr><td class="lead set"></td><td class="lead">full</td><td class="n">360</td><td class="g">49.4</td><td>37.4</td><td class="f1">41.9</td><td class="g">43.8</td><td>25.8</td><td class="f1">31.1</td><td class="g">39.4</td><td>34.8</td><td class="f1">36.4</td><td class="g">45.8</td><td>44.8</td><td class="f1">45.2</td><td class="g">42.1</td><td>27.6</td><td class="f1">33.0</td><td class="g">41.9</td><td>31.4</td><td class="f1">34.4</td></tr>
+<tr><td class="lead set"></td><td class="lead">probe</td><td class="n">360</td><td class="g">51.4</td><td>39.8</td><td class="f1">44.0</td><td class="g">54.3</td><td>43.4</td><td class="f1">47.6</td><td class="g">47.2</td><td>45.4</td><td class="f1">45.4</td><td class="g">54.4</td><td>55.6</td><td class="f1">54.7</td><td class="g">27.2</td><td>30.7</td><td class="f1">28.6</td><td class="g">63.7</td><td>56.3</td><td class="f1">59.2</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (all)</td><td class="n">360</td><td class="g">47.9</td><td>39.5</td><td class="f1">42.9</td><td class="g">43.4</td><td>30.8</td><td class="f1">35.5</td><td class="g">41.8</td><td>40.0</td><td class="f1">40.7</td><td class="g">41.8</td><td>37.1</td><td class="f1">38.8</td><td class="g">41.8</td><td>28.3</td><td class="f1">33.4</td><td class="g">43.9</td><td>27.7</td><td class="f1">32.1</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (temporal)</td><td class="n">360</td><td class="g">46.1</td><td>30.8</td><td class="f1">35.7</td><td class="g">40.0</td><td>20.9</td><td class="f1">26.0</td><td class="g">47.8</td><td>44.2</td><td class="f1">45.6</td><td class="g">42.8</td><td>40.0</td><td class="f1">41.1</td><td class="g">40.7</td><td>28.9</td><td class="f1">33.4</td><td class="g">46.9</td><td>42.0</td><td class="f1">44.0</td></tr>
+<tr class="sep"><td class="lead set">GOAT DI</td><td class="lead">zero-shot</td><td class="n">170</td><td class="g">25.3</td><td>27.1</td><td class="f1">25.6</td><td class="g">25.8</td><td>28.0</td><td class="f1">26.3</td><td class="g">25.0</td><td>36.1</td><td class="f1">28.9</td><td class="g">26.1</td><td>39.5</td><td class="f1">30.6</td><td class="g">27.8</td><td>33.4</td><td class="f1">29.9</td><td class="g">24.6</td><td>35.0</td><td class="f1">28.1</td></tr>
+<tr><td class="lead set"></td><td class="lead">full</td><td class="n">170</td><td class="g">48.3</td><td>33.2</td><td class="f1">38.2</td><td class="g">47.9</td><td>29.5</td><td class="f1">35.3</td><td class="g">48.7</td><td>43.9</td><td class="f1">45.2</td><td class="g">50.8</td><td>46.8</td><td class="f1">48.3</td><td class="g">49.5</td><td>30.1</td><td class="f1">36.5</td><td class="g">38.4</td><td>15.4</td><td class="f1">19.6</td></tr>
+<tr><td class="lead set"></td><td class="lead">probe</td><td class="n">170</td><td class="g">38.2</td><td>28.9</td><td class="f1">32.2</td><td class="g">46.5</td><td>35.2</td><td class="f1">39.2</td><td class="g">37.4</td><td>34.9</td><td class="f1">35.5</td><td class="g">39.3</td><td>40.7</td><td class="f1">39.1</td><td class="g">27.4</td><td>30.8</td><td class="f1">28.5</td><td class="g">39.5</td><td>38.2</td><td class="f1">38.0</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (all)</td><td class="n">170</td><td class="g">48.3</td><td>34.6</td><td class="f1">39.4</td><td class="g">42.9</td><td>24.1</td><td class="f1">28.9</td><td class="g">48.8</td><td>46.9</td><td class="f1">47.2</td><td class="g">42.8</td><td>30.3</td><td class="f1">34.6</td><td class="g">50.7</td><td>30.7</td><td class="f1">37.1</td><td class="g">30.6</td><td>10.8</td><td class="f1">14.2</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (temporal)</td><td class="n">170</td><td class="g">41.2</td><td>24.6</td><td class="f1">29.2</td><td class="g">41.8</td><td>14.3</td><td class="f1">19.8</td><td class="g">50.4</td><td>45.2</td><td class="f1">46.8</td><td class="g">46.7</td><td>37.4</td><td class="f1">40.9</td><td class="g">44.6</td><td>29.2</td><td class="f1">34.2</td><td class="g">56.6</td><td>47.2</td><td class="f1">50.6</td></tr>
+</tbody></table></div>
+</section>
+<section class="panel" data-metric="frame"><p class="metric"><strong>Frame.</strong> Frame-wise pitch activity.</p>
+<div class="scroll"><table>
+<thead><tr>
+<th rowspan="2" class="lead">test set</th>
+<th rowspan="2" class="lead">arm</th>
+<th rowspan="2" class="n">n</th>
+<th colspan="3" class="grp">OAF</th>
+<th colspan="3" class="grp">OAFv2</th>
+<th colspan="3" class="grp">HPP</th>
+<th colspan="3" class="grp">Kong</th>
+<th colspan="3" class="grp">TK</th>
+<th colspan="3" class="grp">hFT</th>
+</tr><tr><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th><th class="g">P</th><th>R</th><th>F1</th></tr></thead><tbody>
+<tr class="sep"><td class="lead set">GAPS test</td><td class="lead">zero-shot</td><td class="n">30</td><td class="g">76.2</td><td>55.1</td><td class="f1">62.6</td><td class="g">71.8</td><td>61.7</td><td class="f1">65.4</td><td class="g">56.2</td><td>71.0</td><td class="f1">61.9</td><td class="g">60.7</td><td>75.2</td><td class="f1">66.4</td><td class="g">58.1</td><td>64.2</td><td class="f1">59.8</td><td class="g">62.7</td><td>66.4</td><td class="f1">63.8</td></tr>
+<tr><td class="lead set"></td><td class="lead">full</td><td class="n">30</td><td class="g">90.4</td><td>54.7</td><td class="f1">67.2</td><td class="g">85.9</td><td>65.7</td><td class="f1">73.5</td><td class="g">81.6</td><td>79.3</td><td class="f1">80.2</td><td class="g">79.4</td><td>85.0</td><td class="f1">81.8</td><td class="g">80.7</td><td>78.1</td><td class="f1">79.2</td><td class="g">84.5</td><td>79.6</td><td class="f1">81.7</td></tr>
+<tr><td class="lead set"></td><td class="lead">probe</td><td class="n">30</td><td class="g">87.2</td><td>45.6</td><td class="f1">59.2</td><td class="g">86.5</td><td>51.7</td><td class="f1">64.3</td><td class="g">79.8</td><td>61.1</td><td class="f1">68.6</td><td class="g">71.7</td><td>75.1</td><td class="f1">72.8</td><td class="g">57.4</td><td>52.2</td><td class="f1">53.7</td><td class="g">77.2</td><td>66.1</td><td class="f1">70.7</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (all)</td><td class="n">30</td><td class="g">88.3</td><td>62.2</td><td class="f1">72.5</td><td class="g">86.5</td><td>67.4</td><td class="f1">75.5</td><td class="g">81.2</td><td>81.2</td><td class="f1">80.9</td><td class="g">79.1</td><td>83.7</td><td class="f1">81.1</td><td class="g">81.0</td><td>79.0</td><td class="f1">79.8</td><td class="g">84.6</td><td>80.2</td><td class="f1">82.0</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (temporal)</td><td class="n">30</td><td class="g">89.1</td><td>58.5</td><td class="f1">70.3</td><td class="g">86.1</td><td>66.1</td><td class="f1">74.5</td><td class="g">82.6</td><td>74.5</td><td class="f1">78.0</td><td class="g">77.6</td><td>84.1</td><td class="f1">80.5</td><td class="g">76.9</td><td>75.0</td><td class="f1">75.6</td><td class="g">83.7</td><td>77.1</td><td class="f1">79.9</td></tr>
+<tr class="sep"><td class="lead set">GuitarSet</td><td class="lead">zero-shot</td><td class="n">360</td><td class="g">83.8</td><td>62.3</td><td class="f1">70.8</td><td class="g">82.2</td><td>60.8</td><td class="f1">69.3</td><td class="g">65.8</td><td>71.7</td><td class="f1">67.9</td><td class="g">72.6</td><td>76.6</td><td class="f1">73.9</td><td class="g">74.4</td><td>59.4</td><td class="f1">65.0</td><td class="g">78.3</td><td>68.0</td><td class="f1">72.3</td></tr>
+<tr><td class="lead set"></td><td class="lead">full</td><td class="n">360</td><td class="g">82.7</td><td>67.0</td><td class="f1">72.3</td><td class="g">78.5</td><td>52.6</td><td class="f1">59.5</td><td class="g">73.3</td><td>67.7</td><td class="f1">68.3</td><td class="g">75.5</td><td>83.9</td><td class="f1">78.4</td><td class="g">67.8</td><td>68.4</td><td class="f1">66.6</td><td class="g">73.2</td><td>57.9</td><td class="f1">59.6</td></tr>
+<tr><td class="lead set"></td><td class="lead">probe</td><td class="n">360</td><td class="g">91.8</td><td>62.1</td><td class="f1">73.1</td><td class="g">82.4</td><td>67.0</td><td class="f1">72.6</td><td class="g">81.0</td><td>70.8</td><td class="f1">74.1</td><td class="g">80.2</td><td>81.1</td><td class="f1">80.2</td><td class="g">74.7</td><td>52.0</td><td class="f1">60.1</td><td class="g">87.9</td><td>69.6</td><td class="f1">76.8</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (all)</td><td class="n">360</td><td class="g">80.2</td><td>72.9</td><td class="f1">75.2</td><td class="g">76.0</td><td>62.1</td><td class="f1">66.7</td><td class="g">70.7</td><td>85.4</td><td class="f1">76.3</td><td class="g">73.9</td><td>80.1</td><td class="f1">75.2</td><td class="g">68.3</td><td>71.0</td><td class="f1">68.3</td><td class="g">74.2</td><td>54.5</td><td class="f1">56.9</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (temporal)</td><td class="n">360</td><td class="g">82.6</td><td>60.5</td><td class="f1">67.6</td><td class="g">75.7</td><td>47.1</td><td class="f1">54.1</td><td class="g">77.4</td><td>78.8</td><td class="f1">77.2</td><td class="g">70.7</td><td>84.0</td><td class="f1">75.6</td><td class="g">66.8</td><td>71.4</td><td class="f1">67.7</td><td class="g">76.7</td><td>79.0</td><td class="f1">76.6</td></tr>
+<tr class="sep"><td class="lead set">GOAT DI</td><td class="lead">zero-shot</td><td class="n">170</td><td class="g">74.0</td><td>63.7</td><td class="f1">66.9</td><td class="g">73.1</td><td>61.9</td><td class="f1">65.1</td><td class="g">66.6</td><td>71.7</td><td class="f1">67.5</td><td class="g">59.5</td><td>76.7</td><td class="f1">65.6</td><td class="g">65.7</td><td>62.7</td><td class="f1">61.2</td><td class="g">63.5</td><td>66.4</td><td class="f1">63.1</td></tr>
+<tr><td class="lead set"></td><td class="lead">full</td><td class="n">170</td><td class="g">86.7</td><td>50.1</td><td class="f1">61.4</td><td class="g">81.7</td><td>48.2</td><td class="f1">58.0</td><td class="g">77.2</td><td>67.6</td><td class="f1">70.8</td><td class="g">77.0</td><td>79.7</td><td class="f1">77.7</td><td class="g">69.2</td><td>62.5</td><td class="f1">64.2</td><td class="g">73.1</td><td>21.2</td><td class="f1">28.4</td></tr>
+<tr><td class="lead set"></td><td class="lead">probe</td><td class="n">170</td><td class="g">84.3</td><td>56.3</td><td class="f1">65.7</td><td class="g">81.3</td><td>59.0</td><td class="f1">67.0</td><td class="g">74.7</td><td>63.4</td><td class="f1">66.8</td><td class="g">70.4</td><td>77.6</td><td class="f1">72.6</td><td class="g">66.6</td><td>55.6</td><td class="f1">57.4</td><td class="g">75.4</td><td>62.1</td><td class="f1">65.8</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (all)</td><td class="n">170</td><td class="g">84.0</td><td>55.1</td><td class="f1">64.3</td><td class="g">79.2</td><td>42.2</td><td class="f1">50.8</td><td class="g">74.0</td><td>79.6</td><td class="f1">76.0</td><td class="g">78.6</td><td>64.8</td><td class="f1">69.3</td><td class="g">71.4</td><td>63.1</td><td class="f1">65.6</td><td class="g">63.1</td><td>15.2</td><td class="f1">20.4</td></tr>
+<tr><td class="lead set"></td><td class="lead">LoRA (temporal)</td><td class="n">170</td><td class="g">84.7</td><td>45.7</td><td class="f1">56.8</td><td class="g">80.6</td><td>25.1</td><td class="f1">34.9</td><td class="g">78.8</td><td>72.1</td><td class="f1">74.6</td><td class="g">73.5</td><td>76.2</td><td class="f1">74.0</td><td class="g">65.4</td><td>63.3</td><td class="f1">61.9</td><td class="g">81.2</td><td>70.8</td><td class="f1">74.5</td></tr>
+</tbody></table></div>
+</section>
+</div>
+
+<h2 id="s2"><span class="num">Table S2</span>LoRA (all) at the full fine-tuning rate</h2>
+<p class="caption">The learning-rate control: LoRA (all) trained at ten times the full fine-tuning rate, the
+study setting (&times;10), and at the full fine-tuning rate (&times;1), selected the same way on GAPS
+validation. Onset F1 on GAPS validation, the selection criterion, and calibrated onset F1 on the three
+guitar sets next to calibration only.</p>
+<table class="wide"><thead><tr><th></th><th colspan="2">GAPS val</th><th colspan="3">GAPS test</th><th colspan="3">GuitarSet</th><th colspan="3">GOAT DI</th></tr><tr><th></th><th>&times;10</th><th>&times;1</th><th>cal. only</th><th>&times;10</th><th>&times;1</th><th>cal. only</th><th>&times;10</th><th>&times;1</th><th>cal. only</th><th>&times;10</th><th>&times;1</th></tr></thead><tbody><tr><td class="lead set">OAF</td><td>87.8</td><td>87.0</td><td>77.0</td><td>89.1</td><td>88.6</td><td>74.4</td><td>83.0</td><td>82.2</td><td>56.8</td><td>71.7</td><td>68.2</td></tr><tr><td class="lead set">OAFv2</td><td>89.4</td><td>88.2</td><td>78.5</td><td>90.3</td><td>89.5</td><td>76.4</td><td>80.2</td><td>78.5</td><td>59.7</td><td>58.4</td><td>66.1</td></tr><tr><td class="lead set">HPP</td><td>91.4</td><td>91.2</td><td>73.9</td><td>93.1</td><td>92.7</td><td>67.0</td><td>87.7</td><td>87.7</td><td>60.9</td><td>72.3</td><td>71.8</td></tr><tr><td class="lead set">Kong</td><td>90.9</td><td>90.4</td><td>81.7</td><td>92.9</td><td>92.8</td><td>79.8</td><td>81.5</td><td>85.8</td><td>61.5</td><td>60.4</td><td>75.5</td></tr><tr><td class="lead set">TK</td><td>90.8</td><td>88.5</td><td>81.5</td><td>93.3</td><td>91.7</td><td>79.9</td><td>81.5</td><td>81.7</td><td>66.6</td><td>66.4</td><td>67.0</td></tr><tr><td class="lead set">hFT</td><td>91.6</td><td>91.3</td><td>84.9</td><td>93.0</td><td>93.7</td><td>81.1</td><td>71.8</td><td>81.8</td><td>61.6</td><td>29.3</td><td>45.1</td></tr></tbody></table>
+
+<footer>Generated by <code>scripts/supp_page.py</code> from the per-piece result files.</footer>
+</main></body></html>
