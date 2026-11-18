@@ -1,0 +1,27 @@
+{
+ "oaf": {
+  "fixed": 0.5,
+  "value": 0.35
+ },
+ "oafv2": {
+  "fixed": 0.5,
+  "value": 0.45
+ },
+ "hpp": {
+  "fixed": 0.4,
+  "value": 0.7
+ },
+ "kong": {
+  "fixed": 0.3,
+  "value": 0.75
+ },
+ "transkun": {
+  "fixed": 0.0,
+  "value": -1.25
+ },
+ "hft": {
+  "fixed": 0.5,
+  "value": 0.8,
+  "keep_zero_velocity": true
+ }
+}
