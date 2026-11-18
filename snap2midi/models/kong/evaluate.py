@@ -150,6 +150,11 @@ def get_frames(midi: pretty_midi.PrettyMIDI, \
                     if note.start >= end or note.end <= start:
                         continue 
 
+                    # Held-out datasets contain pitches this 88-key model does
+                    # not cover (MDS has one at 112, GAPS several at 109). They
+                    # would index past label_frames and raise IndexError.
+                    if not (min_pitch <= note.pitch <= max_pitch):
+                        continue
                     pitch = note.pitch - min_pitch
                     
                     start_frame = int(round(frame_rate * (note.start - start)))
@@ -311,10 +316,10 @@ def evaluate(config: dict):
 
     # Find average of frame and note metrics
     for key in frame_metrics:
-        frame_metrics[key] = round(np.mean(frame_metrics[key]).item(), 2)
+        frame_metrics[key] = round(np.mean(frame_metrics[key]).item(), 4)
 
     for key in note_metrics:
-        note_metrics[key] = round(np.mean(note_metrics[key]).item(), 2)
+        note_metrics[key] = round(np.mean(note_metrics[key]).item(), 4)
 
     print("Frame metrics are: ")
     pprint.pprint(frame_metrics)

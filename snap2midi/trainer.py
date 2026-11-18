@@ -41,7 +41,13 @@ class Trainer:
                 pool_sizes=[1, 2, 2], dropout_probs=[0, 0.25, 0.25], dropout_fc=0.5, \
                 fc_size=512, onset_lstm_units=128, combined_lstm_units=128, pitch_offset: int = 21, \
                 num_workers: int=4, num_nodes: int=1, logger_name: str='csv', resume_path:str|None=None, \
-                save_dir: str="./save_dir"):
+                save_dir: str="./save_dir", feature: str="mel", sample_rate: int=16000, \
+                max_frame_secs: float=20.0, n_mels: int=229, mel_n_fft: int=2048, \
+                hop_length: int=512, seed: int=1234, augment: bool=False, \
+                augment_asset_root: str|None=None, augment_manifest_dir: str|None=None, \
+                reverb_level: str="rms", ckpt_every_n_steps: int=2000, \
+                val_every_n_steps: int=2000, init_weights_from: str|None=None,
+                model_hook=None):
         """
             Train Onsets and Frames model with specified configuration.
 
@@ -100,7 +106,60 @@ class Trainer:
                     None, it trains from scratch.
                 save_dir (str):
                     Path to save results, logs and checkpoints.
-                
+                feature (str), sample_rate (int), max_frame_secs (float),
+                n_mels (int), mel_n_fft (int), hop_length (int):
+                    The feature parameters this store was extracted with.
+                    OAF trains on the feature written at extraction time, so
+                    augmentation has to rebuild it from the augmented waveform;
+                    these have to match the extract_oaf call that wrote the
+                    store, and the dataset verifies that they do. Defaults
+                    match extract_oaf's own defaults.
+                seed (int):
+                    Salts the per-excerpt augmentation seed. Default is 1234.
+                augment (bool):
+                    Apply Edwards et al.'s augmentation to training excerpts on
+                    the fly. Validation is never augmented. Default is False.
+                augment_asset_root (str | None):
+                    Directory holding room_ir/ and bg_noise/. Required when
+                    augment is True.
+                augment_manifest_dir (str | None):
+                    Overrides the packaged asset manifests. Default is None.
+                reverb_level (str):
+                    How the reverb stage sets its output level. "rms" preserves
+                    the excerpt's energy, as Kaldi's wav-reverberate does,
+                    removing the loudness shortcut; "peak" reproduces
+                    audiomentations and therefore Edwards. Default is "rms".
+                ckpt_every_n_steps (int):
+                    Save a checkpoint every this many optimiser steps. Every one
+                    is kept and none is marked "best": neither Hawthorne et al.
+                    nor the reference implementation selects a checkpoint, so the
+                    reported model is the endpoint and the rest of the pool
+                    exists only so a note-F1 ranking can be done offline.
+                    Default is 2000.
+                val_every_n_steps (int):
+                    Run validation every this many optimiser steps. Purely a
+                    monitoring signal -- checkpointing does not depend on it.
+                    Default is 2000.
+                init_weights_from (str | None):
+                    Lightning checkpoint whose *weights only* initialise the
+                    model -- a fine-tune. Default None trains from scratch.
+                    Unlike resume_path this restores neither the optimizer nor
+                    the StepLR schedule nor the step counter: a fresh Adam at
+                    `lr` starts at step 0, so `iterations` is the length of the
+                    fine-tune. Resuming the MAESTRO checkpoint instead would
+                    inherit its decayed LR and its step count, which already
+                    exceeds any fine-tune budget, so `max_steps` would stop the
+                    run before its first batch. Ignored when resume_path is
+                    set, so an interrupted fine-tune resumes its own progress.
+                model_hook (callable | None):
+                    Called on the model after it is built and the pretrained
+                    weights (init_weights_from) are loaded, before training
+                    starts -- for freezing layers or adding adapters. It runs
+                    on a resume too, so the model carries any adapter when
+                    Lightning restores the checkpoint. Passed outside the
+                    config, so it is not saved in the checkpoint's
+                    hyper-parameters. Default None.
+
             Returns
             --------
                 None
@@ -133,9 +192,23 @@ class Trainer:
             num_nodes=num_nodes,
             logger_name=logger_name,
             resume_path=resume_path,
-            save_dir=save_dir
+            save_dir=save_dir,
+            feature=feature,
+            sample_rate=sample_rate,
+            max_frame_secs=max_frame_secs,
+            n_mels=n_mels,
+            mel_n_fft=mel_n_fft,
+            hop_length=hop_length,
+            seed=seed,
+            augment=augment,
+            augment_asset_root=augment_asset_root,
+            augment_manifest_dir=augment_manifest_dir,
+            reverb_level=reverb_level,
+            ckpt_every_n_steps=ckpt_every_n_steps,
+            val_every_n_steps=val_every_n_steps,
+            init_weights_from=init_weights_from
         )
-        oaf_train.main(config)
+        oaf_train.main(config, model_hook=model_hook)
     
     def train_oafv2(self, base_path: str="./data/oafv2/", batch_size=8, iterations=500000, lr=0.0006, \
         sequence_length: int=327680, seed: int=42, sample_rate: int=16000, n_fft: int=2048, \
@@ -145,7 +218,10 @@ class Trainer:
         learning_rate_decay_rate=0.98, learning_rate_decay_steps=10000, clip_gradient_norm=3, \
         pitch_offset: int = 21, num_workers: int=4, num_nodes: int=1, \
         logger_name: str='csv', resume_path:str|None=None, \
-        save_dir: str="./save_dir"):
+        save_dir: str="./save_dir", augment: bool=False, augment_asset_root: str|None=None, \
+        augment_manifest_dir: str|None=None, reverb_level: str="rms", \
+        ckpt_every_n_steps: int=5000, val_every_n_steps: int=500, \
+        init_weights_from: str|None=None, model_hook=None):
         """
             Train Onsets and Frames model version 2 with specified configuration.
 
@@ -204,7 +280,44 @@ class Trainer:
                     None, it trains from scratch.
                 save_dir (str):
                     Path to save results, logs and checkpoints.
-                
+                augment (bool):
+                    Apply Edwards et al.'s augmentation to training excerpts on
+                    the fly. Validation is never augmented. Default is False.
+                augment_asset_root (str | None):
+                    Directory holding room_ir/ and bg_noise/. Required when
+                    augment is True.
+                augment_manifest_dir (str | None):
+                    Overrides the packaged asset manifests. Default is None.
+                reverb_level (str):
+                    How the reverb stage sets its output level. "rms" preserves
+                    the excerpt's energy, as Kaldi's wav-reverberate does,
+                    removing the loudness shortcut; "peak" reproduces
+                    audiomentations and therefore Edwards. Default is "rms".
+                ckpt_every_n_steps (int):
+                    Save a checkpoint every this many optimiser steps. Every one
+                    is kept and none is marked "best": neither Hawthorne et al.
+                    nor the reference implementation selects a checkpoint, so the
+                    reported model is the endpoint and the rest of the pool
+                    exists only so a note-F1 ranking can be done offline.
+                    Default is 5000.
+                val_every_n_steps (int):
+                    Run validation every this many optimiser steps. Purely a
+                    monitoring signal -- checkpointing does not depend on it.
+                    Default is 500.
+                init_weights_from (str | None):
+                    Lightning checkpoint whose *weights only* initialise the
+                    model -- a fine-tune. Default None trains from scratch.
+                    Unlike resume_path this restores neither the optimizer nor
+                    the StepLR schedule nor the step counter.
+                model_hook (callable | None):
+                    Called on the model after it is built and the pretrained
+                    weights (init_weights_from) are loaded, before training
+                    starts -- for freezing layers or adding adapters. It runs
+                    on a resume too, so the model carries any adapter when
+                    Lightning restores the checkpoint. Passed outside the
+                    config, so it is not saved in the checkpoint's
+                    hyper-parameters. Default None.
+
             Returns
             --------
                 None
@@ -239,9 +352,16 @@ class Trainer:
             num_nodes=num_nodes,
             logger_name=logger_name,
             resume_path=resume_path,
-            save_dir=save_dir
+            save_dir=save_dir,
+            augment=augment,
+            augment_asset_root=augment_asset_root,
+            augment_manifest_dir=augment_manifest_dir,
+            reverb_level=reverb_level,
+            ckpt_every_n_steps=ckpt_every_n_steps,
+            val_every_n_steps=val_every_n_steps,
+            init_weights_from=init_weights_from,
         )
-        oafv2_train.main(config)
+        oafv2_train.main(config, model_hook=model_hook)
 
     def train_kong(self, base_path: str="./data/kong/", batch_size: int = 4, factors: list = [16, 32, 32], iterations: int = 200000, frame_rate: float = 100, \
                 lr: float = 5e-4,  onset_threshold: float = 0.3, offset_threshold: float = 0.3, \
@@ -249,9 +369,22 @@ class Trainer:
                 momentum: float = 0.01, learning_rate_decay_rate: float = 0.9, learning_rate_decay_steps: int = 10000, \
                 clip_gradient_norm: float = 3.0, num_workers: int=4, logger_name: str='csv',\
                 val_steps: int=5000, num_nodes: int=1, \
-                resume_path:str|None=None, save_dir: str="./save_dir"):
+                resume_path:str|None=None, save_dir: str="./save_dir", seed: int=1234, \
+                augment: bool=False, augment_asset_root: str|None=None, \
+                augment_manifest_dir: str|None=None, reverb_level: str="rms", \
+                experiment_name: str="Kong", log_steps: int|None=None, \
+                init_weights_from: str|None=None, ckpt_every_n_steps: int|None=None, \
+                model_hook=None):
         """
             Train Kong model with specified configuration.
+
+            Augmentation is off by default. Turning it on applies Edwards et
+            al.'s pipeline to the training excerpts only; validation stays
+            clean, since checkpoint selection monitors valid_total_loss.
+            reverb_level selects how the reverb stage sets its output level:
+            "rms", the default, preserves the excerpt's energy as Kaldi's
+            wav-reverberate does; "peak" reproduces audiomentations and
+            therefore Edwards.
 
             Parameters
             ----------
@@ -299,13 +432,31 @@ class Trainer:
                 save_dir (str):
                     Path to save results, logs and checkpoints.
             
+                init_weights_from (str | None):
+                    Lightning checkpoint whose *weights only* initialise the
+                    model -- a fine-tune; its front end must match the store.
+                    Default None trains from scratch. Unlike resume_path this
+                    restores neither the optimizer nor the StepLR schedule nor
+                    the step counter.
+                ckpt_every_n_steps (int | None):
+                    Save a checkpoint every this many optimiser steps and keep
+                    them all (for selection offline), instead of the five
+                    lowest validation losses. Default None.
+                model_hook (callable | None):
+                    Called on the model after it is built and the pretrained
+                    weights (init_weights_from) are loaded, before training
+                    starts -- for freezing layers or adding adapters. It runs
+                    on a resume too, so the model carries any adapter when
+                    Lightning restores the checkpoint. Passed outside the
+                    config, so it is not saved in the checkpoint's
+                    hyper-parameters. Default None.
             Returns
             ---------
                 None
         """
         config = self._build_config_from_kwargs(
             project_name="snap2midi",
-            experiment_name="Kong",
+            experiment_name=experiment_name,
             base_path=base_path,
             batch_size=batch_size,
             factors=factors,
@@ -324,11 +475,19 @@ class Trainer:
             resume_path=resume_path,
             num_workers=num_workers,
             val_steps=val_steps,
+            log_steps=log_steps,
             num_nodes=num_nodes,
             logger_name=logger_name,
             save_dir=save_dir,
+            seed=seed,
+            augment=augment,
+            augment_asset_root=augment_asset_root,
+            augment_manifest_dir=augment_manifest_dir,
+            reverb_level=reverb_level,
+            init_weights_from=init_weights_from,
+            ckpt_every_n_steps=ckpt_every_n_steps,
         )
-        kong_train.main(config)
+        kong_train.main(config, model_hook=model_hook)
     
     def train_kong_pedals(self, base_path: str="./data/kong_pedal/", batch_size: int = 4, factors: list = [16, 32, 32], iterations: int = 200000, frame_rate: float = 100, \
                 lr: float = 5e-4,  onset_threshold: float = 0.3, offset_threshold: float = 0.3, \
@@ -416,12 +575,23 @@ class Trainer:
         kong_train_pedals.main(config)
 
     def train_hft(self, base_path: str="./data/hft/", batch_size: int = 4, n_div_train: int=1, n_div_val: int=1, margin_b: int = 32, margin_f: int = 32, n_bins: int = 256, n_slice: int=16, \
-        num_frame: int = 128, epochs: int = 50, frame_rate: int = 100, num_velocity: int = 128, num_note: int = 88, \
+        num_frame: int = 128, epochs: int = 50, val_check_interval: float = 1.0, \
+        plateau_per_validation: bool = False, \
+        frame_rate: int = 100, num_velocity: int = 128, num_note: int = 88, \
         lr: float = 1e-4, dropout: float = 0.1, clip_gradient_norm: float = 1.0,seed: int = 1234, \
         cnn_channel: int = 4, cnn_kernel: int = 5, d: int = 256, pff_dim: int = 512, enc_layer: int = 3, \
         dec_layer: int = 3, enc_head: int = 4, dec_head: int = 4, weight_A: float = 1.0, weight_B: float = 1.0,\
-        verbose: int = 1, num_workers: int=4, logger_name: str='csv', num_nodes: int=1, \
-        resume_path:str|None=None, save_dir: str="./save_dir"):
+        verbose: int = 1, num_workers: int=4, logger_name: str='csv', \
+        logger_version: str|None=None, num_nodes: int=1, \
+        devices: int|str="auto", strategy: str="auto", max_steps: int=-1, \
+        fast_attention: bool=False, compile_model: bool=False, \
+        ckpt_every_n_steps: int|None=2000, \
+        resume_path:str|None=None, save_dir: str="./save_dir", augment: bool=False, \
+        augment_asset_root: str|None=None, augment_manifest_dir: str|None=None, \
+        feature_source: str="audio", reverb_level: str="rms", \
+        init_weights_from: str|None=None, plateau_patience: int=10, \
+        model_hook=None, \
+        train_velocity: bool=True):
         """
             Train hFT-Transformer model with specified configuration.
 
@@ -445,9 +615,43 @@ class Trainer:
                     Slice dataset into n_slice parts; used for indexing. Default is 16.
                 num_frame (int): 
                     Number of frames in the input. Default is 128.
-                epochs (int): 
+                epochs (int):
                     Number of epochs for training. Default is 50.
-                frame_rate (int): 
+                val_check_interval (float):
+                    How often to validate, as a fraction of an epoch. 1.0
+                    (default) is once per epoch; 0.25 is four times.
+
+                    Sony's MAESTRO run shards the training set four ways and
+                    validates after each shard, so a 20-epoch run validates 80
+                    times. 0.25 reproduces that. Checkpointing follows
+                    validation, so it also decides how many candidates the run
+                    leaves to select from afterwards: 80 rather than 20, which
+                    is what the original had.
+
+                    It does NOT change how often the learning rate scheduler
+                    fires, which is the other half of that cadence and is not
+                    settable from here. HFT.configure_optimizers declares the
+                    ReduceLROnPlateau with interval="epoch", and Lightning only
+                    steps a scheduler whose declared interval matches the
+                    update it is doing -- so the scheduler steps once per epoch
+                    on the latest validation value however often validation
+                    ran. Measured: at 0.25 over two epochs, 10 checkpoints and
+                    1 scheduler step. Set plateau_per_validation to correct
+                    that half too.
+                plateau_per_validation (bool):
+                    Retime the ReduceLROnPlateau to step once per validation,
+                    as Sony's loop does, rather than once per epoch. Default
+                    False, which is the historical behaviour.
+
+                    Only meaningful together with val_check_interval < 1.0, and
+                    only needed for MAESTRO: Sony's MAPS run validates once an
+                    epoch, so this code already matched it there. Their MAESTRO
+                    run shards four ways and so steps the scheduler 80 times
+                    over 20 epochs against a default patience of 10; stepping
+                    20 times instead leaves the learning rate effectively
+                    constant for the whole run. See PlateauPerValidation in
+                    models/hft/train_hft.py.
+                frame_rate (int):
                     Frame rate for the model. Default is 100.
                 num_velocity (int): 
                     Number of velocity levels. Default is 128.
@@ -487,19 +691,111 @@ class Trainer:
                     Number of workers. Defualt is 4.
                 logger_name (str):
                     Logger to use in pytorch_lightning. Default is `csv`
+                logger_version (str | None):
+                    Fixed subdirectory for the logger to write into, under
+                    `./logs/HFT/`. Default None allocates a fresh `version_N`
+                    per process. Set it to a constant for a run chained across
+                    several walltimes, so every resumed job appends to one
+                    directory instead of leaving one fragment each.
                 num_nodes (int):
                     Number of accelerator nodes to use for distributed training. Default is 1.
-                resume_path (str | None): 
-                    Whether to resume training from a checkpoint. Default is None. If 
+                devices (int | str):
+                    GPUs per node. Default "auto" takes every visible one.
+
+                    batch_size is PER DEVICE. Two devices at batch_size=4
+                    reproduce one device at batch_size=8 exactly -- all eight
+                    loss terms reduce with mean() over the same element count
+                    per rank, and DDP averages the gradients, so
+                    mean(mean(A), mean(B)) = mean(A + B). Two devices at
+                    batch_size=8 instead doubles the effective batch and halves
+                    the optimizer steps per epoch, which is a hyperparameter
+                    change and not a free speedup.
+                strategy (str):
+                    Distributed strategy. Default "auto" resolves to "ddp" once
+                    more than one device is in play.
+                max_steps (int):
+                    Stop after this many optimizer steps. Default -1 is no
+                    limit. For a timing trial, so the run ends at a known step
+                    count rather than a wall clock.
+                fast_attention (bool):
+                    Compute attention with scaled_dot_product_attention rather
+                    than an explicit softmax. Default False. Identical
+                    function, but it never materialises the
+                    (batch*n_frame, heads, n_bin, n_bin) weight matrix -- which
+                    at batch 8 is 1.07 GB per layer, kept twice for the
+                    backward. Measured ~1.3x throughput and a third of the peak
+                    memory. It is not bit-identical: summation order differs.
+                    On a trained checkpoint that moves the gradient less than
+                    disabling TF32 does, and note F1 by 3e-5 over 10 MAESTRO
+                    pieces.
+
+                    The attention weights returned alongside the output become a
+                    zero-width placeholder, since nothing reads them. Anything
+                    wanting the paper's attention maps needs the explicit path.
+                compile_model (bool):
+                    torch.compile the encoder and decoder. Default False.
+                    Measured ~1.5x. Costs a few minutes of compilation at every
+                    process start, and recompiles whenever an input shape
+                    changes -- notably the short last batch of an epoch.
+                ckpt_every_n_steps (int | None):
+                    How often to write the rolling restart checkpoint, in
+                    optimizer steps. Default 2000. None switches it off. This is
+                    what a job killed at its walltime falls back to, so it caps
+                    the work lost at each handoff of a chained run.
+                resume_path (str | None):
+                    Whether to resume training from a checkpoint. Default is None. If
                     None, it trains from scratch.
                 save_dir (str):
                     Path to save results, logs and checkpoints.
+                augment (bool):
+                    Apply Edwards et al.'s augmentation to training excerpts on
+                    the fly. Validation is never augmented. Default is False.
+                augment_asset_root (str | None):
+                    Directory holding `room_ir/` and `bg_noise/`. Required when
+                    augment is True.
+                augment_manifest_dir (str | None):
+                    Overrides the packaged asset manifests. Default is None.
+                reverb_level (str):
+                    How the reverb stage sets its output level. "rms" (default)
+                    preserves the excerpt's energy, as Kaldi's wav-reverberate
+                    does by default, removing the loudness shortcut. "peak"
+                    reproduces audiomentations, and therefore Edwards.
+                feature_source (str):
+                    "audio" (default) reads the waveform slab and computes the
+                    log-mel per item; required for augmentation. "legacy_feature"
+                    reads an npz spectrogram store (no augmentation).
+                init_weights_from (str | None):
+                    Lightning checkpoint whose *weights only* initialise the
+                    model -- a fine-tune. Default None trains from scratch.
+                    Unlike resume_path this restores neither the optimizer nor
+                    the LR scheduler: a fresh Adam at `lr` and a fresh
+                    ReduceLROnPlateau are built, which is the point. The
+                    MAESTRO checkpoint's own scheduler had decayed its LR to
+                    1e-8, so resuming it would not fine-tune anything.
+                    Ignored when resume_path finds a checkpoint, so a chained
+                    job keeps its progress rather than restarting.
+                model_hook (callable | None):
+                    Called on the model after it is built and the pretrained
+                    weights (init_weights_from) are loaded, before training
+                    starts -- for freezing layers or adding adapters. It runs
+                    on a resume too, so the model carries any adapter when
+                    Lightning restores the checkpoint. Passed outside the
+                    config, so it is not saved in the checkpoint's
+                    hyper-parameters. Default None.
+                plateau_patience (int):
+                    ReduceLROnPlateau patience, in scheduler steps (validation
+                    runs when plateau_per_validation is set, epochs otherwise).
+                    Default 10 is torch's and what the MAESTRO run used against
+                    80 validations. Keep the ratio for a shorter run: a 4-epoch
+                    fine-tune validating four times an epoch has 16 steps, so
+                    10 would never fire and 2 fires after half an epoch of no
+                    improvement.
 
             Returns
             ---------
                 None
         """
-        
+
         config = self._build_config_from_kwargs(
             project_name="snap2midi",
             experiment_name="HFT",
@@ -515,6 +811,8 @@ class Trainer:
             num_frame=num_frame,
             n_slice=n_slice,
             epochs=epochs,
+            val_check_interval=val_check_interval,
+            plateau_per_validation=plateau_per_validation,
             frame_rate=frame_rate,
             lr=lr,
             dropout=dropout,
@@ -533,15 +831,34 @@ class Trainer:
             verbose=verbose,
             num_workers=num_workers,
             logger_name=logger_name,
+            logger_version=logger_version,
             num_nodes=num_nodes,
+            devices=devices,
+            strategy=strategy,
+            max_steps=max_steps,
+            fast_attention=fast_attention,
+            compile_model=compile_model,
+            ckpt_every_n_steps=ckpt_every_n_steps,
             resume_path=resume_path,
-            save_dir=save_dir
+            save_dir=save_dir,
+            augment=augment,
+            augment_asset_root=augment_asset_root,
+            augment_manifest_dir=augment_manifest_dir,
+            feature_source=feature_source,
+            reverb_level=reverb_level,
+            init_weights_from=init_weights_from,
+            plateau_patience=plateau_patience,
+            # False drops the velocity loss and freezes that head. Only useful
+            # when the target corpus annotates a single velocity, as GAPS does.
+            train_velocity=train_velocity,
         )
-        hft_train.main(config)
+        hft_train.main(config, model_hook=model_hook)
 
     def train_transkun(self, base_path: str="./data/transkun/", batch_size: int = 4, epochs: int = 1000000,\
         sample_rate: float = 44100, num_workers: int=4, logger_name: str='csv', num_nodes: int=1, 
-        val_steps: int=495, freq: int=3000, nProcess: int=1, resume_path:str|None=None, save_dir: str="./save_dir"):
+        val_steps: int=495, freq: int=3000, nProcess: int=1, resume_path:str|None=None, save_dir: str="./save_dir", \
+        seed: float|None=None, augment: bool=False, augment_asset_root: str|None=None, \
+        augment_manifest_dir: str|None=None, reverb_level: str="rms"):
         """
             Train the Transkun model.
 
@@ -572,6 +889,24 @@ class Trainer:
                     None, it trains from scratch.
                 save_dir (str):
                     Path to save results, logs and checkpoints.
+                seed (float | None):
+                    Seeds the chunk dithering and the per-excerpt augmentation
+                    draw. Default None keeps the historical behaviour of seeding
+                    from the wall clock, which means neither is reproducible
+                    across runs; pass a fixed value to make both so.
+                augment (bool):
+                    Apply Edwards et al.'s augmentation to training excerpts on
+                    the fly. Validation is never augmented. Default is False.
+                augment_asset_root (str | None):
+                    Directory holding room_ir/ and bg_noise/. Required when
+                    augment is True.
+                augment_manifest_dir (str | None):
+                    Overrides the packaged asset manifests. Default is None.
+                reverb_level (str):
+                    How the reverb stage sets its output level. "rms" preserves
+                    the excerpt's energy, as Kaldi's wav-reverberate does,
+                    removing the loudness shortcut; "peak" reproduces
+                    audiomentations and therefore Edwards. Default is "rms".
 
             Returns
             ---------
@@ -584,7 +919,7 @@ class Trainer:
             base_path=base_path,
             batch_size=batch_size,
             epochs=epochs,
-            seed=time.time(),
+            seed=time.time() if seed is None else seed,
             sample_rate=sample_rate,
             freq=freq,
             num_workers=num_workers,
@@ -593,17 +928,24 @@ class Trainer:
             resume_path=resume_path,
             val_steps=val_steps,
             nProcess=nProcess,
-            save_dir=save_dir
+            save_dir=save_dir,
+            augment=augment,
+            augment_asset_root=augment_asset_root,
+            augment_manifest_dir=augment_manifest_dir,
+            reverb_level=reverb_level
         )
         transkun_train.main(config)
     
-    def train_hpp(self, base_path: str="./data/hpp/", model_type: str="sp", batch_size=4, lr=0.0006, iterations: int=600000,\
+    def train_hpp(self, base_path: str="./data/hpp/", model_type: str="sp", batch_size=4, lr=0.0006, iterations: int=1000000,\
         sequence_length: int=327680, seed: int=42, sample_rate: int=16000, \
         bins_per_semitone: int = 4, hop_length: int=320, learning_rate_decay_rate=0.98, \
         learning_rate_decay_steps=10000, clip_gradient_norm=3, \
         pitch_offset: int = 21, num_workers: int=4, num_nodes: int=1, \
         logger_name: str='csv', resume_path:str|None=None, \
-        save_dir: str="./save_dir"):
+        save_dir: str="./save_dir", augment: bool=False, augment_asset_root: str|None=None, \
+        augment_manifest_dir: str|None=None, reverb_level: str="rms", \
+        checkpoint_every_n_steps: int|None=None, early_stopping: bool=True, \
+        init_weights_from: str|None=None, model_hook=None):
         """
             Train HPP with specified configuration.
 
@@ -613,11 +955,19 @@ class Trainer:
                     Path to extracted training data
                 model_type (str):
                     Supported types are 'sp', 'base', 'tiny', 'ultra-tiny'.
-                batch_size (int): 
-                    Batch size for training/validation. Default is 8.
-                iterations (int): 
-                    Number of iterations for training. Default is 500000.
-                lr (float): 
+                batch_size (int):
+                    Batch size for training/validation. Default is 4.
+                iterations (int):
+                    Ceiling on Lightning's global_step, not on batches. HPPNet
+                    optimises each subnet separately, so global_step advances
+                    once per subnet per batch: 'sp' trains two subnets and
+                    therefore consumes two steps a batch, while the
+                    single-subnet variants consume one. The default of 1000000
+                    is 500k batches under 'sp', the top of the 200k-500k range
+                    the paper reports; the variants override it to 500000 to
+                    land on the same batch count. Early stopping is what ends
+                    a run, so this is a ceiling rather than a target.
+                lr (float):
                     Learning rate for the optimizer. Default is 0.0006.
                 sample_rate (int):
                     Sample rate. Default is 16000.
@@ -644,11 +994,55 @@ class Trainer:
                     None, it trains from scratch.
                 save_dir (str):
                     Path to save results, logs and checkpoints.
-                
+                augment (bool):
+                    Apply Edwards et al.'s augmentation to training excerpts on
+                    the fly. Validation is never augmented. Default is False.
+                augment_asset_root (str | None):
+                    Directory holding room_ir/ and bg_noise/. Required when
+                    augment is True.
+                augment_manifest_dir (str | None):
+                    Overrides the packaged asset manifests. Default is None.
+                reverb_level (str):
+                    How the reverb stage sets its output level. "rms" preserves
+                    the excerpt's energy, as Kaldi's wav-reverberate does,
+                    removing the loudness shortcut; "peak" reproduces
+                    audiomentations and therefore Edwards. Default is "rms".
+                checkpoint_every_n_steps (int | None):
+                    Dump a checkpoint every this many global steps and keep all
+                    of them, instead of ranking on val_loss/all and keeping the
+                    best five. None keeps the ranked behaviour. Use this when
+                    the model is to be picked afterwards on a decoded metric:
+                    val_loss/all is ~70% frame loss, so ranking on it throws
+                    away the candidates a note-F1 selection would want to see.
+                early_stopping (bool):
+                    Stop once val_loss/all has not improved for 25 validation
+                    checks. Default is True. False trains to a fixed budget,
+                    which is what the reference implementation does.
+                init_weights_from (str | None):
+                    Lightning checkpoint whose *weights only* initialise the
+                    model -- a fine-tune. Default None trains from scratch.
+                    Unlike resume_path this restores neither the optimizer nor
+                    the StepLR schedule nor the step counter: a fresh Adam at
+                    `lr` starts at step 0, so `iterations` is the length of the
+                    fine-tune. Resuming the MAESTRO checkpoint instead would
+                    inherit its decayed LR and its step count, which already
+                    exceeds any fine-tune budget, so `max_steps` would stop the
+                    run before its first batch. Ignored when resume_path is
+                    set, so an interrupted fine-tune resumes its own progress.
+                model_hook (callable | None):
+                    Called on the model after it is built and the pretrained
+                    weights (init_weights_from) are loaded, before training
+                    starts -- for freezing layers or adding adapters. It runs
+                    on a resume too, so the model carries any adapter when
+                    Lightning restores the checkpoint. Passed outside the
+                    config, so it is not saved in the checkpoint's
+                    hyper-parameters. Default None.
+
+
             Returns
             --------
                 None
-        """    
+        """
         config = self._build_config_from_kwargs(
             project_name="snap2midi",
             experiment_name=f"HPPNet_{model_type}",
@@ -669,7 +1063,14 @@ class Trainer:
             num_nodes=num_nodes,
             logger_name=logger_name,
             resume_path=resume_path,
-            save_dir=save_dir
+            save_dir=save_dir,
+            augment=augment,
+            augment_asset_root=augment_asset_root,
+            augment_manifest_dir=augment_manifest_dir,
+            reverb_level=reverb_level,
+            checkpoint_every_n_steps=checkpoint_every_n_steps,
+            early_stopping=early_stopping,
+            init_weights_from=init_weights_from,
         )
 
         if model_type == "sp":
@@ -678,27 +1079,31 @@ class Trainer:
             config["frame_subnet_heads"]= ['frame', 'offset', 'velocity']
             config["fixed_dilation"] = 24
             config["model_size"] = 128
+        # The variants below train one subnet, so global_step advances once per
+        # batch rather than twice as it does under 'sp'. Halving the ceiling
+        # keeps every variant on the same 500k batches; these overrides shadow
+        # whatever the caller passed for iterations and batch_size.
         elif model_type == "base":
             config["SUBNETS_TO_TRAIN"] = ['onset_subnet']
             config["onset_subnet_heads"] = ['onset', 'frame', 'offset', 'velocity']
             config["frame_subnet_heads"]= []
             config["batch_size"] = 4
             config["model_size"] = 128
-            config["iterations"] = 600000
+            config["iterations"] = 500000
         elif model_type == "tiny":
             config["SUBNETS_TO_TRAIN"] = ['onset_subnet']
             config["onset_subnet_heads"] = ['onset', 'frame', 'offset', 'velocity']
             config["frame_subnet_heads"]= []
             config["batch_size"] = 4
             config["model_size"] = 64
-            config["iterations"] = 600000
+            config["iterations"] = 500000
         elif model_type == "ultra-tiny":
             config["SUBNETS_TO_TRAIN"] = ['onset_subnet']
             config["onset_subnet_heads"] = ['onset', 'frame', 'offset', 'velocity']
             config["frame_subnet_heads"]= []
             config["batch_size"] = 4
             config["model_size"] = 48
-            config["iterations"] = 600000
+            config["iterations"] = 500000
         else:
             raise RuntimeError(f"Mode type: {model_type} not supported!")
-        hpp_train.main(config)
+        hpp_train.main(config, model_hook=model_hook)

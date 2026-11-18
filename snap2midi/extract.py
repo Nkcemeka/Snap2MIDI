@@ -43,9 +43,16 @@ class SnapExtractor:
             sample_rate: int = 16000, hop_sample: int = 256, num_frame: int = 128, note_min: int = 21,
             note_max: int = 108, num_velocity: int = 128, mel_bins: int = 256, n_bins: int = 256, 
             fft_bins: int = 2048, window_length: int = 2048, log_offset: float = 1e-8,
-            window: str = "hann", pad_mode: str = "constant", save_name:str="data/hft"):
+            window: str = "hann", pad_mode: str = "constant", save_name:str="data/hft",
+            goat_audio_columns: list[str] | str | None = None, goat_val_fraction: float = 0.1,
+            goat_test_fraction: float | None = None, goat_split_seed: int = 1234,
+            splits: list[str] | None = None, keep_val_npz: bool = False):
         """
             Extract audio and MIDI files for the HFT mode.
+
+            splits: restrict to a subset of ["train", "val", "test"] (default
+            all). keep_val_npz: keep val's per-track npz beside its collated
+            slab, so the split can be scored per piece.
             
             Parameters:
             -----------
@@ -106,7 +113,9 @@ class SnapExtractor:
         midi_config = self._build_config_from_kwargs(note_min=note_min, note_max=note_max, num_note=note_max-note_min+1,
                 num_velocity=num_velocity)
         extra_config = self._build_config_from_kwargs(save_name=save_name, path=path, dataset_name=dataset_name,
-                        ext_audio="wav", ext_midi="mid")
+                        ext_audio="wav", ext_midi="mid", goat_audio_columns=goat_audio_columns,
+                        goat_val_fraction=goat_val_fraction, goat_test_fraction=goat_test_fraction,
+                        goat_split_seed=goat_split_seed)
         
         # merge all configs
         config = {**extra_config}
@@ -117,13 +126,18 @@ class SnapExtractor:
         config["n_div_train"] = n_div_train
         config["n_div_val"] = n_div_val
         config["n_div_test"] = n_div_test
+        config["splits"] = splits
+        config["keep_val_npz"] = keep_val_npz
 
         _HFTMode(config)
 
     def extract_oaf(self, path: str, dataset_name: str="maps", extend_pedal: bool=True, sample_rate: int = 16000, feature: str = "mel",
                 min_frame_secs: float = 5.0, max_frame_secs: float = 20.0, min_pitch: int = 21, max_pitch: int = 108,
                 onset_length: int = 32, offset_length: int = 32, frame_rate: float = 31.25,
-                n_mels: int = 229, mel_n_fft: int = 2048, hop_length: int = 512, save_name:str="data/oaf"):
+                n_mels: int = 229, mel_n_fft: int = 2048, hop_length: int = 512, save_name:str="data/oaf",
+                goat_audio_columns: list[str] | str | None = None, goat_val_fraction: float = 0.1,
+                goat_test_fraction: float | None = None, goat_split_seed: int = 1234,
+                eval_only: bool = False):
         """
             Extract audio and MIDI files for the OAF mode.
 
@@ -172,7 +186,9 @@ class SnapExtractor:
                 path=path, sample_rate=sample_rate, feature=feature, min_frame_secs=min_frame_secs,
                 max_frame_secs=max_frame_secs, min_pitch=min_pitch, max_pitch=max_pitch,
                 onset_length=onset_length, offset_length=offset_length, frame_rate=frame_rate,
-                save_name=save_name)
+                save_name=save_name, goat_audio_columns=goat_audio_columns,
+                goat_val_fraction=goat_val_fraction, goat_test_fraction=goat_test_fraction,
+                goat_split_seed=goat_split_seed, eval_only=eval_only)
         config = {**extra_config}
         config["feature_params"] = feature_params
         _OAFMode(config)
@@ -180,7 +196,7 @@ class SnapExtractor:
     def extract_oafv2(self, path: str, dataset_name: str="maestro", extend_pedal: bool=True, \
         sample_rate: int = 16000, min_pitch: int = 21, max_pitch: int = 108, \
         onset_frame_length: int =1, offset_frame_length: int = 1, \
-        hop_length: int = 512, save_name:str="data/oafv2"):
+        hop_length: int = 512, save_name:str="data/oafv2", eval_only: bool = False):
         """
             Extract audio and MIDI files for the OAF mode.
 
@@ -215,14 +231,18 @@ class SnapExtractor:
         extra_config = self._build_config_from_kwargs(dataset_name=dataset_name, extend_pedal=extend_pedal, \
             ext_audio="wav", ext_midi="mid", path=path, sample_rate=sample_rate,\
             min_pitch=min_pitch, max_pitch=max_pitch, onset_frame_length=onset_frame_length, \
-            offset_frame_length=offset_frame_length, hop_length=hop_length, save_name=save_name)
+            offset_frame_length=offset_frame_length, hop_length=hop_length, save_name=save_name,
+            eval_only=eval_only)
         config = {**extra_config}
         _OAFV2Mode(config)
 
     def extract_kong(self, path: str, dataset_name: str="maps", sample_rate: int = 16000, window_size: float = 10.0,
             feature: str = "mel", hop_size: float = 1.0, min_pitch: int = 21, max_pitch: int = 108,
             frame_rate: int = 100, n_mels: int = 229, mel_n_fft: int = 2048, hop_length: int = 160,
-            extend_pedal: bool = True, save_name:str="data/kong"):
+            extend_pedal: bool = True, save_name:str="data/kong",
+            goat_audio_columns: list[str] | str | None = None, goat_val_fraction: float = 0.1,
+            goat_test_fraction: float | None = None, goat_split_seed: int = 1234,
+            eval_only: bool = False):
         """
             Extract audio and MIDI files for the Kong mode.
 
@@ -267,7 +287,9 @@ class SnapExtractor:
         extra_config = self._build_config_from_kwargs(dataset_name=dataset_name, ext_audio="wav", ext_midi="midi",
                 path=path, sample_rate=sample_rate, window_size=window_size, feature=feature,  hop_size=hop_size,
                 min_pitch=min_pitch, max_pitch=max_pitch, frame_rate=frame_rate, extend_pedal=extend_pedal,
-                save_name=save_name)
+                save_name=save_name, goat_audio_columns=goat_audio_columns,
+                goat_val_fraction=goat_val_fraction, goat_test_fraction=goat_test_fraction,
+                goat_split_seed=goat_split_seed, eval_only=eval_only)
         config = {**extra_config}
         config["feature_params"] = feature_params
         _KongMode(config)
@@ -323,7 +345,7 @@ class SnapExtractor:
     def extract_hpp(self, path: str, dataset_name: str="maestro", extend_pedal: bool=True, \
         sample_rate: int = 16000, min_pitch: int = 21, max_pitch: int = 108, \
         onset_frame_length: int =1, offset_frame_length: int = 1, \
-        hop_length: int = 320, save_name:str="data/hpp"):
+        hop_length: int = 320, save_name:str="data/hpp", eval_only: bool = False):
         """
             Extract audio and MIDI files for the HPP mode.
 
@@ -358,6 +380,7 @@ class SnapExtractor:
         extra_config = self._build_config_from_kwargs(dataset_name=dataset_name, extend_pedal=extend_pedal, \
             ext_audio="wav", ext_midi="mid", path=path, sample_rate=sample_rate,\
             min_pitch=min_pitch, max_pitch=max_pitch, onset_frame_length=onset_frame_length, \
-            offset_frame_length=offset_frame_length, hop_length=hop_length, save_name=save_name)
+            offset_frame_length=offset_frame_length, hop_length=hop_length, save_name=save_name,
+            eval_only=eval_only)
         config = {**extra_config}
         _HPPMode(config)

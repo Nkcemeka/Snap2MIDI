@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 from collections import defaultdict
 from tqdm import tqdm
-from .inference import load_hft
+from .inference import load_hft, mel_from_audio
 
 @torch.no_grad()
 def evaluate_test(config: dict):
@@ -23,15 +23,26 @@ def evaluate_test(config: dict):
     test_dir = config["test_path"]
     test_files = sorted(Path(test_dir).glob("*.npz"))
 
+    # The test set stores audio now, so the feature is rebuilt here from these
+    # params rather than read back from disk. That introduces a way to evaluate
+    # against a feature the extraction never produced -- pass mel_bins=229 to a
+    # 256-bin extraction and you would silently score a different spectrogram.
+    # n_bins is the model's input width, so requiring them equal pins it down.
+    if config["mel_bins"] != config["n_bins"]:
+        raise ValueError(
+            f"mel_bins ({config['mel_bins']}) must match the model's n_bins "
+            f"({config['n_bins']}); pass the same feature params extraction used.")
+
     trans_metrics = defaultdict(list)
     frame_metrics = defaultdict(list)
 
-    for file in tqdm(test_files, total=len(test_files)-1, desc="Extracting results...."):
-        if "dataset_feature.npz" in str(file):
-            continue
-
+    for file in tqdm(test_files, total=len(test_files), desc="Extracting results...."):
         data = np.load(file, allow_pickle=True)
-        feature = data['feature']
+
+        # Extraction stores the waveform now, so the whole-track feature is
+        # computed here. The collated division slab is a .npy and so is not
+        # picked up by this glob.
+        feature = mel_from_audio(torch.from_numpy(data['audio']), config).numpy()
         ref_notes = data['notes'] # dictionary of note events
         ref_frames = data['label_frames'].astype(int) # binary array of shape [num_frames, num_pitches]
 

@@ -4,8 +4,55 @@ from .hpp import HPPNet
 from .dataset_hpp import HPPDataset
 from torch.utils.data.dataloader import DataLoader
 from snap2midi.utils.train_utils import pl_logger
+from snap2midi.utils.augmentator import Augmentator
 from pathlib import Path
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
+
+
+class EpochUpdateCallback(pl.Callback):
+    """Tell the dataset which epoch it is, so augmentation is redrawn.
+
+    The augmentator seeds each excerpt from (track_id, excerpt_start, epoch).
+    Leave `epoch` at 0 and every pass applies the identical draw to the
+    identical excerpt, which is a fixed pre-corrupted dataset rather than
+    augmentation -- and it fails silently.
+
+    Setting the attribute here reaches the workers only because they re-fork
+    each epoch, which holds while `persistent_workers` is False. Turning it on
+    for speed would freeze the epoch with no error, so the coupling is checked
+    against the live dataloader rather than left as a comment.
+    """
+
+    def on_train_epoch_start(self, trainer, pl_module):
+        dataset = trainer.datamodule.train_dataset
+        if dataset.augmentator is not None:
+            loader = trainer.train_dataloader
+            if getattr(loader, "persistent_workers", False):
+                raise RuntimeError(
+                    "hpp augmentation needs persistent_workers=False: workers "
+                    "must re-fork each epoch to pick up the new epoch number. "
+                    "With persistent workers the augmentation silently freezes "
+                    "at the first epoch's draw.")
+        dataset.epoch = trainer.current_epoch
+
+
+def build_augmentator(config: dict):
+    """Construct the training augmentator, or None for a clean run."""
+    if not config.get("augment"):
+        return None
+    if not config.get("augment_asset_root"):
+        raise ValueError(
+            "augment=True requires augment_asset_root, the directory "
+            "holding room_ir/ and bg_noise/.")
+    return Augmentator(
+        sample_rate=config["sample_rate"],
+        asset_root=config["augment_asset_root"],
+        split="train",
+        manifest_dir=config.get("augment_manifest_dir"),
+        seed=config.get("seed", 1234),
+        reverb_level=config.get("reverb_level", "peak"),
+    )
+
 
 class HPPDataModule(pl.LightningDataModule):
     def __init__(self, config: dict):
@@ -27,7 +74,12 @@ class HPPDataModule(pl.LightningDataModule):
         val_path = f"{self.config["base_path"].rstrip('/')}/val/"
 
         assert Path(train_path).exists(), f"[TRAIN PATH]: {train_path} does not exist!"
-        self.train_dataset = HPPDataset(self.config, [f"{train_path}"])
+
+        # Train only. Augmenting validation would make the loss curve partly a
+        # measure of the augmentation draw rather than of the model, and the
+        # checkpoint selection monitors the validation loss.
+        self.train_dataset = HPPDataset(self.config, [f"{train_path}"],
+                                        augmentator=build_augmentator(self.config))
 
         # We don't necessarily need a validation dataset
         if Path(val_path).exists():
@@ -37,8 +89,10 @@ class HPPDataModule(pl.LightningDataModule):
 
     # Below are methods for setting up the dataloaders
     def train_dataloader(self):
+        # persistent_workers stays False on purpose -- see EpochUpdateCallback.
         return DataLoader(self.train_dataset, batch_size=self.config["batch_size"], \
-                        num_workers=self.config["num_workers"], shuffle=True)
+                        num_workers=self.config["num_workers"], shuffle=True, \
+                        persistent_workers=False)
     
     def val_dataloader(self):
         if self.val_dataset is None:
@@ -47,24 +101,100 @@ class HPPDataModule(pl.LightningDataModule):
         return DataLoader(self.val_dataset, batch_size=self.config["batch_size"], \
                           num_workers=self.config["num_workers"], shuffle=False)
 
-def main(config):
+
+
+def _init_weights_from(model, path: str) -> None:
+    """Weights only, strict. See Trainer.train_hpp(init_weights_from=...).
+
+    The MAESTRO checkpoint carries an optimizer at its decayed LR and a step
+    counter past any fine-tune budget; loading the state_dict alone leaves
+    configure_optimizers to build a fresh Adam and StepLR at step 0.
+    """
+    import torch
+    ckpt = torch.load(path, map_location="cpu", weights_only=False)
+    model.load_state_dict(ckpt["state_dict"], strict=True)
+    print(f"[init_weights_from]: loaded weights from {path} "
+          f"(trained {ckpt.get('global_step')} steps); optimizer, schedule "
+          "and step counter start fresh")
+
+def main(config, model_hook=None):
     # Create datasets 
     dm = HPPDataModule(config)
     model = HPPNet(config)
+    if config.get("init_weights_from") and config["resume_path"] is None:
+        _init_weights_from(model, config["init_weights_from"])
+    if model_hook is not None:
+        # Freezing / adapters: after the pretrained weights, before the
+        # optimizer is built; on a resume too, so the model already carries
+        # any adapter when Lightning restores the checkpoint.
+        model_hook(model)
 
     # create checkpoint callback
     base_path = config["base_path"].rstrip('/')
-    checkpoint_callback = ModelCheckpoint(
-        dirpath=config["save_dir"],
-        filename="hpp-step={step}",
-        every_n_train_steps=2000,
-        save_top_k=-1,  # save all checkpoints
-        save_last=True
-    )
+    val_flag = Path(f"{base_path}/val/").exists()
+    callbacks = [EpochUpdateCallback()]
+
+    if val_flag and config.get("checkpoint_every_n_steps"):
+        # Dump on a fixed stride and keep everything, so the model can be
+        # chosen afterwards on a decoded metric. This is what Wei et al.'s
+        # released train.py does -- model-{i}.pt every 2000 iterations, no
+        # ranking -- and it exists because val_loss/all is the wrong scalar to
+        # rank on: ~70% of it is frame loss, while the reported figure is note
+        # F1, which rides on the onset head at ~10% of the loss. Ranking on it
+        # deletes exactly the candidates a note-F1 sweep needs.
+        callbacks.append(ModelCheckpoint(
+            dirpath=config["save_dir"],
+            filename="hpp-{step}",
+            every_n_train_steps=config["checkpoint_every_n_steps"],
+            save_top_k=-1,
+            save_last=True
+        ))
+    elif val_flag:
+        # Rank on val_loss/all, the sum of the four head losses. val_total_loss
+        # would order runs identically -- for every model_type the subnet sums
+        # re-partition the same heads, so it is exactly 3x val_loss/all -- but
+        # this is the one whose value means something on its own.
+        #
+        # The metric stays out of `filename`: ModelCheckpoint interpolates the
+        # template, and the '/' in the key would be read as a directory
+        # separator. Putting the loss in the name needs a slash-free alias
+        # logged alongside it, the way transkun carries val_f1 next to val/f1.
+        callbacks.append(ModelCheckpoint(
+            dirpath=config["save_dir"],
+            filename="hpp-{step}",
+            monitor="val_loss/all",
+            mode="min",
+            save_top_k=5,
+            save_last=True
+        ))
+    else:
+        # No validation split, so there is nothing to rank against: fall back
+        # to dumping periodically and pick the checkpoint by hand.
+        callbacks.append(ModelCheckpoint(
+            dirpath=config["save_dir"],
+            filename="hpp-{step}",
+            every_n_train_steps=2000,
+            save_top_k=-1,
+            save_last=True
+        ))
+
+    if val_flag and config.get("early_stopping", True):
+        # HPPNet trains for 200k-500k steps and stops early; max_steps alone
+        # only supplies the ceiling. Patience counts validation checks rather
+        # than steps, so at check_val_every_n_epoch=2 these 25 checks span
+        # 12050 batches against a 10000-batch decay period -- about one 2% LR
+        # step of runway, which is less headroom than it looks. Late in a run,
+        # where val_loss/all moves less between checks than it does within
+        # them, this stops on noise; that is what early_stopping=False is for.
+        callbacks.append(EarlyStopping(
+            monitor="val_loss/all",
+            mode="min",
+            patience=25
+        ))
 
     # create trainer
     trainer = pl.Trainer(max_steps=config["iterations"], \
-        callbacks=[checkpoint_callback],
+        callbacks=callbacks,
         check_val_every_n_epoch=2,
         num_sanity_val_steps=0,
         num_nodes=config["num_nodes"],

@@ -8,6 +8,7 @@ import collections
 import pretty_midi
 import copy
 import torch
+from tqdm import tqdm
 pretty_midi.pretty_midi.MAX_TICK = 1e10
 
 class NoteSeg:
@@ -15,16 +16,16 @@ class NoteSeg:
         Returns note events and pedal
         events within a given time segment
     """
-    def __init__(self, midi_obj: pretty_midi.PrettyMIDI, start: float, end: float):
+    def __init__(self, midi_data: dict, start: float, end: float):
         """
             Initialize the NoteSeg object
 
             Args:
-                midi_obj (pretty_midi.PrettyMIDI): PrettyMIDI object
+                midi_data (dict): compact MIDI from parse_midi_compact
                 start (float): Start time of the segment
                 end (float): End time of the segment
         """
-        self.midi_obj = midi_obj
+        self.midi_data = midi_data
         self.start = start
         self.end = end
         self.new_midi = pretty_midi.PrettyMIDI()
@@ -37,30 +38,33 @@ class NoteSeg:
             Set the note events within the given time segment
             to the new_midi object
         """
-        for _, instrument in enumerate(self.midi_obj.instruments):
+        for instrument in self.midi_data["instruments"]:
             # create a new instrument
-            new_instrument = pretty_midi.Instrument(program=instrument.program, is_drum=instrument.is_drum,
-                                                     name=instrument.name)
-            
+            new_instrument = pretty_midi.Instrument(program=instrument["program"],
+                                                    is_drum=instrument["is_drum"],
+                                                    name=instrument["name"])
+
             # add the new instrument to the new midi object
             self.new_midi.instruments.append(new_instrument)
-            if not instrument.is_drum:
-                for note in instrument.notes:
-                    if note.start > self.end or note.end < self.start:
-                        continue 
-
-                    pitch = note.pitch
-                    velocity = note.velocity
-                    onset = note.start
-                    offset = note.end
-                    if note.end > self.end:
+            if not instrument["is_drum"]:
+                notes = instrument["notes"]
+                # Select the overlapping notes with numpy rather than walking
+                # every note in the performance. A 10 s window keeps a few dozen
+                # of the several thousand a MAESTRO file holds, and this runs
+                # once per training item.
+                if len(notes) == 0:
+                    continue
+                keep = (notes[:, 0] <= self.end) & (notes[:, 1] >= self.start)
+                for onset, offset, pitch, velocity in notes[keep]:
+                    if offset > self.end:
                         offset = self.end
                         mask_flag = True
                     else:
                         mask_flag = False
 
                     # create a new note
-                    new_note = pretty_midi.Note(start=onset, end=offset, pitch=pitch, velocity=velocity)
+                    new_note = pretty_midi.Note(start=onset, end=offset,
+                                                pitch=int(pitch), velocity=int(velocity))
 
                     # add the new note to the new instrument
                     new_instrument.notes.append(new_note)
@@ -68,38 +72,27 @@ class NoteSeg:
                     if mask_flag:
                         # This is to deal with the masking effect
                         self.chopped_notes.append(new_note)
-    
+
     def set_pedals(self):
         """
             Set the pedal events within the given time segment
             to the new_midi object
-        """
-        # Get the pedal on and off events first
-        pedal_events = []
-        pedal_on = None
 
-        for instrument in self.midi_obj.instruments:
-            for cc in instrument.control_changes:
-                if cc.number == 64:
-                    if cc.value >= 64 and pedal_on is None:
-                        pedal_on = cc.time
-                    elif cc.value < 64 and pedal_on is not None:
-                        pedal_events.append({
-                            'onset_time': pedal_on,
-                            'offset_time': cc.time
-                        })
-                        pedal_on = None
-        
+            The sustain on/off pairing is a state machine over the whole
+            performance and does not depend on the segment, so it is done once
+            at parse time; only the time filter belongs here.
+        """
+        pedal_events = self.midi_data["pedal_events"]
+        if len(pedal_events):
+            keep = ((pedal_events[:, 0] < self.end)
+                    & (pedal_events[:, 1] > self.start))
+            pedal_events = pedal_events[keep]
+
         # Now, what we do is to add the pedal events to the new midi object
         for instrument in self.new_midi.instruments:
             if not instrument.is_drum:
-                for pedal_event in pedal_events:
-                    if pedal_event['onset_time'] >= self.end or pedal_event['offset_time'] <= self.start:
-                        continue
-                    
-                    onset = pedal_event['onset_time']
-                    offset = pedal_event['offset_time']
-                    if pedal_event['offset_time'] > self.end:
+                for onset, offset in pedal_events:
+                    if offset > self.end:
                         offset = self.end
 
                     cc_on = pretty_midi.ControlChange(number=64, value=127, time=onset)
@@ -108,15 +101,72 @@ class NoteSeg:
                     instrument.control_changes.append(cc_off)
 
 
+def parse_midi_compact(midi_path: str) -> dict:
+    """Parse one MIDI file into the minimum this dataset actually reads.
+
+    Parsing a whole ~10 minute performance with pretty_midi to label one 10 s
+    excerpt costs more than the augmentation itself, and a cache of PrettyMIDI
+    objects (~8 MB each) does not fit. So only what NoteSeg reads is kept --
+    note tuples and paired sustain events -- as numpy arrays: ~40x smaller,
+    small enough to hold every file at once, and shared across forked workers
+    without being copied.
+
+    Args
+    ----
+        midi_path (str): path to the MIDI file
+
+    Returns
+    -------
+        dict: {"instruments": [{program, is_drum, name, notes}], "pedal_events"}
+            where notes is (N, 4) of [start, end, pitch, velocity] and
+            pedal_events is (K, 2) of [onset_time, offset_time].
+    """
+    midi = pretty_midi.PrettyMIDI(str(midi_path))
+
+    instruments = []
+    for instrument in midi.instruments:
+        notes = np.array([(n.start, n.end, n.pitch, n.velocity)
+                          for n in instrument.notes],
+                         dtype=np.float64).reshape(-1, 4)
+        instruments.append({
+            "program": instrument.program,
+            "is_drum": instrument.is_drum,
+            "name": instrument.name,
+            "notes": notes,
+        })
+
+    # Pair sustain on/off exactly as set_pedals used to, scanning instruments in
+    # order because the state carries across them.
+    pedal_events = []
+    pedal_on = None
+    for instrument in midi.instruments:
+        for cc in instrument.control_changes:
+            if cc.number == 64:
+                if cc.value >= 64 and pedal_on is None:
+                    pedal_on = cc.time
+                elif cc.value < 64 and pedal_on is not None:
+                    pedal_events.append((pedal_on, cc.time))
+                    pedal_on = None
+
+    return {
+        "instruments": instruments,
+        "pedal_events": np.array(pedal_events, dtype=np.float64).reshape(-1, 2),
+    }
+
+
 class KongDataset(Dataset):
-    def __init__(self, emb_path: str, extend_pedal: bool = True) -> None:
+    def __init__(self, emb_path: str, extend_pedal: bool = True,
+                 augmentator=None) -> None:
         """
             Instantiate dataset class.
-            
+
             Args
             ----
                 emb_path (str): path to npz files containing audio and feature data.
                 extend_pedal (bool): Whether to extend note offsets. Default is True.
+                augmentator (Augmentator | None): Applied to the excerpt's
+                    waveform before it is returned. Labels are derived from the
+                    MIDI and are untouched. Leave None for a clean baseline.
         """
         super().__init__()
         if emb_path is None:
@@ -124,6 +174,12 @@ class KongDataset(Dataset):
 
         self.data = [] # path to npz files
         self.extend_pedal_flag = extend_pedal
+        self.augmentator = augmentator
+
+        # Set by the epoch callback so augmentation is redrawn each epoch. Left
+        # at 0 the augmentator applies identical damage to identical excerpts
+        # for the whole run -- no crash, just a fixed pre-corrupted dataset.
+        self.epoch = 0
         assert Path(emb_path).exists(), f"{emb_path} does not exist."
         self.data.extend(sorted(Path(emb_path).rglob("*.h5")))
 
@@ -154,6 +210,16 @@ class KongDataset(Dataset):
                     # for test set, we use the whole file
                     midi_path = hf.attrs['midi_path']
                     self.seg_list.append((path, midi_path, 0))
+
+        # Parse every MIDI once, here in the parent process, rather than once
+        # per item inside __getitem__. See parse_midi_compact for why this is a
+        # store rather than a cache. Built before the dataloader forks, so the
+        # workers share these arrays instead of each holding a copy.
+        midi_paths = sorted({str(m) for _, m, _ in self.seg_list})
+        self.midi_store = {
+            p: parse_midi_compact(p)
+            for p in tqdm(midi_paths, desc=f"Parsing {self.split} MIDI")
+        }
         
         
 
@@ -181,11 +247,23 @@ class KongDataset(Dataset):
             # convert audio to float32
             audio = (audio / 32767.0).astype(np.float32)
 
+            sr = hf.attrs["sample_rate"]
+            if self.augmentator is not None:
+                # Seeded from the excerpt's identity rather than call order, so
+                # the same excerpt in the same epoch draws the same augmentation
+                # no matter the batch size, worker count or step. The labels
+                # below come from the MIDI and are unaffected.
+                audio = self.augmentator(
+                    audio,
+                    track_id=Path(path).stem,
+                    excerpt_start=start_sample / sr,
+                    epoch=self.epoch,
+                )
+
             item_dict['audio'] = audio
 
-            # load the midi file
-            midi = pretty_midi.PrettyMIDI(midi_path)
-            sr = hf.attrs["sample_rate"]
+            # the MIDI was parsed once at construction; see parse_midi_compact
+            midi = self.midi_store[str(midi_path)]
             start_time = start_sample / sr
             end_time = end_sample / sr
             label_dict  = self._get_label_roll(midi, start_time, end_time, self.frame_rate)
@@ -214,7 +292,7 @@ class KongDataset(Dataset):
             return 100
         
     
-    def _get_label_roll(self, midi: pretty_midi.PrettyMIDI, \
+    def _get_label_roll(self, midi: dict, \
                   start: float, end: float, frame_rate: int) -> dict:
         """
             Get the label and pedal rolls for a given audio segment.
@@ -222,7 +300,7 @@ class KongDataset(Dataset):
 
             Args
             ----
-                midi (pretty_midi.PrettyMIDI): PrettyMIDI object
+                midi (dict): compact MIDI from parse_midi_compact
                 start (float): Start time in seconds
                 end (float): End time in seconds
                 frame_rate (int): The frame rate of the piano roll
@@ -292,8 +370,18 @@ class KongDataset(Dataset):
         if self.extend_pedal_flag:
             new_midi = self.extend_pedal(new_midi)
 
+        # Notes outside [min_pitch, max_pitch] have no column in the roll and
+        # would index past its end. GAPS scores carry 124 notes at pitch 109
+        # (C#8, artificial harmonics notated at sounding pitch) across 7
+        # tracks; the extractor's _drop_out_of_range_notes never sees them
+        # because this dataset re-parses the MIDI at training time. Skipping
+        # is the same treatment the roll gives them implicitly: unscorable.
+        in_range = lambda n: self.min_pitch <= n.pitch <= self.max_pitch
+
         # set the mask roll for chopped notes
         for note in note_seg_obj.chopped_notes:
+            if not in_range(note):
+                continue
             pitch = note.pitch - self.min_pitch
             start_frame = int(round(frame_rate * (note.start - start)))
             end_frame = int(round(frame_rate * (note.end - start)))
@@ -303,6 +391,8 @@ class KongDataset(Dataset):
         for instrument in new_midi.instruments:
             if not instrument.is_drum:
                 for note in instrument.notes:
+                    if not in_range(note):
+                        continue
                     pitch = note.pitch - self.min_pitch
 
                     note_events.append([note.start, note.end, pitch, note.velocity])
@@ -672,27 +762,24 @@ class KongDataset(Dataset):
                 output (np.ndarray): Regressed roll
         """
         step = 1. / frame_rate
-        output = np.ones_like(input)
-        
+
         # Get the locations where the events (onsets/offsets) occur
         # since the initial regression matrix is 1 everwhere and an
         # onset/offset can occur whithin a frame resolution of 1/frame_rate
         # then 0.5 is enough to determine the locations of the events
-        locts = np.where(input < 0.5)[0] 
-        if len(locts) > 0:
-            for t in range(0, locts[0]):
-                output[t] = step * (t - locts[0]) - input[locts[0]]
-
-            for i in range(0, len(locts) - 1):
-                for t in range(locts[i], (locts[i] + locts[i + 1]) // 2):
-                    output[t] = step * (t - locts[i]) - input[locts[i]]
-
-                for t in range((locts[i] + locts[i + 1]) // 2, locts[i + 1]):
-                    # should be input[locts[i + 1]]
-                    output[t] = step * (t - locts[i + 1]) - input[locts[i + 1]]
-
-            for t in range(locts[-1], len(input)):
-                output[t] = step * (t - locts[-1]) - input[locts[-1]]
+        locts = np.where(input < 0.5)[0]
+        if len(locts) == 0:
+            output = np.ones_like(input)
+        else:
+            # Every frame takes its value from the nearest event, with the
+            # changeover at floor((a + b) / 2) between neighbouring events a and
+            # b -- frames before the first event and after the last one clamp to
+            # it. searchsorted over the midpoints assigns every frame at once;
+            # this runs once per pitch per roll, so it has to be vectorised.
+            frames = np.arange(len(input))
+            mids = (locts[:-1] + locts[1:]) // 2
+            nearest = locts[np.searchsorted(mids, frames, side="right")]
+            output = step * (frames - nearest) - input[nearest]
 
         output = np.clip(np.abs(output), 0., 0.05) * 20
         output = (1. - output)

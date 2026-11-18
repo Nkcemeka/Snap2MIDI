@@ -34,7 +34,8 @@ class _KongMode(_BaseMode):
         if self.path is None or not Path(self.path).exists():
             raise ValueError(f"Path {self.path} does not exist!")
         
-        if config["dataset_name"] not in ["maps", "maestro"]:
+        if config["dataset_name"] not in ["maps", "maestro", "goat", "smd",
+                                          "mds", "guitarset", "gaps", "gaps_ft"]:
             raise ValueError(f"Dataset {config['dataset_name']} not supported for Kong mode!")
         
         if config["frame_rate"] is None:
@@ -59,10 +60,9 @@ class _KongMode(_BaseMode):
         """
 
         # Implement the extraction logic here
-        if self.dataset_name == "maps":
-            train_files, val_files, test_files = self._get_maps_train_val_test()
-        elif self.dataset_name == "maestro":
-            train_files, val_files, test_files = self._get_maestro_train_val_test()
+        # _resolve_split honours eval_only and raises for an unknown dataset,
+        # so the old per-mode if/elif chain and its else-raise are redundant.
+        train_files, val_files, test_files = self._resolve_split()
         
         splits = ["train", "val", "test"]
         splits_data = [train_files, val_files, test_files]
@@ -83,7 +83,7 @@ class _KongMode(_BaseMode):
                 assert midi_file.exists(), f"{midi_file} does not exist"
 
                 if self.dataset_name != "slakh":
-                    store_path = f"{self.save_name}/{split}/{str(audio_file.stem)}.h5" 
+                    store_path = f"{self.save_name}/{split}/{self._store_stem(audio_file)}.h5" 
                 else:
                     # For slakh, we need to get the track name
                     # from the audio file path
@@ -105,8 +105,7 @@ class _KongMode(_BaseMode):
                     # how to get the start indices for each segment
                     # start_list = np.arange(0, audio.shape[-1] - window_samples + 1, hop_samples)
                     # convert audio to int16
-                    assert np.max(np.abs(audio)) <= 1.
-                    audio =  (audio * 32767.).astype(np.int16)
+                    audio = self._to_int16(audio)
 
                     with h5py.File(store_path, 'w') as hf:
                         hf.attrs.create('midi_path', str(midi_file))
@@ -117,8 +116,7 @@ class _KongMode(_BaseMode):
                 else:
                     # For the test set, we extract the whole file
                     # convert audio to int16
-                    assert np.max(np.abs(audio)) <= 1.
-                    audio =  (audio * 32767.).astype(np.int16)
+                    audio = self._to_int16(audio)
 
                     with h5py.File(store_path, 'w') as hf:
                         hf.attrs.create('midi_path', str(midi_file))
@@ -132,10 +130,15 @@ class _KongMode(_BaseMode):
                 if key == "feature_params":
                     for fkey, fvalue in value.items():
                         hf.attrs.create(fkey, fvalue)
+                elif value is None:
+                    # HDF5 has no native None (the goat_* options are None for
+                    # every other dataset); writing one raises.
+                    continue
+                elif isinstance(value, str):
+                    hf.attrs.create(key, value, dtype='S100')
+                elif isinstance(value, (list, tuple)):
+                    hf.attrs.create(key, [str(v) for v in value])
                 else:
-                    if isinstance(value, str):
-                        hf.attrs.create(key, value, dtype='S100')
-                    else:
-                        hf.attrs.create(key, value)
+                    hf.attrs.create(key, value)
 
         print(f"Extraction complete! Total files extracted: {len(train_files) + len(val_files) + len(test_files)}")

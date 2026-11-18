@@ -1,8 +1,16 @@
 argbind
 librosa
 mir_eval
-numpy
+# nnaudio2 requires numpy<2. audiomentations>=0.35 pulls numpy-rms/numpy-minmax,
+# which require numpy>=2, so the augmentation pipeline is pinned to the last
+# release compatible with that constraint. 0.34.1 is also contemporaneous with
+# Edwards et al., whose pipeline snap2midi/utils/augmentator.py reproduces.
+numpy<2
+audiomentations==0.34.1
 pretty_midi
+# Read by snap2midi/extractor and experiments/config.py; until now it was only
+# installed as a side effect of pytorch-lightning.
+pyyaml
 torch
 torchaudio
 tqdm
