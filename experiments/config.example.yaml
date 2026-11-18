@@ -1,0 +1,40 @@
+# Paths for the paper experiments. Copy this file to config.yaml (ignored by
+# git) and point every entry at your own copy. Every script in experiments/
+# reads its paths from here; none is hard-coded.
+
+datasets:
+  # Piano
+  maestro: /path/to/maestro-v3.0.0
+  studio_maestro: /path/to/studio-maestro
+  mds: /path/to/MDS
+  smd: /path/to/SMD
+  maps: /path/to/MAPS
+  # Guitar
+  gaps: /path/to/GAPS                # raw release: audio_tracks/<id>/
+  guitarset: /path/to/GuitarSet
+  goat: /path/to/GOAT
+
+# Written by experiments/data/prepare.py.
+prepared:
+  gaps: /path/to/gaps_44k            # prepare.py: {train,val,test}/<id>.wav + .midi
+  guitarset: /path/to/guitarset_eval # prepare.py: test/<id>.wav + .midi (for TransKun)
+  studio_maestro: /path/to/studio_maestro_paired  # prepare.py
+
+# Extracted feature stores, one directory per (model, dataset).
+stores: /path/to/stores
+
+# Augmentation assets (Edwards et al.): room_ir/ and bg_noise/.
+augmentation: /path/to/augmentation_assets
+
+# Checkpoints: the six pretrained models and the selected fine-tunes
+# (see checkpoints.md), and the directory fine-tuning runs write to.
+pretrained: /path/to/checkpoints/pretrained
+finetuned: /path/to/checkpoints/finetuned
+runs: /path/to/runs
+
+# Transcriptions and metrics written during evaluation. Can grow to a few GB.
+work: /path/to/work
+
+# Official TransKun repository at commit c5cb837, with experiments/transkun
+# applied. TransKun is trained and evaluated from there, not from snap2midi.
+transkun_repo: /path/to/Transkun
