@@ -198,6 +198,12 @@ def _init_weights_from(model, path: str) -> None:
 
 
 def main(config, model_hook=None):
+    base_path = config["base_path"].rstrip('/')
+    if config.get("feature_source") is None:
+        # Stores from the earlier extractor hold spectrograms under feature/.
+        config["feature_source"] = ("audio" if Path(f"{base_path}/audio").exists()
+                                    else "legacy_feature")
+
     # Create datasets and set seed
     pl.seed_everything(config["seed"], workers=True)
     dm = HFTDataModule(config)
@@ -225,70 +231,36 @@ def main(config, model_hook=None):
 
     save_dir = config["save_dir"]
 
-    # Two checkpoint callbacks, because selection and restart want opposite
-    # settings and one callback cannot be both.
-    base_path = config["base_path"].rstrip('/')
-    val_dir = "feature" if config.get("feature_source") == "legacy_feature" else "audio"
+    val_dir = "feature" if config["feature_source"] == "legacy_feature" else "audio"
     val_flag = Path(f"{base_path}/{val_dir}/val/").exists()
 
-    # (1) Selection. save_top_k=-1 keeps every candidate, so the ranking is not
-    # decided while the run is still going.
-    #
-    # monitor='valid_total_loss' is paper-faithful. Sony select on validation
-    # loss and nothing else -- `training/m_training.py` in
-    # github.com/sony/hFT-Transformer keeps the division with the lowest
-    # `epoch_loss_valid`, with no F1 anywhere in that comparison, and their
-    # released MAESTRO model is `model_016_003.pkl` = epoch 16, division 3.
-    #
-    # Ranking the kept candidates on decoded note F1 afterwards is better
-    # statistics -- the loss is a sum of eight terms dominated by a 128-class
-    # velocity CE, and at step 140,329 it was 55% frames, 25% velocity and only
-    # ~5% onset, so it is nearly uncorrelated with the number being reported.
-    # But that is a declared *deviation* from the paper rather than a
-    # correction, and it has to be described as one in any writeup. Keeping
-    # every candidate is what leaves both rules available.
-    #
-    # Disk: one checkpoint per validation, not per epoch. With
-    # val_check_interval=0.25 that is 4 per epoch, so a 20-epoch run leaves ~80
-    # files at ~64 MB, i.e. ~5 GB rather than the 1.3 GB a per-epoch reading
-    # suggests. Size the target filesystem for that.
+    # By default the five best by validation loss. With ckpt_every_n_steps,
+    # every validation's checkpoint is kept (so the model can be chosen
+    # afterwards on a decoded metric) and a separate rolling checkpoint plus
+    # last.ckpt is written on that stride, for resume="last" after a job is
+    # killed.
+    every_n_steps = config.get("ckpt_every_n_steps")
     if val_flag:
         select_ckpt = ModelCheckpoint(
             monitor='valid_total_loss',
             filename='hft-{epoch:02d}-{valid_total_loss:.4f}',
             dirpath=save_dir,
-            save_top_k=-1,
+            save_top_k=-1 if every_n_steps else 5,
             mode="min",
-            # Save after validation rather than at train-epoch end, so the
-            # monitored metric exists when the filename is interpolated.
+            # After validation, so the metric exists for the filename even
+            # with several validations per epoch.
             save_on_train_epoch_end=False,
         )
     else:
         select_ckpt = ModelCheckpoint(
             dirpath=save_dir,
-            save_top_k=-1,
+            save_top_k=-1 if every_n_steps else 1,
         )
 
-    # (2) Restart. Fires on a step count, so it cannot monitor anything: there
-    # is no validation metric at step 40000. monitor=None with save_top_k=1 is
-    # "latest wins" -- a single rolling file rather than one per interval -- and
-    # save_last mirrors it to last.ckpt, which is what _resolve_resume_path
-    # looks for. Only this callback sets save_last; two callbacks writing
-    # last.ckpt would each overwrite the other's.
-    #
-    # The interval defaults here rather than in Trainer.train_hft: it is about
-    # surviving a scheduler, not a training hyperparameter. The file is a
-    # rolling one, so disk does not grow. Pass ckpt_every_n_steps in the config
-    # to size it, or None to switch it off.
     callbacks = [select_ckpt, EpochUpdateCallback()]
     if config.get("plateau_per_validation"):
         callbacks.append(PlateauPerValidation())
-    # Lightning logs no learning rate unless this callback asks it to. The whole
-    # point of PlateauPerValidation above is to make ReduceLROnPlateau fire on
-    # the paper's cadence rather than once an epoch -- without an LR series
-    # there is no way to confirm from the logs that it ever fired.
     callbacks.append(LearningRateMonitor(logging_interval="step"))
-    every_n_steps = config.get("ckpt_every_n_steps", 2000)
     if every_n_steps:
         callbacks.insert(1, ModelCheckpoint(
             dirpath=save_dir,

@@ -59,7 +59,7 @@ SETTINGS = {
         sample_rate=16000, hop_length=320, bins_per_semitone=4,
         learning_rate_decay_rate=0.98, learning_rate_decay_steps=10000,
         clip_gradient_norm=3, seed=42, iterations=400_000,
-        checkpoint_every_n_steps=8_000, early_stopping=False),
+        checkpoint_every_n_steps=8_000),
     "kong": dict(
         batch_size=12, iterations=200_000, lr=5e-4,
         learning_rate_decay_rate=0.9, learning_rate_decay_steps=10_000,

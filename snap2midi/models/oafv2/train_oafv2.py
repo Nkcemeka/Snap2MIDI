@@ -75,10 +75,8 @@ class OAFV2DataModule(pl.LightningDataModule):
 
         assert Path(train_path).exists(), f"[TRAIN PATH]: {train_path} does not exist!"
 
-        # Train only. Augmenting validation would make the loss curve partly a
-        # measure of the augmentation draw rather than of the model, and the
-        # validation loss is the run's only live health signal now that
-        # checkpointing is unconditional.
+        # Train only: augmenting validation would make its loss partly a
+        # measure of the augmentation draw rather than of the model.
         self.train_dataset = OAFV2Dataset(self.config, [f"{train_path}"],
                                           augmentator=build_augmentator(self.config))
 
@@ -133,34 +131,42 @@ def main(config, model_hook=None):
     # create checkpoint callback
     base_path = config["base_path"].rstrip('/')
     val_flag = Path(f"{base_path}/val/").exists()
-    # Every checkpoint on a fixed stride, none deleted, and no "best" chosen:
-    # neither Hawthorne et al. nor the reference implementation selects a
-    # checkpoint (the reported model is the endpoint), and keeping the pool is
-    # what lets a note-F1 selection be done afterwards. The reference
-    # implementation checkpoints every 1,000 steps; the stride here is coarser
-    # only because 670k steps at 1,000 would be 214 GB.
-    checkpoint_callback = ModelCheckpoint(
-        dirpath=config["save_dir"],
-        filename='oafv2-{step}',
-        every_n_train_steps=config["ckpt_every_n_steps"],
-        save_top_k=-1,
-        save_last=True,
-    )
+    if config.get("ckpt_every_n_steps"):
+        # A checkpoint on a fixed stride, none deleted, so the model can be
+        # chosen afterwards on a decoded metric.
+        checkpoint_callback = ModelCheckpoint(
+            dirpath=config["save_dir"],
+            filename='oafv2-{step}',
+            every_n_train_steps=config["ckpt_every_n_steps"],
+            save_top_k=-1,
+            save_last=True,
+        )
+    elif val_flag:
+        checkpoint_callback = ModelCheckpoint(
+            monitor='val_total_loss',
+            filename='oafv2-{epoch:02d}-{val_total_loss:.2f}',
+            dirpath=config["save_dir"],
+            save_top_k=5,
+            mode="min"
+        )
+    else:
+        checkpoint_callback = ModelCheckpoint(
+            dirpath=config["save_dir"],
+        )
 
-    # Validation cadence is set in steps, not epochs. It is only a monitoring
-    # signal now -- checkpointing no longer depends on it -- so the interval is
-    # chosen on cost. check_val_every_n_epoch must be None for an interval
-    # longer than one epoch, which OAFv2's ~120-step epoch always is.
     trainer_kwargs = dict(
         max_steps=config["iterations"],
         callbacks=[checkpoint_callback, EpochUpdateCallback()],
+        check_val_every_n_epoch=1,
         num_sanity_val_steps=0,
         gradient_clip_algorithm="norm",
         gradient_clip_val=config["clip_gradient_norm"],
         num_nodes=config["num_nodes"],
         logger=pl_logger(config["logger_name"], project_name=config["experiment_name"]),
     )
-    if val_flag:
+    if val_flag and config.get("val_every_n_steps"):
+        # In steps rather than epochs; an interval longer than one epoch needs
+        # check_val_every_n_epoch=None.
         trainer_kwargs["val_check_interval"] = config["val_every_n_steps"]
         trainer_kwargs["check_val_every_n_epoch"] = None
 

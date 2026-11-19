@@ -37,12 +37,17 @@ def evaluate_test(config: dict):
     frame_metrics = defaultdict(list)
 
     for file in tqdm(test_files, total=len(test_files), desc="Extracting results...."):
+        if "dataset_feature.npz" in str(file):
+            continue
+
         data = np.load(file, allow_pickle=True)
 
-        # Extraction stores the waveform now, so the whole-track feature is
-        # computed here. The collated division slab is a .npy and so is not
-        # picked up by this glob.
-        feature = mel_from_audio(torch.from_numpy(data['audio']), config).numpy()
+        # The current extractor stores the waveform, so the feature is computed
+        # here; stores from the earlier extractor hold the feature itself.
+        if 'audio' in data.files:
+            feature = mel_from_audio(torch.from_numpy(data['audio']), config).numpy()
+        else:
+            feature = data['feature']
         ref_notes = data['notes'] # dictionary of note events
         ref_frames = data['label_frames'].astype(int) # binary array of shape [num_frames, num_pitches]
 

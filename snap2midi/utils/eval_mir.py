@@ -249,7 +249,7 @@ def multipitch_metrics_roll(pred: np.ndarray, gt: np.ndarray, \
 
 def note_extract(onset_roll: torch.Tensor, frame_roll: torch.Tensor, \
                  velocity_roll: torch.Tensor, onset_thresh: float=0.5, \
-                 frame_thresh: float=0.5, restart_on_reonset: bool=True) \
+                 frame_thresh: float=0.5, restart_on_reonset: bool=False) \
                  -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
         Extract notes from the piano roll.
@@ -262,19 +262,7 @@ def note_extract(onset_roll: torch.Tensor, frame_roll: torch.Tensor, \
             onset_thresh (float): Onset threshold.
             frame_thresh (float): Frame threshold.
             restart_on_reonset (bool): End a note when its pitch is struck
-                again. True is correct and matches Magenta, whose decoder the
-                MAESTRO paper's figures come from; see the comment in the loop
-                below for what goes wrong without it.
-
-                Pass False ONLY to reproduce a reference implementation that
-                lacks the rule, so that a model is scored the way its own paper
-                scores it. HPPNet is the case in hand: `hppnet/decoding.py`
-                derives the offset from the contiguous frame run with no restart,
-                and `evaluate.py` builds its reference notes the same way, so
-                Wei et al.'s published offset figures carry the defect. Scoring
-                our HPP port with the rule would put it on a different basis
-                from the paper it is compared against. Never set False for
-                OAFv2, whose reference is Magenta and does have the rule.
+                again, as Magenta's decoder does. Default False.
 
         Returns:
         --------
@@ -312,33 +300,10 @@ def note_extract(onset_roll: torch.Tensor, frame_roll: torch.Tensor, \
             offset += 1
             if offset == onsets.shape[0]:
                 break
-            # A fresh onset on a pitch that is already sounding ends this note
-            # and starts the next one. Without this the walk runs straight
-            # through the repeat and the note is reported far too long.
-            #
-            # It matters because of how a re-struck note looks after pedal
-            # extension. Hawthorne et al. 2018 extend a held note "until either
-            # sustain goes off or the same note is played again", so a repeat
-            # under sustain lands with the first note's end EXACTLY on the
-            # second note's start -- one frame, which the roll must spend on
-            # either the 1 (offset) or the 3 (onset). The onset wins, the
-            # ending marker is gone, and the walk never terminates there.
-            #
-            # Measured on data/oafv2_maps/test before this line existed: 39.6%
-            # of reference notes came out more than 100 ms too long, mean
-            # +0.81 s, worst +31 s. With it, they reproduce the durations in
-            # MAPS' own .txt files to a mean absolute error of 0.2 ms.
-            #
-            # This is the rule Magenta's own decoder has and jongwook's port --
-            # which the rest of this function follows -- does not:
-            #   note_seq.sequences_lib.pianoroll_to_note_sequence:
-            #     "pitch is already active, but if this is a new onset, we
-            #      should end the note and start a new one."
-            # The paper's numbers are produced with it, so scoring without it
-            # puts every offset-sensitive metric on a different basis from the
-            # figure it is being compared against. The sibling bug at the MIDI
-            # stage is jongwook/onsets-and-frames' own issue about midi.py's
-            # sustain handling; our _pedal_extend never had that one.
+            # With restart_on_reonset, a fresh onset on a pitch that is already
+            # sounding ends this note. After pedal extension a repeated note's
+            # offset falls on the next onset's frame, so without the rule the
+            # two are merged into one long note.
             if (restart_on_reonset
                     and onsets[offset, note].item()
                     and not onsets[offset - 1, note].item()):

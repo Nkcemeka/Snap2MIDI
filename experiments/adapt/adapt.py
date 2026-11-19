@@ -97,7 +97,7 @@ def settings(name, regime, full_rate, cfg, init, resume):
                     batch_size=4, sequence_length=327680, sample_rate=16000,
                     hop_length=320, bins_per_semitone=4, learning_rate_decay_rate=0.98,
                     learning_rate_decay_steps=10000, clip_gradient_norm=3, seed=42,
-                    checkpoint_every_n_steps=2000, early_stopping=False)
+                    checkpoint_every_n_steps=2000)
     if name == "kong":
         return dict(common, resume_path=resume, iterations=budget, batch_size=4, lr=lr,
                     learning_rate_decay_rate=0.9, learning_rate_decay_steps=10000,

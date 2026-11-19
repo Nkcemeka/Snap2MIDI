@@ -45,8 +45,8 @@ class Trainer:
                 max_frame_secs: float=20.0, n_mels: int=229, mel_n_fft: int=2048, \
                 hop_length: int=512, seed: int=1234, augment: bool=False, \
                 augment_asset_root: str|None=None, augment_manifest_dir: str|None=None, \
-                reverb_level: str="rms", ckpt_every_n_steps: int=2000, \
-                val_every_n_steps: int=2000, init_weights_from: str|None=None,
+                reverb_level: str="rms", ckpt_every_n_steps: int|None=None, \
+                val_every_n_steps: int|None=None, init_weights_from: str|None=None,
                 model_hook=None):
         """
             Train Onsets and Frames model with specified configuration.
@@ -129,17 +129,13 @@ class Trainer:
                     the excerpt's energy, as Kaldi's wav-reverberate does,
                     removing the loudness shortcut; "peak" reproduces
                     audiomentations and therefore Edwards. Default is "rms".
-                ckpt_every_n_steps (int):
-                    Save a checkpoint every this many optimiser steps. Every one
-                    is kept and none is marked "best": neither Hawthorne et al.
-                    nor the reference implementation selects a checkpoint, so the
-                    reported model is the endpoint and the rest of the pool
-                    exists only so a note-F1 ranking can be done offline.
-                    Default is 2000.
-                val_every_n_steps (int):
-                    Run validation every this many optimiser steps. Purely a
-                    monitoring signal -- checkpointing does not depend on it.
-                    Default is 2000.
+                ckpt_every_n_steps (int | None):
+                    Save a checkpoint every this many optimiser steps and keep
+                    all of them, so the model can be chosen afterwards. Default
+                    None keeps the five best by validation loss.
+                val_every_n_steps (int | None):
+                    Run validation every this many optimiser steps instead of
+                    once per epoch. Default None.
                 init_weights_from (str | None):
                     Lightning checkpoint whose *weights only* initialise the
                     model -- a fine-tune. Default None trains from scratch.
@@ -220,7 +216,7 @@ class Trainer:
         logger_name: str='csv', resume_path:str|None=None, \
         save_dir: str="./save_dir", augment: bool=False, augment_asset_root: str|None=None, \
         augment_manifest_dir: str|None=None, reverb_level: str="rms", \
-        ckpt_every_n_steps: int=5000, val_every_n_steps: int=500, \
+        ckpt_every_n_steps: int|None=None, val_every_n_steps: int|None=None, \
         init_weights_from: str|None=None, model_hook=None):
         """
             Train Onsets and Frames model version 2 with specified configuration.
@@ -293,17 +289,13 @@ class Trainer:
                     the excerpt's energy, as Kaldi's wav-reverberate does,
                     removing the loudness shortcut; "peak" reproduces
                     audiomentations and therefore Edwards. Default is "rms".
-                ckpt_every_n_steps (int):
-                    Save a checkpoint every this many optimiser steps. Every one
-                    is kept and none is marked "best": neither Hawthorne et al.
-                    nor the reference implementation selects a checkpoint, so the
-                    reported model is the endpoint and the rest of the pool
-                    exists only so a note-F1 ranking can be done offline.
-                    Default is 5000.
-                val_every_n_steps (int):
-                    Run validation every this many optimiser steps. Purely a
-                    monitoring signal -- checkpointing does not depend on it.
-                    Default is 500.
+                ckpt_every_n_steps (int | None):
+                    Save a checkpoint every this many optimiser steps and keep
+                    all of them, so the model can be chosen afterwards. Default
+                    None keeps the five best by validation loss.
+                val_every_n_steps (int | None):
+                    Run validation every this many optimiser steps instead of
+                    once per epoch. Default None.
                 init_weights_from (str | None):
                     Lightning checkpoint whose *weights only* initialise the
                     model -- a fine-tune. Default None trains from scratch.
@@ -585,10 +577,10 @@ class Trainer:
         logger_version: str|None=None, num_nodes: int=1, \
         devices: int|str="auto", strategy: str="auto", max_steps: int=-1, \
         fast_attention: bool=False, compile_model: bool=False, \
-        ckpt_every_n_steps: int|None=2000, \
+        ckpt_every_n_steps: int|None=None, \
         resume_path:str|None=None, save_dir: str="./save_dir", augment: bool=False, \
         augment_asset_root: str|None=None, augment_manifest_dir: str|None=None, \
-        feature_source: str="audio", reverb_level: str="rms", \
+        feature_source: str|None=None, reverb_level: str="rms", \
         init_weights_from: str|None=None, plateau_patience: int=10, \
         model_hook=None, \
         train_velocity: bool=True):
@@ -738,10 +730,10 @@ class Trainer:
                     process start, and recompiles whenever an input shape
                     changes -- notably the short last batch of an epoch.
                 ckpt_every_n_steps (int | None):
-                    How often to write the rolling restart checkpoint, in
-                    optimizer steps. Default 2000. None switches it off. This is
-                    what a job killed at its walltime falls back to, so it caps
-                    the work lost at each handoff of a chained run.
+                    When set, keep a checkpoint at every validation and write a
+                    rolling restart checkpoint (and last.ckpt) every this many
+                    optimizer steps, which caps the work lost when a job is
+                    killed. Default None keeps the five best by validation loss.
                 resume_path (str | None):
                     Whether to resume training from a checkpoint. Default is None. If
                     None, it trains from scratch.
@@ -761,9 +753,11 @@ class Trainer:
                     does by default, removing the loudness shortcut. "peak"
                     reproduces audiomentations, and therefore Edwards.
                 feature_source (str):
-                    "audio" (default) reads the waveform slab and computes the
-                    log-mel per item; required for augmentation. "legacy_feature"
-                    reads an npz spectrogram store (no augmentation).
+                    "audio" reads the waveform slab and computes the log-mel
+                    per item; required for augmentation. "legacy_feature" reads
+                    an npz spectrogram store written by the earlier extractor
+                    (no augmentation). Default None picks whichever the store
+                    at base_path holds.
                 init_weights_from (str | None):
                     Lightning checkpoint whose *weights only* initialise the
                     model -- a fine-tune. Default None trains from scratch.
@@ -936,7 +930,7 @@ class Trainer:
         )
         transkun_train.main(config)
     
-    def train_hpp(self, base_path: str="./data/hpp/", model_type: str="sp", batch_size=4, lr=0.0006, iterations: int=1000000,\
+    def train_hpp(self, base_path: str="./data/hpp/", model_type: str="sp", batch_size=4, lr=0.0006, iterations: int=600000,\
         sequence_length: int=327680, seed: int=42, sample_rate: int=16000, \
         bins_per_semitone: int = 4, hop_length: int=320, learning_rate_decay_rate=0.98, \
         learning_rate_decay_steps=10000, clip_gradient_norm=3, \
@@ -944,7 +938,7 @@ class Trainer:
         logger_name: str='csv', resume_path:str|None=None, \
         save_dir: str="./save_dir", augment: bool=False, augment_asset_root: str|None=None, \
         augment_manifest_dir: str|None=None, reverb_level: str="rms", \
-        checkpoint_every_n_steps: int|None=None, early_stopping: bool=True, \
+        checkpoint_every_n_steps: int=2000, \
         init_weights_from: str|None=None, model_hook=None):
         """
             Train HPP with specified configuration.
@@ -958,15 +952,9 @@ class Trainer:
                 batch_size (int):
                     Batch size for training/validation. Default is 4.
                 iterations (int):
-                    Ceiling on Lightning's global_step, not on batches. HPPNet
-                    optimises each subnet separately, so global_step advances
-                    once per subnet per batch: 'sp' trains two subnets and
-                    therefore consumes two steps a batch, while the
-                    single-subnet variants consume one. The default of 1000000
-                    is 500k batches under 'sp', the top of the 200k-500k range
-                    the paper reports; the variants override it to 500000 to
-                    land on the same batch count. Early stopping is what ends
-                    a run, so this is a ceiling rather than a target.
+                    Number of iterations for training (Lightning's global_step,
+                    which 'sp' advances twice per batch, once per subnet).
+                    Default is 600000.
                 lr (float):
                     Learning rate for the optimizer. Default is 0.0006.
                 sample_rate (int):
@@ -1007,17 +995,9 @@ class Trainer:
                     the excerpt's energy, as Kaldi's wav-reverberate does,
                     removing the loudness shortcut; "peak" reproduces
                     audiomentations and therefore Edwards. Default is "rms".
-                checkpoint_every_n_steps (int | None):
-                    Dump a checkpoint every this many global steps and keep all
-                    of them, instead of ranking on val_loss/all and keeping the
-                    best five. None keeps the ranked behaviour. Use this when
-                    the model is to be picked afterwards on a decoded metric:
-                    val_loss/all is ~70% frame loss, so ranking on it throws
-                    away the candidates a note-F1 selection would want to see.
-                early_stopping (bool):
-                    Stop once val_loss/all has not improved for 25 validation
-                    checks. Default is True. False trains to a fixed budget,
-                    which is what the reference implementation does.
+                checkpoint_every_n_steps (int):
+                    Save a checkpoint every this many global steps, keeping all
+                    of them. Default is 2000.
                 init_weights_from (str | None):
                     Lightning checkpoint whose *weights only* initialise the
                     model -- a fine-tune. Default None trains from scratch.
@@ -1069,7 +1049,6 @@ class Trainer:
             augment_manifest_dir=augment_manifest_dir,
             reverb_level=reverb_level,
             checkpoint_every_n_steps=checkpoint_every_n_steps,
-            early_stopping=early_stopping,
             init_weights_from=init_weights_from,
         )
 
@@ -1079,31 +1058,27 @@ class Trainer:
             config["frame_subnet_heads"]= ['frame', 'offset', 'velocity']
             config["fixed_dilation"] = 24
             config["model_size"] = 128
-        # The variants below train one subnet, so global_step advances once per
-        # batch rather than twice as it does under 'sp'. Halving the ceiling
-        # keeps every variant on the same 500k batches; these overrides shadow
-        # whatever the caller passed for iterations and batch_size.
         elif model_type == "base":
             config["SUBNETS_TO_TRAIN"] = ['onset_subnet']
             config["onset_subnet_heads"] = ['onset', 'frame', 'offset', 'velocity']
             config["frame_subnet_heads"]= []
             config["batch_size"] = 4
             config["model_size"] = 128
-            config["iterations"] = 500000
+            config["iterations"] = 600000
         elif model_type == "tiny":
             config["SUBNETS_TO_TRAIN"] = ['onset_subnet']
             config["onset_subnet_heads"] = ['onset', 'frame', 'offset', 'velocity']
             config["frame_subnet_heads"]= []
             config["batch_size"] = 4
             config["model_size"] = 64
-            config["iterations"] = 500000
+            config["iterations"] = 600000
         elif model_type == "ultra-tiny":
             config["SUBNETS_TO_TRAIN"] = ['onset_subnet']
             config["onset_subnet_heads"] = ['onset', 'frame', 'offset', 'velocity']
             config["frame_subnet_heads"]= []
             config["batch_size"] = 4
             config["model_size"] = 48
-            config["iterations"] = 500000
+            config["iterations"] = 600000
         else:
             raise RuntimeError(f"Mode type: {model_type} not supported!")
         hpp_train.main(config, model_hook=model_hook)
