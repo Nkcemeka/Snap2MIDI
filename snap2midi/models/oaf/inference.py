@@ -86,8 +86,12 @@ def inference(config: dict):
         onset, offset = int_preds[each]/frame_rate
         vel = vels[each]
         
+        # A note-on with velocity 0 is a note-off in the MIDI spec, so a note
+        # written with it disappears when the file is read back. Clamp to the
+        # quietest audible velocity instead of silently losing the note.
         note = pretty_midi.Note(
-                velocity=int(vel), pitch=int(pitch), start=onset, end=offset
+                velocity=max(1, min(127, int(vel))), pitch=int(pitch),
+                start=onset, end=offset
         )
         piano.notes.append(note)
     

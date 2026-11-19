@@ -1,0 +1,698 @@
+{
+ "hft_full": {
+  "model": "hft",
+  "regime": "full",
+  "operating_point": "threshold",
+  "n_checkpoints": 32,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "hft-epoch=05-valid_total_loss=0.0960.ckpt",
+   "value": 0.5,
+   "gaps_val_f1": 91.74253912361624
+  },
+  "joint": {
+   "checkpoint": "hft-epoch=02-valid_total_loss=0.0951.ckpt",
+   "value": 0.4,
+   "gaps_val_f1": 91.90431653241575
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  }
+ },
+ "hft_lora": {
+  "model": "hft",
+  "regime": "lora",
+  "operating_point": "threshold",
+  "n_checkpoints": 32,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "hft-epoch=02-valid_total_loss=0.0938.ckpt",
+   "value": 0.5,
+   "gaps_val_f1": 91.64729324426783
+  },
+  "joint": {
+   "checkpoint": "hft-epoch=02-valid_total_loss=0.0938.ckpt",
+   "value": 0.4,
+   "gaps_val_f1": 91.69131606635372
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  }
+ },
+ "hft_lora_fullrate": {
+  "model": "hft",
+  "regime": "lora_fullrate",
+  "operating_point": "threshold",
+  "n_checkpoints": 32,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "hft-epoch=06-valid_total_loss=0.0946.ckpt",
+   "value": 0.5,
+   "gaps_val_f1": 91.41582244225185
+  },
+  "joint": {
+   "checkpoint": "hft-epoch=06-valid_total_loss=0.0946.ckpt",
+   "value": 0.45,
+   "gaps_val_f1": 91.44789602806512
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  },
+  "budget_cap": {
+   "lora_series": "hft_lora",
+   "lora_last_checkpoint": "hft-epoch=07-valid_total_loss=0.0939-v3.ckpt",
+   "step": 182144,
+   "excluded": 0
+  }
+ },
+ "hft_lora_temporal": {
+  "model": "hft",
+  "regime": "lora_temporal",
+  "operating_point": "threshold",
+  "n_checkpoints": 32,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "hft-epoch=04-valid_total_loss=0.1093-v1.ckpt",
+   "value": 0.5,
+   "gaps_val_f1": 89.88441137259134
+  },
+  "joint": {
+   "checkpoint": "hft-epoch=04-valid_total_loss=0.1093-v1.ckpt",
+   "value": 0.5,
+   "gaps_val_f1": 89.88441137259134
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  }
+ },
+ "hft_probe": {
+  "model": "hft",
+  "regime": "probe",
+  "operating_point": "threshold",
+  "n_checkpoints": 32,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "hft-epoch=06-valid_total_loss=0.1249.ckpt",
+   "value": 0.5,
+   "gaps_val_f1": 85.3719891297853
+  },
+  "joint": {
+   "checkpoint": "hft-epoch=06-valid_total_loss=0.1249.ckpt",
+   "value": 0.5,
+   "gaps_val_f1": 85.3719891297853
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  }
+ },
+ "hpp_full": {
+  "model": "hpp",
+  "regime": "full",
+  "operating_point": "threshold",
+  "n_checkpoints": 30,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "hpp-step=40000.ckpt",
+   "value": 0.4,
+   "gaps_val_f1": 91.27136963046287
+  },
+  "joint": {
+   "checkpoint": "hpp-step=40000.ckpt",
+   "value": 0.3,
+   "gaps_val_f1": 91.4597742967724
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  }
+ },
+ "hpp_lora": {
+  "model": "hpp",
+  "regime": "lora",
+  "operating_point": "threshold",
+  "n_checkpoints": 30,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "hpp-step=10000.ckpt",
+   "value": 0.4,
+   "gaps_val_f1": 91.18278855148826
+  },
+  "joint": {
+   "checkpoint": "hpp-step=10000.ckpt",
+   "value": 0.4,
+   "gaps_val_f1": 91.18278855148826
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  }
+ },
+ "hpp_lora_fullrate": {
+  "model": "hpp",
+  "regime": "lora_fullrate",
+  "operating_point": "threshold",
+  "n_checkpoints": 30,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "hpp-step=38000.ckpt",
+   "value": 0.4,
+   "gaps_val_f1": 90.98048186544061
+  },
+  "joint": {
+   "checkpoint": "hpp-step=38000.ckpt",
+   "value": 0.35,
+   "gaps_val_f1": 91.07271941139743
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  },
+  "budget_cap": {
+   "lora_series": "hpp_lora",
+   "lora_last_checkpoint": "hpp-step=60000.ckpt",
+   "step": 60000,
+   "excluded": 0
+  }
+ },
+ "hpp_lora_temporal": {
+  "model": "hpp",
+  "regime": "lora_temporal",
+  "operating_point": "threshold",
+  "n_checkpoints": 30,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "hpp-step=28000.ckpt",
+   "value": 0.4,
+   "gaps_val_f1": 89.99989917823727
+  },
+  "joint": {
+   "checkpoint": "hpp-step=28000.ckpt",
+   "value": 0.35,
+   "gaps_val_f1": 90.10663235918412
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  }
+ },
+ "hpp_probe": {
+  "model": "hpp",
+  "regime": "probe",
+  "operating_point": "threshold",
+  "n_checkpoints": 30,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "hpp-step=54000.ckpt",
+   "value": 0.4,
+   "gaps_val_f1": 83.31314388433303
+  },
+  "joint": {
+   "checkpoint": "hpp-step=56000.ckpt",
+   "value": 0.35,
+   "gaps_val_f1": 83.36240138489299
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  }
+ },
+ "kong_full": {
+  "model": "kong",
+  "regime": "full",
+  "operating_point": "threshold",
+  "n_checkpoints": 20,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "kong-step=50000.ckpt",
+   "value": 0.3,
+   "gaps_val_f1": 90.91781387914932
+  },
+  "joint": {
+   "checkpoint": "kong-step=50000.ckpt",
+   "value": 0.35,
+   "gaps_val_f1": 90.9836357655633
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  }
+ },
+ "kong_lora": {
+  "model": "kong",
+  "regime": "lora",
+  "operating_point": "threshold",
+  "n_checkpoints": 30,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "kong-step=85000.ckpt",
+   "value": 0.3,
+   "gaps_val_f1": 90.86655087066433
+  },
+  "joint": {
+   "checkpoint": "kong-step=85000.ckpt",
+   "value": 0.3,
+   "gaps_val_f1": 90.86655087066433
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  }
+ },
+ "kong_lora_fullrate": {
+  "model": "kong",
+  "regime": "lora_fullrate",
+  "operating_point": "threshold",
+  "n_checkpoints": 30,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "kong-step=140000.ckpt",
+   "value": 0.3,
+   "gaps_val_f1": 90.278247564435
+  },
+  "joint": {
+   "checkpoint": "kong-step=145000.ckpt",
+   "value": 0.35,
+   "gaps_val_f1": 90.35859858703277
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  },
+  "budget_cap": {
+   "lora_series": "kong_lora",
+   "lora_last_checkpoint": "kong-step=150000.ckpt",
+   "step": 150000,
+   "excluded": 10
+  }
+ },
+ "kong_lora_temporal": {
+  "model": "kong",
+  "regime": "lora_temporal",
+  "operating_point": "threshold",
+  "n_checkpoints": 20,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "kong-step=55000.ckpt",
+   "value": 0.3,
+   "gaps_val_f1": 89.52779871830641
+  },
+  "joint": {
+   "checkpoint": "kong-step=55000.ckpt",
+   "value": 0.35,
+   "gaps_val_f1": 89.58796845761822
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  }
+ },
+ "kong_probe": {
+  "model": "kong",
+  "regime": "probe",
+  "operating_point": "threshold",
+  "n_checkpoints": 20,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "kong-step=90000.ckpt",
+   "value": 0.3,
+   "gaps_val_f1": 82.565999750465
+  },
+  "joint": {
+   "checkpoint": "kong-step=75000.ckpt",
+   "value": 0.4,
+   "gaps_val_f1": 83.5388685696796
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  }
+ },
+ "oaf_full": {
+  "model": "oaf",
+  "regime": "full",
+  "operating_point": "threshold",
+  "n_checkpoints": 40,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "oaf-step=40000.ckpt",
+   "value": 0.5,
+   "gaps_val_f1": 84.56246078962558
+  },
+  "joint": {
+   "checkpoint": "oaf-step=16000.ckpt",
+   "value": 0.2,
+   "gaps_val_f1": 88.40414247379806
+  },
+  "argmax_is_last_checkpoint": {
+   "native": true,
+   "joint": false
+  }
+ },
+ "oaf_lora": {
+  "model": "oaf",
+  "regime": "lora",
+  "operating_point": "threshold",
+  "n_checkpoints": 40,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "oaf-step=6000.ckpt",
+   "value": 0.5,
+   "gaps_val_f1": 86.02951218990381
+  },
+  "joint": {
+   "checkpoint": "oaf-step=24000.ckpt",
+   "value": 0.2,
+   "gaps_val_f1": 88.8205767786249
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  }
+ },
+ "oaf_lora_fullrate": {
+  "model": "oaf",
+  "regime": "lora_fullrate",
+  "operating_point": "threshold",
+  "n_checkpoints": 40,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "oaf-step=38000.ckpt",
+   "value": 0.5,
+   "gaps_val_f1": 83.59224980288522
+  },
+  "joint": {
+   "checkpoint": "oaf-step=35000.ckpt",
+   "value": 0.2,
+   "gaps_val_f1": 87.71046518902521
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  },
+  "budget_cap": {
+   "lora_series": "oaf_lora",
+   "lora_last_checkpoint": "oaf-step=40000.ckpt",
+   "step": 40000,
+   "excluded": 0
+  }
+ },
+ "oaf_lora_temporal": {
+  "model": "oaf",
+  "regime": "lora_temporal",
+  "operating_point": "threshold",
+  "n_checkpoints": 40,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "oaf-step=8000.ckpt",
+   "value": 0.5,
+   "gaps_val_f1": 84.62818913840765
+  },
+  "joint": {
+   "checkpoint": "oaf-step=36000.ckpt",
+   "value": 0.2,
+   "gaps_val_f1": 87.3781961440323
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  }
+ },
+ "oaf_probe": {
+  "model": "oaf",
+  "regime": "probe",
+  "operating_point": "threshold",
+  "n_checkpoints": 40,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "oaf-step=14000.ckpt",
+   "value": 0.5,
+   "gaps_val_f1": 74.04510328898546
+  },
+  "joint": {
+   "checkpoint": "oaf-step=40000.ckpt",
+   "value": 0.15,
+   "gaps_val_f1": 84.27984473380256
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": true
+  }
+ },
+ "oafv2_full": {
+  "model": "oafv2",
+  "regime": "full",
+  "operating_point": "threshold",
+  "n_checkpoints": 40,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "oafv2-step=26000.ckpt",
+   "value": 0.5,
+   "gaps_val_f1": 87.68293301951977
+  },
+  "joint": {
+   "checkpoint": "oafv2-step=26000.ckpt",
+   "value": 0.2,
+   "gaps_val_f1": 89.92366069216357
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  }
+ },
+ "oafv2_lora": {
+  "model": "oafv2",
+  "regime": "lora",
+  "operating_point": "threshold",
+  "n_checkpoints": 40,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "oafv2-step=9000.ckpt",
+   "value": 0.5,
+   "gaps_val_f1": 86.94534577548174
+  },
+  "joint": {
+   "checkpoint": "oafv2-step=9000.ckpt",
+   "value": 0.2,
+   "gaps_val_f1": 89.46160654087318
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  }
+ },
+ "oafv2_lora_fullrate": {
+  "model": "oafv2",
+  "regime": "lora_fullrate",
+  "operating_point": "threshold",
+  "n_checkpoints": 40,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "oafv2-step=33000.ckpt",
+   "value": 0.5,
+   "gaps_val_f1": 85.50627986592482
+  },
+  "joint": {
+   "checkpoint": "oafv2-step=40000.ckpt",
+   "value": 0.2,
+   "gaps_val_f1": 88.73842836119488
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": true
+  },
+  "budget_cap": {
+   "lora_series": "oafv2_lora",
+   "lora_last_checkpoint": "oafv2-step=40000.ckpt",
+   "step": 40000,
+   "excluded": 0
+  }
+ },
+ "oafv2_lora_temporal": {
+  "model": "oafv2",
+  "regime": "lora_temporal",
+  "operating_point": "threshold",
+  "n_checkpoints": 40,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "oafv2-step=18000.ckpt",
+   "value": 0.5,
+   "gaps_val_f1": 85.30679285055027
+  },
+  "joint": {
+   "checkpoint": "oafv2-step=6000.ckpt",
+   "value": 0.2,
+   "gaps_val_f1": 88.41329391760395
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  }
+ },
+ "oafv2_probe": {
+  "model": "oafv2",
+  "regime": "probe",
+  "operating_point": "threshold",
+  "n_checkpoints": 40,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "oafv2-step=32000.ckpt",
+   "value": 0.5,
+   "gaps_val_f1": 77.4576668392813
+  },
+  "joint": {
+   "checkpoint": "oafv2-step=18000.ckpt",
+   "value": 0.15,
+   "gaps_val_f1": 86.39301223079522
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  }
+ },
+ "transkun_full": {
+  "model": "transkun",
+  "regime": "full",
+  "operating_point": "note_bias",
+  "n_checkpoints": 21,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "ckpt.pt.ep008.pt",
+   "value": 0.0,
+   "gaps_val_f1": 90.43607537747462
+  },
+  "joint": {
+   "checkpoint": "ckpt.pt.ep012.pt",
+   "value": 1.25,
+   "gaps_val_f1": 91.32612216524201
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  }
+ },
+ "transkun_lora": {
+  "model": "transkun",
+  "regime": "lora",
+  "operating_point": "note_bias",
+  "n_checkpoints": 21,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "ckpt.pt.ep013.pt",
+   "value": 0.0,
+   "gaps_val_f1": 90.63511735630851
+  },
+  "joint": {
+   "checkpoint": "ckpt.pt.ep013.pt",
+   "value": 0.75,
+   "gaps_val_f1": 91.28339260961027
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  }
+ },
+ "transkun_lora_fullrate": {
+  "model": "transkun",
+  "regime": "lora_fullrate",
+  "operating_point": "note_bias",
+  "n_checkpoints": 21,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "ckpt.pt.ep011.pt",
+   "value": 0.0,
+   "gaps_val_f1": 87.55823828791223
+  },
+  "joint": {
+   "checkpoint": "ckpt.pt.ep011.pt",
+   "value": 1.25,
+   "gaps_val_f1": 89.70645651438039
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  },
+  "budget_cap": {
+   "lora_series": "transkun_lora",
+   "lora_last_checkpoint": "ckpt.pt.ep020.pt",
+   "step": 20,
+   "excluded": 0
+  }
+ },
+ "transkun_lora_temporal": {
+  "model": "transkun",
+  "regime": "lora_temporal",
+  "operating_point": "note_bias",
+  "n_checkpoints": 21,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "ckpt.pt.ep010.pt",
+   "value": 0.0,
+   "gaps_val_f1": 86.67949671969927
+  },
+  "joint": {
+   "checkpoint": "ckpt.pt.ep015.pt",
+   "value": 1.0,
+   "gaps_val_f1": 88.69943370563342
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  }
+ },
+ "transkun_probe": {
+  "model": "transkun",
+  "regime": "probe",
+  "operating_point": "note_bias",
+  "n_checkpoints": 21,
+  "n_pieces": 27,
+  "rule": "argmax mean note F1 on GAPS validation (27 tracks)",
+  "native": {
+   "checkpoint": "ckpt.pt.ep000.pt",
+   "value": 0.0,
+   "gaps_val_f1": 78.80110465767652
+  },
+  "joint": {
+   "checkpoint": "ckpt.pt.ep002.pt",
+   "value": 1.0,
+   "gaps_val_f1": 80.48596307145644
+  },
+  "argmax_is_last_checkpoint": {
+   "native": false,
+   "joint": false
+  }
+ }
+}

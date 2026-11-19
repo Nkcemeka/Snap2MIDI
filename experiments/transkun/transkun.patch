@@ -1,0 +1,801 @@
+diff --git a/scripts/createDatasetGAPS.py b/scripts/createDatasetGAPS.py
+new file mode 100644
+index 0000000..16c9a89
+--- /dev/null
++++ b/scripts/createDatasetGAPS.py
+@@ -0,0 +1,126 @@
++#!/usr/bin/env python
++"""Build train/val/test pickles for GAPS, in the format transkun.train expects.
++
++`createDatasetMaestro.py` reads MAESTRO's CSV for its splits. GAPS has no such
++CSV in this layout, so the split is taken from the directory a file sits in:
++
++    <root>/train/<piece>.wav + .midi
++    <root>/val/...
++    <root>/test/...
++
++That layout is also what `Data.createDataset` needs -- it globs '*/*.midi', so
++files must be exactly one directory below the root, and each .midi must have a
++same-named .wav sibling. `relPath` is stored relative to <root>, so training
++takes `--datasetPath <root>` and the paths resolve.
++
++Two checks the authors' code does not do, both of which fail silently otherwise:
++
++  * **Sample rate.** Nothing in the training path resamples and nothing asserts:
++    `Data.fetchData` reads the wav and passes its fs straight through. A 48 kHz
++    file trains as if it were 44.1 kHz -- every pitch and duration wrong by 8.8%,
++    with no error. This is why `trial/maestro_44k.csv` exists at all (MAESTRO
++    2017/2018 are 48 kHz and were dropped rather than resampled). GAPS audio
++    comes from YouTube, which is 48 kHz almost without exception, so this is the
++    single most likely way to waste a training run.
++  * **Extension.** `createDataset` globs '*.midi' only. A tree of '.mid' files
++    produces an empty, valid-looking pickle.
++
++Pedal extension is off: guitar has no sustain pedal, so it would be a no-op, but
++saying so explicitly keeps the intent in the record.
++
++    scripts/createDatasetGAPS.py /path/to/gaps_44k \
++                                 /path/to/gaps_meta
++"""
++
++import argparse
++import os
++import pickle
++import sys
++from collections import Counter
++from pathlib import Path
++
++from transkun import Data
++
++SPLITS = ("train", "val", "test")
++EXPECTED_FS = 44100
++
++
++def main():
++    ap = argparse.ArgumentParser()
++    ap.add_argument("datasetPath", help="root holding train/ val/ test/")
++    ap.add_argument("outputPath")
++    ap.add_argument("--extendPedal", action="store_true",
++                    help="off by default: guitar has no sustain pedal")
++    ap.add_argument("--expectedFs", type=int, default=EXPECTED_FS)
++    args = ap.parse_args()
++
++    root = Path(args.datasetPath)
++
++    stray = list(root.rglob("*/*.mid"))
++    if stray:
++        sys.exit(f"{len(stray)} '.mid' files found (e.g. {stray[0].name}). "
++                 "Data.createDataset globs '*.midi' only and would skip them "
++                 "silently -- rename before building.")
++
++    dataset = Data.createDataset(str(root), extendPedal=args.extendPedal)
++    if not dataset:
++        sys.exit(f"no '<root>/*/*.midi' pairs under {root}")
++
++    bad = [(e["relPath"], e["fs"]) for e in dataset if e["fs"] != args.expectedFs]
++    if bad:
++        seen = Counter(fs for _, fs in bad)
++        for relPath, fs in bad[:5]:
++            print(f"  {fs} Hz  {relPath}", file=sys.stderr)
++        sys.exit(f"{len(bad)} of {len(dataset)} files are not {args.expectedFs} Hz "
++                 f"({dict(seen)}). Nothing resamples and nothing asserts -- these "
++                 "would train at the wrong rate. Convert first.")
++
++    # Data.createDataset emits relPath/nSamples/fs/nChannel/notes, but
++    # DatasetMaestro reads "duration" (:468) and "audio_filename" (:497, joined
++    # to datasetPath at :500). Neither exists in that output -- only
++    # createDatasetMaestroCSV adds them, from MAESTRO's CSV. Derive both here,
++    # or training dies with KeyError: 'duration' the moment it loads the pickle.
++    #
++    # audio_filename is also what the augmentator hashes for its per-track seed
++    # (Data.py:935), so it must be the stable relative path, not an absolute one.
++    for e in dataset:
++        e["duration"] = e["nSamples"] / e["fs"]
++        e["audio_filename"] = str(Path(e["relPath"]).with_suffix(".wav"))
++
++    # f-measure sidecar from prepareGAPS.py: GAPS' own per-track score-alignment
++    # quality. Nothing is filtered on it -- it is attached so results can be
++    # sliced by alignment quality later without rebuilding the pickles.
++    fmPath = root / "fmeasure.csv"
++    fm = {}
++    if fmPath.exists():
++        import csv
++        for r in csv.DictReader(open(fmPath)):
++            try:
++                fm[r["stem"]] = float(r["f_measure"])
++            except (KeyError, ValueError):
++                pass
++        print(f"attaching f-measure for {len(fm)} tracks from {fmPath.name}")
++    for e in dataset:
++        e["f_measure"] = fm.get(Path(e["relPath"]).stem)
++
++    bySplit = {s: [] for s in SPLITS}
++    for e in dataset:
++        split = Path(e["relPath"]).parts[0]
++        if split not in bySplit:
++            sys.exit(f"{e['relPath']}: top-level dir {split!r} is not one of {SPLITS}")
++        bySplit[split].append(e)
++
++    os.makedirs(args.outputPath, exist_ok=True)
++    for split, items in bySplit.items():
++        hours = sum(e["nSamples"] / e["fs"] for e in items) / 3600
++        # DatasetMaestroIterator: ceil((duration + chunkSize)/hopSize) per file
++        import math
++        chunks = sum(math.ceil((e["nSamples"] / e["fs"] + 16) / 8) for e in items)
++        print(f"{split:6s} {len(items):4d} files  {hours:6.2f} h  {chunks:6d} chunks "
++              f"({chunks // 12} steps/epoch at batch 12)")
++        with open(os.path.join(args.outputPath, f"{split}.pickle"), "wb") as f:
++            pickle.dump(items, f, pickle.HIGHEST_PROTOCOL)
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/scripts/train_regime.py b/scripts/train_regime.py
+new file mode 100644
+index 0000000..18fffee
+--- /dev/null
++++ b/scripts/train_regime.py
+@@ -0,0 +1,139 @@
++#!/usr/bin/env python
++"""Run transkun.train under an adaptation regime: probe, lora or lora_temporal.
++
++The TransKun arm of the guitar-transfer study's adaptation experiment (the
++full regime is plain transkun.train). It runs
++this repository's own (patched) transkun/train.py unchanged -- every argument
++is passed straight through -- and changes one thing: how the model is rebuilt
++from the checkpoint file before training starts.
++
++WHERE THE REGIME GOES. train.py always ends its setup with load_checkpoint(),
++on a fresh run (right after --initWeightsFrom wrote the pretrained weights into
++ckpt.pt) and on a resume alike, and that function builds the model, the
++AdaBelief optimizer and the OneCycle schedule. It is replaced here by a version
++that applies regimes.apply(model, <regime>, TRANSKUN_ROLES) between
++building the model and building the optimizer:
++
++  fresh run (ckpt nIter == 0)  load the plain pretrained weights strictly, apply
++                               the regime, build a FRESH optimizer and OneCycle
++                               from --max_lr / --weight_decay / --nIter exactly as
++                               initializeCheckpoint does
++  resume (nIter > 0)           apply the regime first (the saved state dict holds
++                               adapter keys), load strictly, then restore the
++                               optimizer and schedule states
++
++Two differences from the stock load_checkpoint, both deliberate: loading is
++strict (the stock one drops mismatched keys silently), and a fresh run does not
++restore the optimizer state saved by the init branch, which was built for the
++full parameter set.
++
++The patch must be in place before transkun.train is executed: train.py binds
++load_checkpoint with `from .TrainUtil import *` at import time, so the function
++is replaced on transkun.TrainUtil first and train.py is then run as __main__.
++Only --nProcess 1 is supported (a spawned worker would re-import unpatched).
++
++The regimes are those of Snap2MIDI's experiments/adapt/regimes.py. REGIME and
++LoRA settings come from the environment:
++    TK_REGIME=probe|lora|lora_temporal   TK_LORA_RANK=8   TK_LORA_ALPHA=16
++    SNAP2MIDI_ROOT=<path to the Snap2MIDI checkout>
++
++Usage (from the patched Transkun root):
++    TK_REGIME=lora python scripts/train_regime.py <out>/ckpt.pt --nProcess 1 \\
++        --initWeightsFrom <maestro.pt> ... (the usual transkun.train arguments)
++
++After a LoRA run, fold the adapters before scoring:
++    python <Snap2MIDI>/experiments/adapt/regimes.py merge ckpt.pt.ep003.pt merged/ckpt.pt.ep003.pt
++"""
++
++import argparse
++import functools
++import os
++import runpy
++import sys
++from pathlib import Path
++
++ROOT = Path(__file__).resolve().parents[1]
++sys.path.insert(0, str(ROOT))
++sys.path.insert(0, str(Path(os.environ.get("SNAP2MIDI_ROOT", str(ROOT.parent / "Snap2MIDI")))
++                    / "experiments" / "adapt"))
++
++import torch  # noqa: E402
++import torch.utils.checkpoint as _ckpt  # noqa: E402
++
++import regimes as fr  # noqa: E402
++import transkun.TrainUtil as TU  # noqa: E402
++
++REGIME = os.environ.get("TK_REGIME", "")
++if REGIME not in ("full", "probe", "lora", "lora_temporal"):
++    raise SystemExit(f"TK_REGIME={REGIME!r}; set it to full, probe, lora or lora_temporal")
++RANK = int(os.environ.get("TK_LORA_RANK", "8"))
++ALPHA = float(os.environ.get("TK_LORA_ALPHA", "16"))
++
++# TransKun checkpoints every encoder layer in train mode with the reentrant
++# default, which drops every gradient inside a layer whose input does not
++# require grad: the lora_temporal case, where all that precedes the encoder is
++# frozen (the first lora_temporal run trained its readouts only). The
++# non-reentrant variant gives the same gradients and keeps them then. The
++# backbone looks the function up at forward time, so replacing it here is enough.
++_ckpt.checkpoint = functools.partial(_ckpt.checkpoint, use_reentrant=False)
++
++# The three hyperparameters the fresh optimizer needs, with train.py's defaults.
++_hp = argparse.ArgumentParser(add_help=False)
++_hp.add_argument("--max_lr", type=float, default=2e-4)
++_hp.add_argument("--weight_decay", type=float, default=1e-4)
++_hp.add_argument("--nIter", type=int, default=180000)
++_hp.add_argument("--nProcess", type=int, default=1)
++HP, _ = _hp.parse_known_args()
++
++
++def build_optimizer(model):
++    """initializeCheckpoint's optimizer and schedule, over the regime's model."""
++    optimizer = TU.optim.AdaBelief(TU.getOptimizerGroup(model), HP.max_lr,
++                                   weight_decouple=True, eps=1e-8,
++                                   weight_decay=HP.weight_decay, rectify=True)
++    schedule = torch.optim.lr_scheduler.OneCycleLR(
++        optimizer, HP.max_lr, HP.nIter, pct_start=0.05, cycle_momentum=False,
++        final_div_factor=2, div_factor=20)
++    return optimizer, schedule
++
++
++def load_checkpoint_regime(Model, conf, filename, device, strict=False):
++    checkpoint = torch.load(filename, map_location="cpu", weights_only=False)
++    model = Model(conf=conf)
++    state = checkpoint["state_dict"]
++    adapted = any(".parametrizations." in k for k in state)
++    if adapted:
++        fr.apply(model, REGIME, fr.TRANSKUN_ROLES, rank=RANK, alpha=ALPHA)
++        model.load_state_dict(state, strict=True)
++    else:
++        model.load_state_dict(state, strict=True)
++        fr.apply(model, REGIME, fr.TRANSKUN_ROLES, rank=RANK, alpha=ALPHA)
++    fr.harden_frozen_norms(model)
++    # The adapters are created on the CPU, so the move comes after apply().
++    model = model.to(device)
++
++    optimizer, schedule = build_optimizer(model)
++    fresh = int(checkpoint.get("nIter", 0)) == 0
++    if not fresh:
++        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
++        schedule.load_state_dict(checkpoint["lr_scheduler_state_dict"])
++    print(f"[regime] transkun {REGIME}: {'fresh optimizer' if fresh else 'resumed'} "
++          f"at epoch {checkpoint['epoch']} nIter {checkpoint['nIter']} "
++          f"(max_lr {HP.max_lr:g}, nIter {HP.nIter})", flush=True)
++    return (checkpoint["epoch"], checkpoint["nIter"], model, checkpoint["loss_tracker"],
++            checkpoint["best_state_dict"], optimizer, schedule)
++
++
++TU.load_checkpoint = load_checkpoint_regime
++
++
++if __name__ == "__main__":
++    if HP.nProcess != 1:
++        raise SystemExit("train_regime.py supports --nProcess 1 only")
++    train_py = (ROOT / "transkun" / "train.py").read_text()
++    for flag in ("--initWeightsFrom", "--maxEpochs", "--saveEveryEpoch"):
++        if flag not in train_py:
++            raise SystemExit(f"transkun/train.py lacks {flag}: apply Snap2MIDI's "
++                             "experiments/transkun/transkun.patch first")
++    sys.argv = [str(ROOT / "transkun" / "train.py")] + sys.argv[1:]
++    runpy.run_module("transkun.train", run_name="__main__", alter_sys=True)
+diff --git a/transkun/AugmentatorEdwards.py b/transkun/AugmentatorEdwards.py
+new file mode 100644
+index 0000000..aaff9b9
+--- /dev/null
++++ b/transkun/AugmentatorEdwards.py
+@@ -0,0 +1,176 @@
++"""Adapter exposing Snap2MIDI's augmentation pipeline to this repository.
++
++The point of this module is comparability. Snap2MIDI benchmarks several
++transcription architectures against each other and holds augmentation fixed
++across all of them, so that a difference between two models cannot be a
++difference in the nuisance audio they happened to be trained on. Running
++Transkun's own `AugmentatorAudiomentations` here would break that: it is a
++different stage list with different ranges and different asset pools.
++
++So this imports the very same `Augmentator` object Snap2MIDI trains with,
++rather than reimplementing it. A copy would be one refactor away from silently
++diverging, and a silent divergence here invalidates every cross-model number
++the augmentation was supposed to protect.
++
++Three things have to line up for two repositories to draw *identical*
++augmentation, not merely to run the same code:
++
++  1. The pipeline itself -- solved by importing it.
++  2. The call convention. Snap2MIDI augments each channel separately with one
++     shared seed, so both channels hear the same room. Reproduced in `__call__`.
++  3. The seed inputs. `Augmentator` derives its seed by hashing
++     `(seed, track_id, excerpt_start, epoch)`, so a track_id that differs by so
++     much as a directory prefix yields a completely unrelated draw. Snap2MIDI
++     stores an `audio_filename` relative to its own working directory and
++     pointing at its resampled copy; this repository stores the MAESTRO-relative
++     path from the metadata CSV. `normalizeTrackId` reduces both to the bare
++     stem, which is unique within MAESTRO and identical from either side.
++
++Note the third point cuts both ways: Snap2MIDI must normalize too. See
++`normalizeTrackId` for the one-line change required there.
++
++Requires Snap2MIDI to be importable (`pip install -e /path/to/Snap2MIDI`).
++"""
++
++from pathlib import Path
++
++import numpy as np
++
++
++TRACK_ID_MODES = ("stem", "path")
++
++
++def normalizeTrackId(audioFilename, mode="stem"):
++    """Reduce a stored audio path to the key used to seed its augmentation.
++
++    Which reduction is correct depends on what this run is being compared
++    against, because Snap2MIDI is not internally consistent here:
++
++      "stem"  what oaf, oafv2, hpp and kong use. MAESTRO basenames are unique
++              across years, so the stem identifies a recording without
++              depending on directory layout, resampled copies or working
++              directory -- which is why it ports cleanly to this repository.
++              Use this to compare against those four.
++
++      "path"  the raw stored `audio_filename`, which is what Snap2MIDI's own
++              transkun passes. Matching it from here also requires the stored
++              string to be identical, and Snap2MIDI's points at its resampled
++              copy relative to its own working directory, so this generally
++              needs --augmentTrackIdPrefix as well. Use this only to reproduce
++              an existing Snap2MIDI transkun run.
++
++    (Snap2MIDI's hft is a third convention, `hft|split|div`. That one is
++    deliberate and documented: its audio lives in a concatenated slab with no
++    track names. It cannot be matched from here and does not need to be -- its
++    excerpt boundaries differ anyway.)
++    """
++    if mode not in TRACK_ID_MODES:
++        raise ValueError("mode must be one of {}, got {!r}".format(TRACK_ID_MODES, mode))
++    if mode == "path":
++        return audioFilename
++    return Path(audioFilename).stem
++
++
++class EdwardsAugmentator:
++    """Snap2MIDI's `Augmentator`, called the way Snap2MIDI calls it.
++
++    Deliberately *not* a drop-in for `AugmentatorAudiomentations`: that class
++    takes only the waveform, which is exactly the interface that makes seeding
++    from excerpt identity impossible. `DatasetMaestroIterator` therefore checks
++    for this type and passes the extra arguments.
++    """
++
++    def __init__(self,
++                 sampleRate=44100,
++                 assetRoot=None,
++                 manifestDir=None,
++                 split="train",
++                 seed=0,
++                 reverbLevel="rms",
++                 trackIdMode="stem",
++                 trackIdPrefix=""):
++
++        try:
++            from snap2midi.utils.augmentator import Augmentator
++        except ImportError as e:
++            raise ImportError(
++                "EdwardsAugmentator needs the Snap2MIDI package, which holds the "
++                "shared augmentation pipeline. Install it with "
++                "`pip install -e /path/to/Snap2MIDI`.") from e
++
++        if assetRoot is None:
++            raise ValueError(
++                "assetRoot is required: it is the directory holding room_ir/ and "
++                "bg_noise/, the impulse response and background noise pools.")
++
++        self.augmentator = Augmentator(
++            sample_rate=sampleRate,
++            asset_root=assetRoot,
++            split=split,
++            manifest_dir=manifestDir,
++            seed=seed,
++            reverb_level=reverbLevel,
++        )
++        self.reverbLevel = reverbLevel
++        self.trackIdMode = trackIdMode
++        self.trackIdPrefix = trackIdPrefix
++        self._stereoChecked = False
++
++    def trackIdFor(self, audioFilename):
++        """The seeding key for one recording.
++
++        The augmentator owns this rather than the dataset, because it is part
++        of the seeding convention and has to travel with the pipeline it is
++        being matched to.
++        """
++        return self.trackIdPrefix + normalizeTrackId(audioFilename, self.trackIdMode)
++
++    def _checkStereoSafe(self, audioSlice):
++        """Reject reverb_level="peak" on multi-channel audio.
++
++        Under "peak" the reverb stage normalizes its output to a fixed peak,
++        and here that happens once per channel. Two channels then receive
++        unrelated gains, so the stereo balance is re-rolled at random on every
++        excerpt the stage fires on. "rms" restores each channel to its own
++        original energy and leaves the balance alone.
++
++        MAESTRO is stereo, so this fires for anyone who overrides the default.
++        Checked once: channel count is a property of the dataset, not of the
++        excerpt. Mirrors `_check_stereo_safe` in Snap2MIDI's transkun dataset.
++        """
++        if self._stereoChecked:
++            return
++        self._stereoChecked = True
++        if audioSlice.shape[-1] > 1 and self.reverbLevel == "peak":
++            raise ValueError(
++                "this dataset is {}-channel and reverbLevel='peak' normalizes "
++                "each channel separately, which randomizes the stereo balance "
++                "on every excerpt the reverb fires on. Pass reverbLevel='rms' "
++                "for multi-channel audio.".format(audioSlice.shape[-1]))
++
++    def __call__(self, audioSlice, trackId, excerptStart, epoch):
++        """Augment one excerpt of shape (nSample, nChannel).
++
++        Every channel is handed the identical (trackId, excerptStart, epoch),
++        so all of them draw the same room, the same equalizer curves and the
++        same pitch shift -- one microphone pair in one space, rather than a
++        different space per channel.
++        """
++        self._checkStereoSafe(audioSlice)
++
++        return np.stack(
++            [
++                self.augmentator(
++                    audioSlice[:, channel],
++                    track_id=trackId,
++                    excerpt_start=excerptStart,
++                    epoch=epoch,
++                )
++                for channel in range(audioSlice.shape[-1])
++            ],
++            axis=-1,
++        )
++
++    def __repr__(self):
++        return "EdwardsAugmentator({!r}, reverbLevel={!r})".format(
++            self.augmentator, self.reverbLevel)
+diff --git a/transkun/Data.py b/transkun/Data.py
+index d20db39..05f50bc 100644
+--- a/transkun/Data.py
++++ b/transkun/Data.py
+@@ -266,7 +266,7 @@ def createDataset(datasetPath, extendPedal = True):
+         assert(len(midiFile.instruments) == 1)
+ 
+         inst = midiFile.instruments[0]
+-        events = parseEventAll(inst.notes, inst.control_changes, extendPedal)
++        events = parseEventAll(inst.notes, inst.control_changes, extendSustainPedal=extendPedal)
+ 
+         t2 = time.time()
+         # also read meta info from the wav file
+@@ -852,7 +852,8 @@ class DatasetMaestroIterator(torch.utils.data.Dataset):
+                  notesStrictlyContained=True,
+                  ditheringFrames = True,
+                  seed = 1234,
+-                 augmentator = None):
++                 augmentator = None,
++                 epoch = 0):
+         super().__init__()
+         self.dataset = dataset
+         self.hopSizeInSecond = hopSizeInSecond
+@@ -862,6 +863,11 @@ class DatasetMaestroIterator(torch.utils.data.Dataset):
+         self.ditheringFrames = ditheringFrames
+         self.augmentator = augmentator
+ 
++        # Only used to seed the augmentation, which is redrawn every epoch. A
++        # fresh iterator is built per epoch anyway, so the epoch is passed in
++        # rather than tracked here.
++        self.epoch = epoch
++
+ 
+         randGen = random.Random(seed)
+ 
+@@ -906,8 +912,8 @@ class DatasetMaestroIterator(torch.utils.data.Dataset):
+         idx, begin,end = self.chunksAll[idx]
+         # print(begin, end)
+         notes, audioSlice, fs = self.dataset.fetchData(idx,
+-                               begin, 
+-                               end, 
++                               begin,
++                               end,
+                                audioNormalize = self.audioNormalize,
+                                notesStrictlyContained = self.notesStrictlyContained)
+ 
+@@ -915,7 +921,22 @@ class DatasetMaestroIterator(torch.utils.data.Dataset):
+         # print(notes[0])
+         # print(notes[-1])
+         if self.augmentator is not None:
+-            audioSlice = self.augmentator(audioSlice)
++            from .AugmentatorEdwards import EdwardsAugmentator
++
++            if isinstance(self.augmentator, EdwardsAugmentator):
++                # Seeded from the excerpt's identity rather than from call
++                # order, which is what lets another architecture -- with a
++                # different batch size and step count -- receive the identical
++                # augmentation of this same excerpt. Passing only the waveform
++                # would fall back to the ambient RNG and give that up.
++                audioSlice = self.augmentator(
++                        audioSlice,
++                        trackId = self.augmentator.trackIdFor(
++                            self.dataset.data[idx]["audio_filename"]),
++                        excerptStart = begin,
++                        epoch = self.epoch)
++            else:
++                audioSlice = self.augmentator(audioSlice)
+ 
+ 
+         sample = {"notes": notes,
+diff --git a/transkun/ModelTransformer.py b/transkun/ModelTransformer.py
+index 532e8cb..fd11fbd 100644
+--- a/transkun/ModelTransformer.py
++++ b/transkun/ModelTransformer.py
+@@ -356,25 +356,30 @@ class TransKun(torch.nn.Module):
+         nEstTotal = 0
+         nGTTotal = 0 
+         nCorrectTotal = 0
++        nCorrectOnsetTotal = 0
+           
+         for est, gt in zip(notesEstBatch, notesBatch):
+             metrics = compareTranscription(est, gt) 
+             p,r,f, _ = metrics["note+offset"]
++            pOn, rOn, fOn, _ = metrics["note"]
+ 
+             nGT= metrics["nGT"]
+             nEst= metrics["nEst"]
+ 
+             nCorrect = r*nGT
++            nCorrectOnset = rOn*nGT
+ 
+             nEstTotal+= nEst
+             nGTTotal+= nGT
+             nCorrectTotal += nCorrect
++            nCorrectOnsetTotal += nCorrectOnset
+ 
+ 
+         stats = {
+                 "nGT": nGTTotal,
+                 "nEst": nEstTotal, 
+                 "nCorrect": nCorrectTotal,
++                "nCorrectOnset": nCorrectOnsetTotal,
+                 }
+ 
+         return stats
+diff --git a/transkun/TrainUtil.py b/transkun/TrainUtil.py
+index d058804..392c700 100644
+--- a/transkun/TrainUtil.py
++++ b/transkun/TrainUtil.py
+@@ -223,7 +223,8 @@ def computeMetrics(model, x, notes):
+     nEst = stats["nEst"]
+     nCorrect = stats["nCorrect"]
+     
+-    result = {"logProb": logp, "length": length, "nGT": nGT, "nEst":nEst, "nCorrect":nCorrect}
++    result = {"logProb": logp, "length": length, "nGT": nGT, "nEst":nEst, "nCorrect":nCorrect,
++              "nCorrectOnset": stats["nCorrectOnset"]}
+ 
+     return result
+ 
+@@ -250,17 +251,19 @@ def doValidation(model, dataset, parallel, device):
+     nGT = sum([e["nGT"] for e in resultAll])
+     nEst = sum([e["nEst"] for e in resultAll])
+     nCorrect= sum([e["nCorrect"] for e in resultAll])
++    nCorrectOnset = sum([e["nCorrectOnset"] for e in resultAll])
+ 
+     if parallel:
+         import torch.distributed as dist
+ 
+-        result = torch.Tensor([logPAgg, lengthAgg, nGT,nEst, nCorrect]).cuda()
++        result = torch.Tensor([logPAgg, lengthAgg, nGT,nEst, nCorrect, nCorrectOnset]).cuda()
+         dist.all_reduce(result.data)
+         logPAgg = float(result[0])
+         lengthAgg = float(result[1])
+         nGT = float(result[2])
+         nEst= float(result[3])
+         nCorrect= float(result[4])
++        nCorrectOnset= float(result[5])
+ 
+      
+     meanNLLPerSecond = -logPAgg/lengthAgg
+@@ -269,6 +272,12 @@ def doValidation(model, dataset, parallel, device):
+     f1 = 2* precision*recall/(precision+recall)              
+ 
+ 
+-    return {"meanNLL": meanNLLPerSecond, "precision": precision, "recall":recall, "f1": f1}
++    precisionOnset = nCorrectOnset/nEst
++    recallOnset = nCorrectOnset/nGT
++    f1Onset = 2*precisionOnset*recallOnset/(precisionOnset+recallOnset)
++
++    return {"meanNLL": meanNLLPerSecond, "precision": precision, "recall":recall, "f1": f1,
++            "precisionOnset": precisionOnset, "recallOnset": recallOnset, "f1Onset": f1Onset,
++            "nGT": nGT, "nEst": nEst, "estOverGT": nEst/nGT}
+ 
+ 
+diff --git a/transkun/train.py b/transkun/train.py
+index 9121b92..8c99b41 100644
+--- a/transkun/train.py
++++ b/transkun/train.py
+@@ -32,11 +32,11 @@ def train(workerId, nWorker, filename, runSeed, args):
+ 
+     device = torch.device("cuda:"+str(workerId%torch.cuda.device_count()) if torch.cuda.is_available() else "cpu")
+     torch.cuda.set_device(device)
+-    random.seed(workerId+int(time.time()))
++    random.seed(workerId + runSeed)
+     # torch.autograd.set_detect_anomaly(True)
+-    np.random.seed(workerId + int(time.time()))
+-    torch.manual_seed(workerId+int(time.time()))
+-    torch.cuda.manual_seed(workerId+ int(time.time()))
++    np.random.seed(workerId + runSeed)
++    torch.manual_seed(workerId + runSeed)
++    torch.cuda.manual_seed(workerId + runSeed)
+ 
+     if args.allow_tf32:
+         torch.backends.cuda.matmul.allow_tf32 = True 
+@@ -64,6 +64,16 @@ def train(workerId, nWorker, filename, runSeed, args):
+                                 conf = conf)
+ 
+ 
++            if args.initWeightsFrom is not None:
++                print("loading pretrained weights from", args.initWeightsFrom)
++                pre = torch.load(args.initWeightsFrom, map_location=device, weights_only=False)
++                sd = pre["best_state_dict"] if "best_state_dict" in pre else pre["state_dict"]
++                # strict=True: load_state_dict_tolerant would drop shape
++                # mismatches silently and leave those heads random.
++                model.load_state_dict(sd, strict=True)
++                best_state_dict = copy.deepcopy(model.state_dict())
++                print("pretrained weights loaded (fresh optimizer, fresh LR schedule)")
++
+             save_checkpoint(filename, startEpoch, startIter, model,  lossTracker, best_state_dict, optimizer, lrScheduler)
+ 
+     if parallel:
+@@ -110,12 +120,30 @@ def train(workerId, nWorker, filename, runSeed, args):
+     gradNormHist = MovingBuffer(initValue = 40, maxLen = 10000)
+ 
+     augmentator = None
+-    if args.augment:
++    if args.augment and args.augmentLegacy:
+         augmentator = Data.AugmentatorAudiomentations(sampleRate=44100, noiseFolder = args.noiseFolder, convIRFolder = args.irFolder)
++    elif args.augment:
++        # The shared pipeline, so that a comparison against the other
++        # architectures in Snap2MIDI is not partly a comparison of the
++        # augmentation each happened to receive.
++        from .AugmentatorEdwards import EdwardsAugmentator
++        augmentator = EdwardsAugmentator(
++                sampleRate = conf.fs,
++                assetRoot = args.augmentAssetRoot,
++                manifestDir = args.augmentManifestDir,
++                split = "train",
++                seed = args.augmentSeed,
++                reverbLevel = args.reverbLevel,
++                trackIdMode = args.augmentTrackIdMode,
++                trackIdPrefix = args.augmentTrackIdPrefix)
++        if workerId == 0:
++            print("aug:", augmentator)
++
++    globalStepWarmupCutoff = 500
+ 
+     for epoc in range(startEpoch, 1000000):
+         # average length will be chunkSize
+-        dataIter = Data.DatasetMaestroIterator(dataset, hopSize, chunkSize, seed = epoc*100+runSeed, augmentator = augmentator, notesStrictlyContained=False)
++        dataIter = Data.DatasetMaestroIterator(dataset, hopSize, chunkSize, seed = epoc*100+runSeed, augmentator = augmentator, notesStrictlyContained=False, epoch = epoc)
+ 
+         if parallel:
+             sampler = torch.utils.data.distributed.DistributedSampler(dataIter)
+@@ -123,13 +151,13 @@ def train(workerId, nWorker, filename, runSeed, args):
+             # dataloader= torch.utils.data.DataLoader(dataIter, batch_size = batchSize, collate_fn = Data.collate_fn, num_workers=args.dataLoaderWorkers, sampler = sampler, drop_last = True, prefetch_factor = 3)
+             dataloader= torch.utils.data.DataLoader(dataIter, batch_size = batchSize, collate_fn = Data.collate_fn_batching, num_workers=args.dataLoaderWorkers, sampler = sampler, drop_last = True, prefetch_factor = max(4, args.dataLoaderWorkers))
+         else:
+-            dataloader= torch.utils.data.DataLoader(dataIter, batch_size = batchSize, collate_fn = Data.collate_fn_batching, num_workers=args.dataLoaderWorkers, shuffle=True, dropout_last=True, prefetch_factor = max(4, args.dataLoaderWorkers))
++            dataloader= torch.utils.data.DataLoader(dataIter, batch_size = batchSize, collate_fn = Data.collate_fn_batching, num_workers=args.dataLoaderWorkers, shuffle=True, drop_last=True, prefetch_factor = max(4, args.dataLoaderWorkers))
+ 
+ 
+         lossAll = []
+ 
+         # curLRScheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, base_lr = 5e-5, max_lr = 1e-4, step_size_up = len(dataloader)//10*5, step_size_down = len(dataloader)//10*5, cycle_momentum=False)
+-        globalStepWarmupCutoff = globalStep+500
++        # (hoisted out of the epoch loop: see scripts/patch_finetune.py)
+ 
+         for idx, batch in enumerate(dataloader):
+             if workerId ==0:
+@@ -137,7 +165,7 @@ def train(workerId, nWorker, filename, runSeed, args):
+                 writer.add_scalar(f'Optimizer/lr', currentLR , globalStep)
+ 
+             computeStats = False 
+-            if idx % 40 == 0:
++            if idx % 200 == 0:
+                 computeStats =True
+ 
+ 
+@@ -350,6 +378,27 @@ def train(workerId, nWorker, filename, runSeed, args):
+ 
+             save_checkpoint(filename, epoc+1, globalStep+1, model,  lossTracker, best_state_dict, optimizer, lrScheduler)
+ 
++            # clean manual stop: `touch <ckpt>.STOP` to end after this epoch,
++            # once the checkpoint above is safely written.
++            if args.saveEveryEpoch:
++                slim = {"state_dict": model.state_dict(),
++                        "epoch": epoc, "nIter": globalStep+1,
++                        "val": valResult}
++                slimPath = "{}.ep{:03d}.pt".format(filename, epoc)
++                torch.save(slim, slimPath + ".part")
++                os.replace(slimPath + ".part", slimPath)
++                print("saved per-epoch checkpoint", slimPath, flush=True)
++
++            if os.path.exists(filename + ".STOP"):
++                print("STOP file found, exiting cleanly at epoch", epoc,
++                      "nIter", globalStep+1, flush=True)
++                break
++
++            if args.maxEpochs is not None and epoc+1 >= args.maxEpochs:
++                print("reached --maxEpochs", args.maxEpochs, "at nIter",
++                      globalStep+1, "- exiting cleanly", flush=True)
++                break
++
+ 
+     
+     
+@@ -379,11 +428,51 @@ if __name__ == '__main__':
+     parser.add_argument('--max_lr', default = 2e-4, type=float)
+     parser.add_argument('--weight_decay', default = 1e-4, type=float)
+     parser.add_argument('--nIter', default= 180000,type = int)
++    parser.add_argument('--saveEveryEpoch', action='store_true',
++                        help="also write <ckpt>.epNNN.pt each epoch: weights plus "
++                             "the validation record, no optimizer state")
++    parser.add_argument('--maxEpochs', required=False, type=int,
++                        help="stop after this many epochs. --nIter only sizes "
++                             "the LR schedule and is NOT a stop condition.")
++    parser.add_argument('--initWeightsFrom', required=False,
++                        help="start a NEW run from these pretrained weights: "
++                             "fresh optimizer and LR schedule, unlike resuming "
++                             "from an existing checkpoint file")
+     parser.add_argument('--modelConf', required=True, help = "the path to the model conf file")
+     parser.add_argument('--augment',  action ="store_true", help="do data augmentation")
++
++    # Shared (Snap2MIDI / Edwards et al.) augmentation, the default under --augment.
++    parser.add_argument('--augmentAssetRoot', required = False,
++            help = "directory holding room_ir/ and bg_noise/ for the shared augmentation pipeline")
++    parser.add_argument('--augmentManifestDir', required = False,
++            help = "override the manifests packaged with Snap2MIDI")
++    parser.add_argument('--reverbLevel', default = "rms", choices = ["rms", "peak"],
++            help = "how the reverb stage sets its output level. 'rms' is required for "
++                   "multi-channel audio such as MAESTRO; 'peak' reproduces audiomentations "
++                   "but randomizes the stereo balance. DEFAULT: rms")
++    parser.add_argument('--augmentSeed', default = 0, type = int,
++            help = "salts the per-excerpt augmentation seed. Must match Snap2MIDI's "
++                   "--seed for the two to draw identical augmentation. DEFAULT: 0")
++    parser.add_argument('--augmentTrackIdMode', default = "stem", choices = ["stem", "path"],
++            help = "how a recording is keyed when seeding its augmentation. 'stem' matches "
++                   "Snap2MIDI's oaf/oafv2/hpp/kong; 'path' matches Snap2MIDI's own transkun, "
++                   "and normally needs --augmentTrackIdPrefix too. DEFAULT: stem")
++    parser.add_argument('--augmentTrackIdPrefix', default = "",
++            help = "prepended to the track id, to reconstruct the exact string another "
++                   "repository stored (e.g. 'data/transkun/resampled/2008/')")
++
++    # Legacy pipeline, kept reachable but no longer the default under --augment.
++    parser.add_argument('--augmentLegacy', action = "store_true",
++            help = "use this repository's original AugmentatorAudiomentations instead of "
++                   "the shared pipeline. Not comparable against the other architectures.")
+     parser.add_argument('--noiseFolder',  required = False)
+     parser.add_argument('--irFolder',  required = False)
+ 
++    parser.add_argument('--seed', required = False, type = int,
++            help = "seed for the chunk dithering grid. Defaults to the wall clock, which "
++                   "makes excerpt boundaries differ between runs; set it explicitly to "
++                   "reproduce a run or to align the grid with another repository.")
++
+ 
+ 
+     args = parser.parse_args()
+@@ -394,7 +483,11 @@ if __name__ == '__main__':
+     saved_filename = args.saved_filename
+ 
+ 
+-    runSeed = int(time.time())
++    if args.augment and not args.augmentLegacy and args.augmentAssetRoot is None:
++        parser.error("--augment requires --augmentAssetRoot (or pass --augmentLegacy "
++                     "to use this repository's original pipeline)")
++
++    runSeed = int(time.time()) if args.seed is None else args.seed
+ 
+ 
+     if num_processes == 1:

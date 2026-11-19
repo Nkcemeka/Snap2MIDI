@@ -37,7 +37,8 @@ class _OAFV2Mode(_BaseMode):
         if self.path is None or not Path(self.path).exists():
             raise ValueError(f"Path {self.path} does not exist!")
         
-        if config["dataset_name"] not in ["maps", "maestro"]:
+        if config["dataset_name"] not in ["maps", "maestro", "smd", "mds",
+                                          "guitarset", "gaps", "gaps_ft", "goat"]:
             raise ValueError(f"Dataset {config['dataset_name']} not supported for OAFV2 mode!")
         
         if config["sample_rate"] is None:
@@ -54,10 +55,7 @@ class _OAFV2Mode(_BaseMode):
         # Perform the extraction
         # extract the data for the train, val and test splits
         # Implement the extraction logic here
-        if self.dataset_name == "maps":
-            train_files, val_files, test_files = self._get_maps_train_val_test()
-        elif self.dataset_name == "maestro":
-            train_files, val_files, test_files = self._get_maestro_train_val_test()
+        train_files, val_files, test_files = self._resolve_split()
 
         # create the directory for the splits
         for split in ["train", "val", "test"]:
@@ -83,6 +81,12 @@ class _OAFV2Mode(_BaseMode):
             midi_obj = pretty_midi.PrettyMIDI(midi_file)
             if self.extend_pedal: 
                 midi_obj = self._pedal_extend(midi_obj)
+            # Must happen before the roll is written: a pitch outside
+            # [min_pitch, max_pitch] indexes past the roll's columns and raises.
+            dropped = self._drop_out_of_range_notes(midi_obj)
+            if dropped:
+                print(f"  {Path(midi_file).name}: dropped {dropped} note(s) "
+                      f"outside pitch {self.min_pitch}-{self.max_pitch}")
             
             audio, _ = librosa.load(audio_file, sr=self.sample_rate)
             assert self.sample_rate == _, f"[Loaded sample rate]{_} != {self.sample_rate}[Config sample rate]"
@@ -111,7 +115,7 @@ class _OAFV2Mode(_BaseMode):
                         velocity[onset_frame_start:offset_frame_start, pitch] = vel/128
 
             if self.dataset_name != "slakh":
-                store_path = f"{self.save_name}/{split}/{str(audio_file.stem)}.npz"
+                store_path = f"{self.save_name}/{split}/{self._store_stem(audio_file)}.npz"
             else:
                 # For slakh, we need to get the track name
                 # from the audio file path

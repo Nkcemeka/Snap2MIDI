@@ -72,6 +72,15 @@ class AcousticModel(nn.Module):
     
 
 class BiLSTM(nn.Module):
+    # cuDNN holds the RNN sequence length in a 16-bit field, so one call with
+    # 65,536 timesteps or more fails with CUDNN_STATUS_NOT_SUPPORTED -- not an
+    # out-of-memory, a hard ceiling (measured: 65,535 passes, 65,536 does not).
+    # Training never approaches it, but the cross-dataset benchmark scores whole
+    # pieces: 15 of Studio MAESTRO's 1,276 run past it, the longest 82,127
+    # frames (44 minutes at 31.25 fps).
+    cudnn_max_seq_length = 65535
+    inference_chunk_length = 512
+
     def __init__(self, input_size: int, hidden_size: int) -> None:
         """
         Default constructor for BiLSTM
@@ -96,8 +105,49 @@ class BiLSTM(nn.Module):
             -------
                 x (torch.Tensor): Processed representation
         """
+        if x.shape[1] > self.cudnn_max_seq_length:
+            return self._chunked(x)
         x, _ = self.lstm(x)
         return x
+
+    def _chunked(self, x: torch.Tensor) -> torch.Tensor:
+        """The same result as one call, in chunks cuDNN will accept.
+
+        The hidden and cell state are carried across chunk boundaries -- forward
+        left to right, backward right to left -- so every timestep still sees the
+        whole sequence and this is the full-sequence recurrence, not a windowed
+        approximation of it. It is the BiLSTM that `models/oafv2/oafv2.py` and
+        `models/hpp/nets.py` already run in eval mode, applied here only above
+        the ceiling so that every sequence the single call can handle keeps
+        taking it and no existing result moves.
+        """
+        batch_size, sequence_length, _ = x.shape
+        hidden_size = self.lstm.hidden_size
+        num_directions = 2 if self.lstm.bidirectional else 1
+
+        h = torch.zeros(num_directions, batch_size, hidden_size,
+                        device=x.device, dtype=x.dtype)
+        c = torch.zeros_like(h)
+        output = torch.zeros(batch_size, sequence_length,
+                             num_directions * hidden_size,
+                             device=x.device, dtype=x.dtype)
+
+        slices = range(0, sequence_length, self.inference_chunk_length)
+        for start in slices:
+            end = start + self.inference_chunk_length
+            output[:, start:end, :], (h, c) = self.lstm(x[:, start:end, :], (h, c))
+
+        if self.lstm.bidirectional:
+            # The backward half written above ran left to right and is wrong;
+            # redo it right to left, which is the direction it belongs to.
+            h.zero_()
+            c.zero_()
+            for start in reversed(slices):
+                end = start + self.inference_chunk_length
+                result, (h, c) = self.lstm(x[:, start:end, :], (h, c))
+                output[:, start:end, hidden_size:] = result[:, :, hidden_size:]
+
+        return output
 
 
 class OnsetsAndFrames(pl.LightningModule):

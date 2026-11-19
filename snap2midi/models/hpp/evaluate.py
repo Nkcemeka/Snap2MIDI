@@ -39,9 +39,14 @@ def evaluate_test(config):
     metrics_notes = defaultdict(list)
     metrics_velocities = defaultdict(list)
 
-    threshold = config.get("threshold", 0.5)
+    # Fallbacks are HPPNet's own, not the OAF lineage's: the paper picks 0.4 for
+    # both the onset and frame thresholds on MAESTRO's validation split, and the
+    # 50 fps grid is 16 kHz over hop 320. Evaluator.evaluate_hpp passes both
+    # explicitly, so these only bite when this function is called directly --
+    # which is exactly when a 31.25 fps default would silently skew note times.
+    threshold = config.get("threshold", 0.4)
     pitch_offset = config.get("pitch_offset", 21)
-    frame_rate = config.get("frame_rate", 31.25)
+    frame_rate = config.get("frame_rate", 50.0)
 
     for i, data in tqdm(enumerate(dataloader), total=len(dataloader), desc="Evaluating results...."):
         audio = data["audio"]

@@ -1,4 +1,4 @@
-from .base_mode import _BaseMode
+from .base_mode import _BaseMode, drop_out_of_range_notes
 from pathlib import Path
 import numpy as np
 from tqdm import tqdm
@@ -93,6 +93,15 @@ class _OafFramedEvents:
         self.num_pitches = max_pitch - min_pitch + 1
         self.onset_length = onset_length
         self.offset_length = offset_length
+
+        # Before anything reads the notes: a pitch outside [min_pitch, max_pitch]
+        # indexes past the label roll's columns, which is what killed the MDS and
+        # GAPS extractions. Dropping here rather than at label time also keeps
+        # such a note from influencing where the 20 s windows are cut.
+        dropped = drop_out_of_range_notes(self.midi, self.min_pitch, self.max_pitch)
+        if dropped:
+            print(f"  {Path(midi_path).name}: dropped {dropped} note(s) outside "
+                  f"pitch {self.min_pitch}-{self.max_pitch}")
 
         if not ignore_duration:
             self.split_windows = self._get_split_windows()
@@ -686,16 +695,15 @@ class _OAFMode(_BaseMode):
         # Implement the extraction logic here
         splits = ["train", "val", "test"]
         if self.dataset_name == "oaf_maps":
-            # oaf_maps follows the actual paper
+            # oaf_maps follows the paper: MAPS' val split is folded into train
+            # and only two splits are written, which _resolve_split does not do.
             train_files, val_files, test_files = self._get_maps_train_val_test()
             train_files = train_files + val_files
             splits = ["train", "test"]
-        elif self.dataset_name == "maps":
-            train_files, val_files, test_files = self._get_maps_train_val_test()
-        elif self.dataset_name == "maestro":
-            train_files, val_files, test_files = self._get_maestro_train_val_test()
         else:
-            raise ValueError(f"Dataset {self.dataset_name} not supported!")
+            # Every other dataset, and the eval_only flag (every item into
+            # test): see _resolve_split.
+            train_files, val_files, test_files = self._resolve_split()
 
         if self.dataset_name == "oaf_maps":
             splits_data = [train_files, test_files]
@@ -711,6 +719,7 @@ class _OAFMode(_BaseMode):
             split_path = Path(f"{self.save_name}/{split}")
             split_path.mkdir(parents=True, exist_ok=True)
 
+        skipped = []
         for idx, split in tqdm(enumerate(splits), desc="Processing splits"):
             split_files = splits_data[idx]
 
@@ -718,7 +727,7 @@ class _OAFMode(_BaseMode):
                 assert audio_file.exists(), f"{audio_file} does not exist"
                 assert midi_file.exists(), f"{midi_file} does not exist"
 
-                if split != "test":
+                try:
                     framed_events = _OafFramedEvents(
                         audio_path=audio_file,
                         midi_path=midi_file,
@@ -730,23 +739,21 @@ class _OAFMode(_BaseMode):
                         max_pitch=self.config["max_pitch"],
                         onset_length=self.config["onset_length"],
                         offset_length=self.config["offset_length"],
+                        # The test split is scored whole, so it is not cut into
+                        # windows; every other split is.
+                        ignore_duration=(split == "test"),
                         extend_pedal=self.config["extend_pedal"]
                     )
-                else:
-                    framed_events = _OafFramedEvents(
-                        audio_path=audio_file,
-                        midi_path=midi_file,
-                        min_frame_secs=self.config["min_frame_secs"],
-                        max_frame_secs=self.config["max_frame_secs"],
-                        sample_rate=self.config["sample_rate"],
-                        frame_rate=self.config["frame_rate"],
-                        min_pitch=self.config["min_pitch"],
-                        max_pitch=self.config["max_pitch"],
-                        onset_length=self.config["onset_length"],
-                        offset_length=self.config["offset_length"],
-                        ignore_duration=True,  # For test split, we ignore duration
-                        extend_pedal=self.config["extend_pedal"]
-                    )
+                except ValueError as err:
+                    # A pair whose MIDI runs far past its audio cannot be framed
+                    # against that audio at all. GOAT ships two such items --
+                    # item_96's MIDI is 349 s against 175 s of audio, item_110's
+                    # 55 s against 26 s -- and each appears once per amp
+                    # variant, so 12 of its 1,032 pairs are unusable. Losing
+                    # them is right; losing the other 1,020 to an abort is not.
+                    skipped.append((audio_file.name, str(err)))
+                    print(f"  [skip] {audio_file.name} + {midi_file.name}: {err}")
+                    continue
 
                 for idx_event, framed_event in enumerate(framed_events):
                     store_dict = {'audio': None, 'feature': None}  
@@ -759,7 +766,9 @@ class _OAFMode(_BaseMode):
                     f"Feature {feature.shape} and label {label['label_frames'].shape} shapes do not match!"
                     
                     if self.dataset_name != "slakh":
-                        store_path = f"{self.save_name}/{split}/{str(audio_file.stem)}_{idx_event}.npz"
+                        # _store_stem qualifies MDS items by their directory; the two
+                        # renderings of one MIDI share a stem and would otherwise collide.
+                        store_path = f"{self.save_name}/{split}/{self._store_stem(audio_file)}_{idx_event}.npz"
                     else:
                         # For slakh, we need to get the track name
                         # from the audio file path
@@ -774,7 +783,9 @@ class _OAFMode(_BaseMode):
                     
                     np.savez(store_path, **store_dict)
 
-        print(f"Extraction complete! Total files extracted: {len(train_files) + len(test_files)}")
+        total = len(train_files) + len(val_files) + len(test_files)
+        print(f"Extraction complete! Total source pairs extracted: {total - len(skipped)}"
+              + (f" ({len(skipped)} of {total} skipped as unusable)" if skipped else ""))
             
 
     def _get_feature(self, audio : np.ndarray, feature: str, feature_params: dict):

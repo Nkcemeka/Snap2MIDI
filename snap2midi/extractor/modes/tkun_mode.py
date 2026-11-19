@@ -50,7 +50,7 @@ class _TranskunMode(_BaseMode):
         if self.path is None or not Path(self.path).exists():
             raise ValueError(f"Path {self.path} does not exist!")
         
-        if config["dataset_name"] not in ["maps", "maestro"]:
+        if config["dataset_name"] not in ["maps", "maestro", "gaps_ft"]:
             raise ValueError(f"Dataset {config['dataset_name']} not supported for Transkun mode!")
         
         if config["sample_rate"] is None:
@@ -69,6 +69,8 @@ class _TranskunMode(_BaseMode):
             train_files, val_files, test_files = self._get_maps_train_val_test()
         elif self.dataset_name == "maestro":
             train_files, val_files, test_files = self._get_maestro_train_val_test()
+        elif self.dataset_name == "gaps_ft":
+            train_files, val_files, test_files = self._get_gaps_ft_train_val_test()
 
         # create the directory for the splits
         for split in ["train", "val", "test"]:

@@ -249,7 +249,8 @@ def multipitch_metrics_roll(pred: np.ndarray, gt: np.ndarray, \
 
 def note_extract(onset_roll: torch.Tensor, frame_roll: torch.Tensor, \
                  velocity_roll: torch.Tensor, onset_thresh: float=0.5, \
-                 frame_thresh: float=0.5) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+                 frame_thresh: float=0.5, restart_on_reonset: bool=False) \
+                 -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
         Extract notes from the piano roll.
 
@@ -260,6 +261,8 @@ def note_extract(onset_roll: torch.Tensor, frame_roll: torch.Tensor, \
             velocity_roll (torch.Tensor): Velocity roll.
             onset_thresh (float): Onset threshold.
             frame_thresh (float): Frame threshold.
+            restart_on_reonset (bool): End a note when its pitch is struck
+                again, as Magenta's decoder does. Default False.
 
         Returns:
         --------
@@ -296,6 +299,14 @@ def note_extract(onset_roll: torch.Tensor, frame_roll: torch.Tensor, \
                 velocities.append(velocity_roll[offset, note].item())
             offset += 1
             if offset == onsets.shape[0]:
+                break
+            # With restart_on_reonset, a fresh onset on a pitch that is already
+            # sounding ends this note. After pedal extension a repeated note's
+            # offset falls on the next onset's frame, so without the rule the
+            # two are merged into one long note.
+            if (restart_on_reonset
+                    and onsets[offset, note].item()
+                    and not onsets[offset - 1, note].item()):
                 break
                 
         # If the note is off, we store results

@@ -3,18 +3,6 @@ import torch
 import numpy as np
 import pretty_midi
 import mir_eval
-import torch.nn as nn
-
-def initialize_weights(m):
-    weight = getattr(m, "weight", None)
-
-    if hasattr(m, "weight") and weight is None:
-        print("weight=None:", type(m), m)
-
-    if weight is not None and weight.dim() > 1:
-        nn.init.xavier_uniform_(weight)
-    # if hasattr(m, 'weight') and m.weight.dim() > 1:
-    #     nn.init.xavier_uniform_(m.weight.data)
 
 def half_stride(model, feature, shift: int, config: dict):
     """
@@ -43,7 +31,6 @@ def half_stride(model, feature, shift: int, config: dict):
     # behind, see the paper)
     # -18.42 was used in the main code; this is the log of 1e-8 which is the log_offset....
     pad_behind = np.full((back_margin + shift, num_bins), -18.42068099975586, dtype=np.float32)
-
     # now, we want to move our window such that the entire length is a multiple of the half_frames
     # np.ceil below allows us know what length to add to make full_length a multiple of half_frames
     # why add half_frame??? Now, when we get to the last segemtn (if feature is not a multuple of half_frames),
@@ -289,13 +276,22 @@ def frames_to_note(onset, offset, frames, velocity, config):
                     final_offset = float(time_frames)
                 #final_offset = min(float(offset_time), float(time_frames))
             
-            # Now we can append the note to the notes list
-            if velocity_value > 0:
+            # A velocity of 0 is a rejection, not a quiet note: the velocity
+            # head is a 128-way classifier trained against a roll that is zero
+            # everywhere except at onsets, so class 0 is its "no note here"
+            # class, and this decoder is an AND of the onset and velocity heads.
+            # Fine-tuned on GAPS, where every note carries the same velocity,
+            # the head collapses toward class 0 on out-of-domain audio and
+            # vetoes notes the onset head found. keep_zero_velocity_notes
+            # disables the veto (the paper's adapted hFT models are decoded with
+            # it on). A kept note gets velocity 1, since a note-on with
+            # velocity 0 is a note-off.
+            if velocity_value > 0 or config.get("keep_zero_velocity_notes", False):
                 notes.append({
                     'pitch': midi_pitch,
                     'onset': float(onset_time),
                     'offset': final_offset,
-                    'velocity': velocity_value
+                    'velocity': max(1, min(127, velocity_value))
                 })
 
             if onset_time >= final_offset:

@@ -1,0 +1,6 @@
+# Local paths; config.example.yaml is the committed template.
+config.yaml
+
+# The root .gitignore ignores every data/ directory (the dataset stores);
+# this one holds code and the study's split lists.
+!/data/
